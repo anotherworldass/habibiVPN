@@ -1,0 +1,40 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# env & secrets
+.env
+.env.*
+!.env.example
+info.txt
+
+# build
+dist
+build
+.next
+out
+.turbo
+*.tsbuildinfo
+
+# prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# logs / ide
+logs
+*.log
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# test / coverage
+coverage
+.nyc_output
+
+# misc
+*.local
+.umi
+.umi-production
+src/.umi
+src/.umi-production

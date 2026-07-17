@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum AdminRole {
+  superadmin
+  support
+}
+
+enum OrderStatus {
+  pending
+  paid
+  provisioned
+  failed
+  refunded
+  cancelled
+}
+
+enum UpstreamSlotStatus {
+  active
+  disabled
+}
+
+enum CommissionStatus {
+  pending
+  settled
+  invalid
+}
+
+enum WithdrawStatus {
+  pending
+  approved
+  paid
+  rejected
+}
+
+/// Habibi end-user (App / H5)
+model User {
+  id           String     @id @default(cuid())
+  email        String?    @unique
+  phone        String?    @unique
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(active)
+  /// Unique referral code for inviting others
+  inviteCode   String     @unique @map("invite_code")
+  /// Permanent inviter binding (null = organic)
+  invitedById  String?    @map("invited_by_id")
+  /// Promotion qualification (can be revoked for fraud)
+  promoEnabled Boolean    @default(true) @map("promo_enabled")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  inviter              User?              @relation("UserInvites", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitees             User[]             @relation("UserInvites")
+  upstreams            UserUpstream[]
+  orders               Order[]
+  promoWallet          PromoWallet?
+  commissionsEarned    CommissionLedger[] @relation("CommissionBeneficiary")
+  commissionsAsPayer   CommissionLedger[] @relation("CommissionPayer")
+  withdrawRequests     WithdrawRequest[]
+  ancestorClosures     InviteClosure[]    @relation("ClosureAncestor")
+  descendantClosures   InviteClosure[]    @relation("ClosureDescendant")
+
+  @@index([invitedById])
+  @@map("users")
+}
+
+/// Closure table for N-level upline/downline queries
+model InviteClosure {
+  id           String @id @default(cuid())
+  ancestorId   String @map("ancestor_id")
+  descendantId String @map("descendant_id")
+  /// 1 = direct invite, 2 = second level, ...
+  depth        Int
+
+  ancestor   User @relation("ClosureAncestor", fields: [ancestorId], references: [id], onDelete: Cascade)
+  descendant User @relation("ClosureDescendant", fields: [descendantId], references: [id], onDelete: Cascade)
+
+  @@unique([ancestorId, descendantId])
+  @@index([descendantId, depth])
+  @@index([ancestorId, depth])
+  @@map("invite_closures")
+}
+
+/// Singleton-ish referral program settings (use id = "default")
+model ReferralConfig {
+  id                String   @id @default("default")
+  enabled           Boolean  @default(true)
+  maxLevel          Int      @default(5) @map("max_level")
+  settleDays        Int      @default(7) @map("settle_days")
+  minWithdrawCents  Int      @default(10000) @map("min_withdraw_cents")
+  withdrawFeeBps    Int      @default(300) @map("withdraw_fee_bps")
+  /// Max total commission budget in bps (default 20%)
+  maxTotalRateBps   Int      @default(2000) @map("max_total_rate_bps")
+  /// e.g. ["usdt","bank"]
+  withdrawMethods   Json     @default("[\"usdt\",\"bank\"]") @map("withdraw_methods")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("referral_configs")
+}
+
+model ReferralLevelRate {
+  id        String   @id @default(cuid())
+  level     Int
+  /// Basis points: 1400 = 14%
+  rateBps   Int      @map("rate_bps")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([level])
+  @@map("referral_level_rates")
+}
+
+model PromoWallet {
+  id             String   @id @default(cuid())
+  userId         String   @unique @map("user_id")
+  availableCents Int      @default(0) @map("available_cents")
+  pendingCents   Int      @default(0) @map("pending_cents")
+  withdrawnCents Int      @default(0) @map("withdrawn_cents")
+  frozenCents    Int      @default(0) @map("frozen_cents")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("promo_wallets")
+}
+
+model CommissionLedger {
+  id               String           @id @default(cuid())
+  orderId          String           @map("order_id")
+  beneficiaryId    String           @map("beneficiary_id")
+  payerId          String           @map("payer_id")
+  level            Int
+  orderAmountCents Int              @map("order_amount_cents")
+  rateBps          Int              @map("rate_bps")
+  amountCents      Int              @map("amount_cents")
+  status           CommissionStatus @default(pending)
+  settleAt         DateTime         @map("settle_at")
+  settledAt        DateTime?        @map("settled_at")
+  invalidReason    String?          @map("invalid_reason") @db.Text
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  order       Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  beneficiary User  @relation("CommissionBeneficiary", fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  payer       User  @relation("CommissionPayer", fields: [payerId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, beneficiaryId, level])
+  @@index([beneficiaryId, status])
+  @@index([status, settleAt])
+  @@index([payerId])
+  @@map("commission_ledgers")
+}
+
+model WithdrawRequest {
+  id             String         @id @default(cuid())
+  userId         String         @map("user_id")
+  amountCents    Int            @map("amount_cents")
+  feeCents       Int            @map("fee_cents")
+  netCents       Int            @map("net_cents")
+  method         String
+  /// USDT address / bank details JSON
+  accountPayload Json           @map("account_payload")
+  status         WithdrawStatus @default(pending)
+  reviewedBy     String?        @map("reviewed_by")
+  reviewedAt     DateTime?      @map("reviewed_at")
+  adminNote      String?        @map("admin_note") @db.Text
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@map("withdraw_requests")
+}
+
+/// One Habibi user → many WireRaw customers (each slot = one package / subscription URL)
+model UserUpstream {
+  id               String             @id @default(cuid())
+  userId           String             @map("user_id")
+  planId           String?            @map("plan_id")
+  upstreamId       String?            @map("upstream_id")
+  upstreamUsername String             @unique @map("upstream_username")
+  /// Stable for renew / plan change — never rotate unless explicit revoke/refresh
+  subscriptionUrl  String?            @map("subscription_url") @db.Text
+  expiresAt        DateTime?          @map("expires_at")
+  status           UpstreamSlotStatus @default(active)
+  lastSyncedAt     DateTime?          @map("last_synced_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan Plan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([planId])
+  @@unique([userId, planId])
+  @@map("user_upstreams")
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(support)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+/// Local sellable SKU (maps to WireRaw plan / duration)
+model Plan {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  description      String?  @db.Text
+  priceCents       Int      @map("price_cents")
+  currency         String   @default("USD")
+  upstreamPlanRef  String?  @map("upstream_plan_ref")
+  validitySeconds  Int?     @map("validity_seconds")
+  dataLimitBytes   BigInt?  @map("data_limit_bytes")
+  /// Users can claim once for free after register (no payment)
+  isFreeClaimable  Boolean  @default(false) @map("is_free_claimable")
+  enabled          Boolean  @default(true)
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  orders    Order[]
+  upstreams UserUpstream[]
+
+  @@map("plans")
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  userId         String      @map("user_id")
+  planId         String      @map("plan_id")
+  status         OrderStatus @default(pending)
+  amountCents    Int         @map("amount_cents")
+  currency       String      @default("USD")
+  provider       String?
+  providerRef    String?     @map("provider_ref")
+  provisionError String?     @map("provision_error") @db.Text
+  paidAt         DateTime?   @map("paid_at")
+  provisionedAt  DateTime?   @map("provisioned_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  user        User               @relation(fields: [userId], references: [id])
+  plan        Plan               @relation(fields: [planId], references: [id])
+  commissions CommissionLedger[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorType  String   @map("actor_type")
+  actorId    String?  @map("actor_id")
+  action     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

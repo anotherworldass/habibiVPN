@@ -1,0 +1,36 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: habibi-mysql
+    restart: unless-stopped
+    ports:
+      # Host 3306/3307 often taken by local mysqld / other containers
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: habibivpn
+      MYSQL_USER: habibi
+      MYSQL_PASSWORD: habibi
+    volumes:
+      - habibi_mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: habibi-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - habibi_redis_data:/data
+
+volumes:
+  habibi_mysql_data:
+  habibi_redis_data:

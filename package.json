@@ -1,0 +1,20 @@
+{
+  "name": "habibivpn",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @habibi/api dev",
+    "dev:web": "pnpm --filter @habibi/web dev",
+    "dev:admin": "pnpm --filter @habibi/admin start",
+    "build": "pnpm -r run build",
+    "db:up": "docker compose up -d mysql redis",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @habibi/api exec prisma migrate dev",
+    "db:migrate:init": "cd apps/api && DATABASE_URL='mysql://root:root@127.0.0.1:3308/habibivpn' pnpm exec prisma migrate dev",
+    "db:generate": "pnpm --filter @habibi/api prisma:generate",
+    "wireraw:smoke": "pnpm --filter @habibi/api wireraw:smoke"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
