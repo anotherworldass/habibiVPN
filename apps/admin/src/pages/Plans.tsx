@@ -15,7 +15,7 @@ type PlanRow = {
 };
 
 export default function PlansPage() {
-  const actionRef = useRef<ActionType>();
+  const actionRef = useRef<ActionType>(undefined);
 
   const columns: ProColumns<PlanRow>[] = [
     { title: "code", dataIndex: "code", copyable: true },

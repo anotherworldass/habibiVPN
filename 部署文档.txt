@@ -1,0 +1,450 @@
+HabibiVPN 宝塔部署文档
+======================
+
+一、部署架构
+------------
+
+1. 用户前端
+   - 技术：Next.js
+   - 运行方式：PM2
+   - 本地端口：3000
+   - 域名示例：https://www.tizi.work
+
+2. 后端 API
+   - 技术：Fastify + Prisma
+   - 运行方式：PM2
+   - 本地端口：3001
+   - 可选独立域名：https://api.example.com
+
+3. 管理后台
+   - 技术：React + Vite
+   - 运行方式：构建为静态文件，由 Nginx 托管
+   - 静态目录：apps/admin/dist
+   - 域名示例：https://admin.example.com
+
+4. 数据库
+   - MySQL 8
+   - Redis 当前未实际使用，可暂不部署
+
+
+二、服务器环境
+--------------
+
+在宝塔安装：
+
+- Nginx
+- MySQL 8
+- Node.js 20 或更高版本
+- PM2 管理器
+
+安装项目指定的 pnpm：
+
+    corepack enable
+    corepack prepare pnpm@9.15.0 --activate
+
+检查版本：
+
+    node -v
+    pnpm -v   # 必须是 9.15.0；若是 10+/11+ 会出现 ERR_PNPM_IGNORED_BUILDS
+
+若误用了 pnpm 11，重新切回：
+
+    corepack prepare pnpm@9.15.0 --activate
+    hash -r
+    pnpm -v
+
+
+三、代码目录和权限
+------------------
+
+本文假设项目位于：
+
+    /www/wwwroot/habibiVPN
+
+建议统一使用 ec2-user 安装依赖、构建和运行 PM2，不要混用 root，否则可能出现 EACCES 权限错误。
+
+统一项目权限：
+
+    sudo chown -R ec2-user:ec2-user /www/wwwroot/habibiVPN
+
+
+四、安装依赖
+------------
+
+    cd /www/wwwroot/habibiVPN
+    pnpm install
+    pnpm --filter @habibi/shared build
+    pnpm db:generate
+
+
+五、生产环境变量
+----------------
+
+项目根目录创建：
+
+    /www/wwwroot/habibiVPN/.env
+
+主要配置示例：
+
+    NODE_ENV=production
+    API_HOST=127.0.0.1
+    API_PORT=3001
+
+    DATABASE_URL=mysql://数据库用户:数据库密码@127.0.0.1:3306/habibivpn
+
+    CORS_ORIGINS=https://www.tizi.work,https://admin.example.com
+    WEB_PUBLIC_ORIGIN=https://www.tizi.work
+    API_PUBLIC_ORIGIN=https://www.tizi.work
+
+    JWT_USER_SECRET=足够长的随机字符串
+    JWT_ADMIN_SECRET=另一个足够长的随机字符串
+    PAYMENT_CONFIG_ENCRYPTION_KEY=独立的至少16位随机字符串
+
+    ADMIN_BOOTSTRAP_USERNAME=管理员账号
+    ADMIN_BOOTSTRAP_PASSWORD=强密码
+
+    WIRERAW_HOST=https://...
+    WIRERAW_SUB_HOST=https://...
+    WIRERAW_KEY_ID=...
+    WIRERAW_KEY_SECRET=...
+    WIRERAW_MERCHANT_ID=...
+
+注意：
+
+1. 不要使用默认管理员密码。
+2. WireRaw 密钥只能放在后端环境变量中，不能使用 NEXT_PUBLIC_*。
+3. 数据库密码包含 @、#、:、/ 等字符时，需要进行 URL 编码。
+4. 宝塔本机 MySQL 通常使用 3306，不是开发 Docker 配置中的 3308。
+5. API_PUBLIC_ORIGIN 必须是支付平台可公网访问的 HTTPS 地址。使用用户站点的 /api rewrite 时可填写用户站点域名；使用独立 API 域名时填写 API 域名。
+6. PAYMENT_CONFIG_ENCRYPTION_KEY 用于加密数据库中的支付秘钥。生产环境必须固定保存，修改后旧秘钥将无法解密。
+
+
+六、Prisma 环境变量和数据库迁移
+------------------------------
+
+Prisma CLI 从 apps/api 运行时，不一定会读取仓库根目录的 .env。
+
+推荐把根目录 .env 链接到 apps/api：
+
+    cd /www/wwwroot/habibiVPN/apps/api
+    ln -s ../../.env .env
+
+如果 apps/api/.env 已存在，则确保其中至少包含 DATABASE_URL。
+
+生产数据库迁移：
+
+    cd /www/wwwroot/habibiVPN
+    pnpm --filter @habibi/api prisma:deploy
+
+生产环境不要运行 prisma migrate dev 或 pnpm db:migrate。
+
+可选：初始化免费套餐：
+
+    pnpm --filter @habibi/api exec tsx scripts/seed-free-plan.ts
+
+
+七、构建应用
+------------
+
+1. 构建后端（必须在仓库根目录执行，不要 cd 进 apps/api）：
+
+    cd /www/wwwroot/habibiVPN
+    # 一行完成：shared → prisma generate → api
+    pnpm build:api
+
+    # 或分步：
+    # pnpm --filter @habibi/shared build   # shared 的 dist 不进 git，必须先构建
+    # pnpm db:generate                     # 根目录脚本；在 apps/api 下会报 Command not found
+    # pnpm --filter @habibi/api build
+
+2. 构建用户前端：
+
+    pnpm --filter @habibi/web build
+
+Next.js 必须先成功构建，才能执行 next start。
+
+确认生产构建存在：
+
+    ls /www/wwwroot/habibiVPN/apps/web/.next/BUILD_ID
+
+3. 构建管理后台：
+
+    pnpm --filter @habibi/admin build
+
+构建结果位于：
+
+    /www/wwwroot/habibiVPN/apps/admin/dist
+
+
+八、PM2 / 宝塔启动后端 API
+-------------------------
+
+项目已提供宝塔友好启动文件（文件名 = 项目名）：
+
+    apps/api/habibi-api.js
+
+命令行 PM2：
+
+    cd /www/wwwroot/habibiVPN/apps/api
+    pm2 start habibi-api.js --name habibi-api
+    pm2 save
+
+宝塔 Node 项目管理器：
+
+- 项目名称：habibi-api
+- 项目目录：/www/wwwroot/habibiVPN/apps/api
+- 启动文件：habibi-api.js
+- 启动选项：选择「自定义启动文件 / habibi-api.js」（不要用自动解析 package.json 的 next 路径）
+- 包管理器：pnpm（依赖请在仓库根目录手动 pnpm install，勿只在子目录装）
+- 运行用户：www（与目录属主一致）
+- 项目端口：3001
+
+检查后端：
+
+    pm2 status
+    pm2 logs habibi-api --lines 100
+    curl http://127.0.0.1:3001/health
+    curl http://127.0.0.1:3001/health/ready
+
+
+九、PM2 / 宝塔启动用户前端
+-------------------------
+
+启动文件：
+
+    apps/web/habibi-web.js
+
+命令行 PM2：
+
+    cd /www/wwwroot/habibiVPN/apps/web
+    pm2 start habibi-web.js --name habibi-web
+    pm2 save
+
+宝塔 Node 项目管理器：
+
+- 项目名称：habibi-web
+- 项目目录：/www/wwwroot/habibiVPN/apps/web
+- 启动文件：habibi-web.js
+- 包管理器：pnpm
+- 运行用户：www
+- 项目端口：3000
+
+启动前必须已有生产构建：
+
+    ls /www/wwwroot/habibiVPN/apps/web/.next/BUILD_ID
+
+检查前端：
+
+    pm2 status
+    pm2 show habibi-web | grep pm_cwd
+    # pm_cwd 必须是 /www/wwwroot/habibiVPN/apps/web
+    pm2 logs habibi-web --lines 100
+    curl -I http://127.0.0.1:3000
+
+
+十、宝塔配置用户前端网站
+------------------------
+
+创建网站：
+
+    www.tizi.work
+
+申请 SSL，并开启强制 HTTPS。
+
+设置反向代理：
+
+    http://127.0.0.1:3000
+
+用户前端通过 Next.js rewrite 把 /api/* 转发到：
+
+    http://127.0.0.1:3001
+
+因此用户前端和 API 部署在同一台服务器时，不需要额外配置 /api 反向代理。
+
+
+十一、宝塔配置管理后台
+----------------------
+
+创建管理后台网站，并把网站目录设置为：
+
+    /www/wwwroot/habibiVPN/apps/admin/dist
+
+Nginx 配置：
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /admin/v1/ {
+        proxy_pass http://127.0.0.1:3001/admin/v1/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /health {
+        proxy_pass http://127.0.0.1:3001;
+    }
+
+管理后台生产环境不会使用 Vite 开发代理，因此 /admin/v1/ 反向代理不能遗漏。
+
+
+十二、可选 API 公网域名
+----------------------
+
+如果 Flutter App 需要直接访问 API，可创建：
+
+    api.example.com
+
+整体反向代理到：
+
+    http://127.0.0.1:3001
+
+Flutter 客户端 API 地址设置为：
+
+    https://api.example.com
+
+服务器防火墙只需对公网开放：
+
+- 80
+- 443
+- SSH 端口
+
+不要对公网开放：
+
+- 3000
+- 3001
+- 3306
+
+支付配置和回调检查：
+
+1. 执行数据库迁移后，管理后台会出现“支付配置”。
+2. 进入支付配置，填写艾希商户秘钥，测试余额查询成功后，再启用服务商。
+3. 分别启用微信扫码 6608 和支付宝原生 6607；迁移已预置对应限额。
+4. 售卖套餐币种必须为 CNY，且价格需位于所选通道限额内。
+5. 支付平台回调地址为：
+
+    https://你的API公网域名/api/v1/payments/callback/aixi
+
+6. 回调必须能收到 application/x-www-form-urlencoded POST，并原样返回大写 SUCCESS。
+7. 不要在 Nginx、CDN 或 WAF 中拦截该回调路径；建议同时把平台提供的回调 IP 150.5.133.8 加入访问白名单。
+
+
+十三、常见错误处理
+------------------
+
+1. Prisma 报 Environment variable not found: DATABASE_URL
+
+原因：
+Prisma CLI 没有读取到根目录 .env。
+
+处理：
+
+    cd /www/wwwroot/habibiVPN/apps/api
+    ln -s ../../.env .env
+    cd /www/wwwroot/habibiVPN
+    pnpm --filter @habibi/api prisma:deploy
+
+
+2. Next.js 报 Could not find a production build in the '.next' directory
+
+原因：
+next build 没有执行，或者构建中途失败。
+
+处理：
+
+    cd /www/wwwroot/habibiVPN
+    pnpm --filter @habibi/web build
+    ls apps/web/.next/BUILD_ID
+    pm2 restart habibi-web
+
+
+3. Next.js 构建报 display: 22 类型错误
+
+错误文件：
+
+    apps/web/src/app/login/page.tsx
+
+错误代码：
+
+    style={{ marginTop: 16, display: 22 }}
+
+正确代码：
+
+    style={{ marginTop: 16 }}
+
+本地代码已经修复，部署时需要把修复后的文件上传或拉取到服务器，然后重新构建。
+
+
+4. 构建报 EACCES: permission denied, open '.next/trace'
+
+原因：
+之前使用 root 构建，之后又使用 ec2-user 构建，目录所有者不一致。
+
+处理：
+
+    sudo chown -R ec2-user:ec2-user /www/wwwroot/habibiVPN
+    cd /www/wwwroot/habibiVPN
+    pnpm --filter @habibi/web build
+
+
+5. Nginx 报 connect() failed (111: Connection refused)
+
+原因：
+127.0.0.1:3000 没有正常运行的 Next.js 进程，通常是 PM2 进程退出或生产构建不存在。
+
+检查：
+
+    pm2 status
+    pm2 logs habibi-web --lines 100
+    curl -I http://127.0.0.1:3000
+
+确认构建成功后重新创建进程：
+
+    pm2 delete habibi-web next web 2>/dev/null || true
+    cd /www/wwwroot/habibiVPN/apps/web
+    pm2 start habibi-web.js --name habibi-web
+    pm2 save
+
+
+十四、日常更新部署
+------------------
+
+代码已经推送到 Git 仓库时：
+
+    cd /www/wwwroot/habibiVPN
+    git pull
+    pnpm install
+    pnpm --filter @habibi/api prisma:deploy
+    pnpm build:api
+    pnpm --filter @habibi/web build
+    pnpm --filter @habibi/admin build
+    pm2 restart habibi-api
+    pm2 restart habibi-web
+    pm2 save
+
+更新完成后检查：
+
+    curl http://127.0.0.1:3001/health/ready
+    curl -I http://127.0.0.1:3000
+    pm2 status
+
+
+十五、最终检查清单
+------------------
+
+[ ] Node.js 20 或更高版本
+[ ] pnpm 9.15.0
+[ ] MySQL 8 和生产数据库已创建
+[ ] 根目录 .env 已配置
+[ ] apps/api/.env 可被 Prisma 读取
+[ ] Prisma 生产迁移成功
+[ ] API 构建成功并监听 127.0.0.1:3001
+[ ] Web 构建成功且 apps/web/.next/BUILD_ID 存在
+[ ] Web 由 PM2 运行并监听 127.0.0.1:3000
+[ ] Admin 已构建到 apps/admin/dist
+[ ] Nginx 用户站点反向代理到 3000
+[ ] Nginx 管理后台配置了 SPA fallback 和 /admin/v1/ 代理
+[ ] SSL 和强制 HTTPS 已启用
+[ ] 3000、3001、3306 未直接暴露公网
+[ ] PM2 已执行 pm2 save

@@ -1,4 +1,5 @@
 import { clearSession, getToken } from "./auth";
+import { getProjectId } from "./project";
 
 export class ApiError extends Error {
   constructor(
@@ -13,12 +14,16 @@ export class ApiError extends Error {
 
 export async function adminFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
+  const isFormData =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
   const headers: Record<string, string> = {
     Accept: "application/json",
-    ...(init?.body ? { "Content-Type": "application/json" } : {}),
+    ...(init?.body && !isFormData ? { "Content-Type": "application/json" } : {}),
     ...(init?.headers as Record<string, string> | undefined),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+  const projectId = getProjectId();
+  if (projectId) headers["X-Admin-Project-Id"] = projectId;
 
   const res = await fetch(path, { ...init, headers });
   const text = await res.text();
@@ -33,11 +38,10 @@ export async function adminFetch<T = unknown>(path: string, init?: RequestInit):
 
   if (!res.ok) {
     const err =
-      typeof data?.error === "string"
-        ? data.error
-        : typeof data?.message === "string"
-          ? data.message
-          : `http.${res.status}`;
+      (typeof data?.message === "string" && data.message.trim()) ||
+      (typeof data?.error === "string" && data.error.trim()) ||
+      (typeof data?.detail === "string" && data.detail.trim()) ||
+      `http.${res.status}`;
     throw new ApiError(err, res.status, data);
   }
   return data as T;

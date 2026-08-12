@@ -1,6 +1,6 @@
 # HabibiVPN
 
-自有 VPN 品牌系统：用户端（H5 / App）+ 运营后台 + WireRaw 上游对接。
+自有 VPN 品牌系统：用户端（H5 / Telegram Mini App / App）+ 运营后台 + WireRaw 上游对接。
 
 ## 技术栈
 
@@ -9,6 +9,8 @@
 | API | Node.js · Fastify · Prisma · MySQL |
 | 管理后台 | React · Ant Design Pro Components · Vite |
 | 用户 H5 | Next.js |
+| Telegram Mini App | Next.js（`apps/tg`） |
+| 用户 App | Flutter（`clients/` 下各马甲包） |
 | 缓存/队列 | Redis |
 | 上游 | WireRaw Merchant API |
 
@@ -18,9 +20,10 @@
 apps/api      # 后端（User API + Admin API + WireRaw 适配）
 apps/admin    # 运营后台
 apps/web      # 用户 H5
+apps/tg       # Telegram Mini App
+clients/      # Flutter 马甲包（每品牌一个子目录）
 packages/shared
 ```
-
 ## 快速开始
 
 ### 1. 环境变量
@@ -51,6 +54,17 @@ pnpm db:migrate
 
 ### 4. 启动
 
+一键（推荐，需 Docker Desktop 已开）：
+
+```bash
+pnpm dev
+# 仅 API + Admin：pnpm dev:api-admin
+# 不含 TG：bash scripts/dev-local.sh --no-tg
+# 打开浏览器：bash scripts/dev-local.sh --open
+```
+
+或分终端：
+
 ```bash
 # 终端 1
 pnpm dev:api
@@ -60,11 +74,15 @@ pnpm dev:admin
 
 # 终端 3
 pnpm dev:web
+
+# 终端 4
+pnpm dev:tg
 ```
 
 - API: http://127.0.0.1:3001/health  
 - Admin: http://127.0.0.1:8000 （默认 `admin` / `admin123`）  
 - H5: http://127.0.0.1:3000  
+- TG Mini App: http://127.0.0.1:3002  
 
 ### 5. 上游联调
 
@@ -82,30 +100,30 @@ pnpm wireraw:smoke
 
 ## 用户端 API（App / H5）
 
-- `POST /api/v1/auth/register` / `login`（注册可带 `invite_code` / H5 `?ref=`）
-- `GET /api/v1/me`
-- `GET /api/v1/plans`（含 `is_free_claimable` / `already_claimed`）
-- `GET /api/v1/nodes`（节点池汇总：地区 / 状态 / 数量，不含 IP）
-- `POST /api/v1/subscriptions/claim`（免费领取 → 新建上游顾客槽）
-- `GET /api/v1/subscriptions`（多套餐列表）
-- `GET /api/v1/subscription`（兼容：主订阅 + 列表）
-- `POST /api/v1/subscriptions/:id/change-plan`（续费/改套餐，upsert 同上游 id，订阅链接不变）
-- `GET /api/v1/promo/overview|tools|team|commissions|team-orders|withdrawals`
-- `POST /api/v1/promo/withdrawals`（申请提现）
+完整对接文档（鉴权、冷启动、支付/IAP、推广、页面对照）：
+
+→ **[`docs/user-api-v1.md`](docs/user-api-v1.md)**
 
 模型：本地用户 1:N 上游顾客；每个上游顾客 = 一个套餐槽（含独立 `subscription_url`）。  
 种子免费套餐：`pnpm --filter @habibi/api exec tsx scripts/seed-free-plan.ts`（code=`free_trial`）。
 
-H5：`pnpm dev:web` → http://127.0.0.1:3000（注册 → 领取 → 复制订阅链接；「我的」→ 推广中心）  
+H5：`pnpm dev:web` → http://127.0.0.1:3000（注册 → 领取 → 复制订阅链接；「我的」→ 推广中心）
 手机访问可用同一局域网 IP（如 `http://192.168.x.x:3000`）。若 3000 被占用，Next 会换端口，以终端打印的 Local 地址为准。
+
+Telegram Mini App：`pnpm dev:tg` → http://127.0.0.1:3002（独立壳层，业务复用同一 API；详见 `apps/tg/README.md`）
 
 后台「Habibi 用户」可「新增套餐」或对已有槽「续费/改套餐」。  
 后台「分销」：配置比例 / 邀请关系 / 佣金流水 / 提现审核 / 补记付费订单（支付上线前联调分佣）。
+
+## App（Flutter）
+
+客户端工程在 [`clients/`](clients/) 下，每个马甲包一个子目录。导入后按该工程自带说明构建/运行即可。
 
 ## 开发阶段（摘要）
 
 0–3. 上游联调 + Admin（已可用）  
 4. User API + H5：注册 / 登录 / 免费领取 / 多订阅（已完成）  
 4.5 N 级分销：邀请绑定、佣金结算、提现审核、推广中心（已完成）  
-5. 支付闭环（暂缓；分佣挂 `Order.paid`，可复用 `settleCommissionsForOrder`） 
+5. App：`clients/` 马甲包接入 Habibi 登录/订阅（进行中）  
+6. 支付闭环：可配置服务商/通道、微信与支付宝下单、查单、验签回调、自动开通及分佣（已完成）
 

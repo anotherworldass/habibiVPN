@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { invalidateCommissionsForOrder } from "./commission.js";
+import { applyWalletDelta } from "./wallet.js";
 
 export async function setPromoEnabled(
   userId: string,
@@ -29,10 +30,18 @@ export async function freezeWallet(
   if (frozenCents < 0) {
     throw Object.assign(new Error("wallet.invalid_freeze"), { statusCode: 400 });
   }
-  const wallet = await prisma.promoWallet.upsert({
-    where: { userId },
-    create: { userId, frozenCents },
-    update: { frozenCents },
+  const wallet = await prisma.$transaction(async (tx) => {
+    return applyWalletDelta(tx, {
+      userId,
+      entryType: "freeze_set",
+      delta: {},
+      setFrozenCents: frozenCents,
+      refType: "admin",
+      refId: adminId,
+      actorType: "admin",
+      actorId: adminId,
+      remark: `set frozen=${frozenCents}`,
+    });
   });
   await writeAudit({
     actorType: "admin",
@@ -77,9 +86,15 @@ export async function invalidateLedgerByAdmin(
 
   await prisma.$transaction(async (tx) => {
     if (row.status === "pending") {
-      await tx.promoWallet.update({
-        where: { userId: row.beneficiaryId },
-        data: { pendingCents: { decrement: row.amountCents } },
+      await applyWalletDelta(tx, {
+        userId: row.beneficiaryId,
+        entryType: "commission_invalidate_pending",
+        delta: { pendingCents: -row.amountCents },
+        refType: "commission_ledger",
+        refId: row.id,
+        actorType: "admin",
+        actorId: adminId,
+        remark: reason,
       });
     } else if (row.status === "settled") {
       const wallet = await tx.promoWallet.findUnique({
@@ -87,9 +102,19 @@ export async function invalidateLedgerByAdmin(
       });
       if (wallet) {
         const fromAvailable = Math.min(wallet.availableCents, row.amountCents);
-        await tx.promoWallet.update({
-          where: { userId: row.beneficiaryId },
-          data: { availableCents: { decrement: fromAvailable } },
+        const remainder = row.amountCents - fromAvailable;
+        await applyWalletDelta(tx, {
+          userId: row.beneficiaryId,
+          entryType: "commission_clawback",
+          delta: {
+            availableCents: -fromAvailable,
+            ...(remainder > 0 ? { frozenCents: remainder } : {}),
+          },
+          refType: "commission_ledger",
+          refId: row.id,
+          actorType: "admin",
+          actorId: adminId,
+          remark: reason,
         });
       }
     }

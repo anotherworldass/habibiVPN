@@ -1,6 +1,6 @@
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { LoginForm, ProFormText } from "@ant-design/pro-components";
-import { message } from "antd";
+import { message } from "../lib/antd-message";
 import { useNavigate } from "react-router-dom";
 import { adminFetch } from "../lib/api";
 import { setSession, type AdminUser } from "../lib/auth";

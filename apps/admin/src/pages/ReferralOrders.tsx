@@ -8,7 +8,7 @@ import {
   ProFormText,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Modal, Tag, message } from "antd";
+import { App, Button, Tag } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
 
@@ -31,8 +31,35 @@ function money(cents: number, currency = "USD") {
   return `${(cents / 100).toFixed(2)} ${currency}`;
 }
 
+type EntitlementRes = {
+  ok: boolean;
+  skipped?: string;
+  error?: string;
+  previous_expires_at?: string | null;
+  new_expires_at?: string;
+  clawback_seconds?: number;
+  disabled?: boolean;
+};
+
+function formatEntitlementMsg(e?: EntitlementRes): string {
+  if (!e) return "";
+  if (!e.ok) {
+    return `权益扣回失败：${e.error || "unknown"}（订单已退款，请手工改到期）`;
+  }
+  if (e.skipped === "no_slot") return "无对应订阅槽，未扣时长";
+  if (e.skipped === "already_refunded") return "订单已退款，跳过权益扣回";
+  const prev = e.previous_expires_at
+    ? new Date(e.previous_expires_at).toLocaleString()
+    : "—";
+  const next = e.new_expires_at ? new Date(e.new_expires_at).toLocaleString() : "—";
+  const secs =
+    e.clawback_seconds != null ? `扣回 ${e.clawback_seconds} 秒 · ` : "";
+  return `权益：${secs}到期 ${prev} → ${next}${e.disabled ? "（已禁用）" : ""}`;
+}
+
 export default function ReferralOrdersPage() {
-  const actionRef = useRef<ActionType>();
+  const { modal, message } = App.useApp();
+  const actionRef = useRef<ActionType>(undefined);
   const [open, setOpen] = useState(false);
   const [plans, setPlans] = useState<PlanOpt[]>([]);
 
@@ -74,16 +101,34 @@ export default function ReferralOrdersPage() {
           ? [
               <a
                 key="refund"
-                onClick={() => {
-                  Modal.confirm({
+                onClick={(e) => {
+                  e.preventDefault();
+                  modal.confirm({
                     title: "退款并作废佣金？",
+                    content:
+                      "将同步从套餐到期时间末尾扣回本单时长；扣完则禁用订阅槽。",
+                    okText: "确认退款",
+                    okButtonProps: { danger: true },
                     onOk: async () => {
-                      await adminFetch(`/admin/v1/referral/orders/${row.id}/refund`, {
-                        method: "POST",
-                        body: JSON.stringify({ reason: "admin_refund" }),
-                      });
-                      message.success("已退款");
-                      actionRef.current?.reload();
+                      try {
+                        const res = await adminFetch<{
+                          ok: boolean;
+                          entitlement?: EntitlementRes;
+                        }>(`/admin/v1/referral/orders/${row.id}/refund`, {
+                          method: "POST",
+                          body: JSON.stringify({ reason: "admin_refund" }),
+                        });
+                        const ent = formatEntitlementMsg(res.entitlement);
+                        if (res.entitlement && !res.entitlement.ok) {
+                          message.warning(`已退款。${ent}`);
+                        } else {
+                          message.success(ent ? `已退款。${ent}` : "已退款");
+                        }
+                        actionRef.current?.reload();
+                      } catch (err) {
+                        message.error(err instanceof Error ? err.message : "退款失败");
+                        throw err;
+                      }
                     },
                   });
                 }}

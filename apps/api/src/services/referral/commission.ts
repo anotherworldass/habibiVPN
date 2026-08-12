@@ -1,7 +1,9 @@
 import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { ensurePromoWallet } from "./bind.js";
+import { applyWalletDelta } from "./wallet.js";
 import { getReferralConfig } from "./config.js";
+import { DEFAULT_PROMO_GROUP_ID, seedPromoGroupsIfNeeded } from "./groups.js";
 
 function commissionAmount(orderAmountCents: number, rateBps: number): number {
   return Math.floor((orderAmountCents * rateBps) / 10000);
@@ -9,7 +11,7 @@ function commissionAmount(orderAmountCents: number, rateBps: number): number {
 
 /**
  * Create pending commission ledgers for a paid order (idempotent).
- * Call when Order reaches paid with amountCents > 0.
+ * Rates come from each beneficiary's promo group (not global table).
  */
 export async function settleCommissionsForOrder(orderId: string): Promise<{
   created: number;
@@ -22,7 +24,11 @@ export async function settleCommissionsForOrder(orderId: string): Promise<{
   if (!order) {
     throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
   }
-  if (order.status !== "paid" && order.status !== "provisioned") {
+  if (
+    order.status !== "paid" &&
+    order.status !== "provisioning" &&
+    order.status !== "provisioned"
+  ) {
     throw Object.assign(new Error("order.not_paid"), { statusCode: 400 });
   }
   if (order.amountCents <= 0) {
@@ -34,19 +40,55 @@ export async function settleCommissionsForOrder(orderId: string): Promise<{
     return { created: 0, skipped: true };
   }
 
-  const config = await getReferralConfig();
+  const config = await getReferralConfig(order.user.projectId);
   if (!config.enabled) {
     return { created: 0, skipped: true };
   }
 
-  const rateByLevel = new Map(config.levels.map((l) => [l.level, l.rateBps]));
+  // Base stack: amount → store factor (if any) → first/renew factor.
+  let orderAmountCents = order.amountCents;
+  if (order.provider === "app_store") {
+    orderAmountCents = Math.floor(
+      (orderAmountCents * config.iapCommissionBaseBps) / 10000,
+    );
+  } else if (order.provider === "google_play") {
+    orderAmountCents = Math.floor(
+      (orderAmountCents * config.playCommissionBaseBps) / 10000,
+    );
+  }
+  const kindBps =
+    order.commissionKind === "renew"
+      ? config.renewCommissionBaseBps
+      : config.firstCommissionBaseBps;
+  orderAmountCents = Math.floor((orderAmountCents * kindBps) / 10000);
+  if (orderAmountCents <= 0) {
+    return { created: 0, skipped: true };
+  }
+
+  await seedPromoGroupsIfNeeded();
+
   const ancestors = await prisma.inviteClosure.findMany({
     where: {
       descendantId: order.userId,
       depth: { lte: config.maxLevel },
     },
     include: {
-      ancestor: { select: { id: true, status: true, promoEnabled: true } },
+      ancestor: {
+        select: {
+          id: true,
+          status: true,
+          promoEnabled: true,
+          promoGroupId: true,
+          promoGroup: {
+            select: {
+              id: true,
+              enabled: true,
+              maxLevel: true,
+              levels: { select: { level: true, rateBps: true } },
+            },
+          },
+        },
+      },
     },
     orderBy: { depth: "asc" },
   });
@@ -58,9 +100,6 @@ export async function settleCommissionsForOrder(orderId: string): Promise<{
 
   await prisma.$transaction(async (tx) => {
     for (const edge of ancestors) {
-      const rateBps = rateByLevel.get(edge.depth);
-      if (rateBps == null || rateBps <= 0) continue;
-
       const beneficiary = edge.ancestor;
       if (beneficiary.status !== "active" || !beneficiary.promoEnabled) {
         await writeAudit({
@@ -73,22 +112,44 @@ export async function settleCommissionsForOrder(orderId: string): Promise<{
         continue;
       }
 
-      // Self-buy / fraud: payer is in beneficiary's downline (they invited themselves indirectly)
-      // Already prevented by not having self as ancestor. Extra: skip if beneficiary === payer.
+      // Self-buy / fraud: already prevented by closure; extra guard.
       if (beneficiary.id === order.userId) continue;
 
-      const amountCents = commissionAmount(order.amountCents, rateBps);
+      const group = beneficiary.promoGroup;
+      if (!group || !group.enabled) {
+        await writeAudit({
+          actorType: "system",
+          action: "commission.skip_group_disabled",
+          targetType: "user",
+          targetId: beneficiary.id,
+          meta: {
+            orderId,
+            level: edge.depth,
+            promoGroupId: beneficiary.promoGroupId || DEFAULT_PROMO_GROUP_ID,
+          },
+        });
+        continue;
+      }
+
+      const effectiveMax = group.maxLevel ?? config.maxLevel;
+      if (edge.depth > effectiveMax) continue;
+
+      const rateBps = group.levels.find((l) => l.level === edge.depth)?.rateBps;
+      if (rateBps == null || rateBps <= 0) continue;
+
+      const amountCents = commissionAmount(orderAmountCents, rateBps);
       if (amountCents <= 0) continue;
 
       await ensurePromoWallet(beneficiary.id, tx);
 
-      await tx.commissionLedger.create({
+      const ledger = await tx.commissionLedger.create({
         data: {
           orderId: order.id,
           beneficiaryId: beneficiary.id,
           payerId: order.userId,
+          promoGroupId: group.id,
           level: edge.depth,
-          orderAmountCents: order.amountCents,
+          orderAmountCents,
           rateBps,
           amountCents,
           status: "pending",
@@ -96,9 +157,14 @@ export async function settleCommissionsForOrder(orderId: string): Promise<{
         },
       });
 
-      await tx.promoWallet.update({
-        where: { userId: beneficiary.id },
-        data: { pendingCents: { increment: amountCents } },
+      await applyWalletDelta(tx, {
+        userId: beneficiary.id,
+        entryType: "commission_pending",
+        delta: { pendingCents: amountCents },
+        refType: "commission_ledger",
+        refId: ledger.id,
+        actorType: "system",
+        remark: `order=${orderId} level=${edge.depth}`,
       });
 
       created += 1;
@@ -121,9 +187,14 @@ export async function invalidateCommissionsForOrder(
   await prisma.$transaction(async (tx) => {
     for (const row of ledgers) {
       if (row.status === "pending") {
-        await tx.promoWallet.update({
-          where: { userId: row.beneficiaryId },
-          data: { pendingCents: { decrement: row.amountCents } },
+        await applyWalletDelta(tx, {
+          userId: row.beneficiaryId,
+          entryType: "commission_invalidate_pending",
+          delta: { pendingCents: -row.amountCents },
+          refType: "commission_ledger",
+          refId: row.id,
+          actorType: "system",
+          remark: reason,
         });
       } else if (row.status === "settled") {
         const wallet = await tx.promoWallet.findUnique({
@@ -132,12 +203,17 @@ export async function invalidateCommissionsForOrder(
         if (!wallet) continue;
         const fromAvailable = Math.min(wallet.availableCents, row.amountCents);
         const remainder = row.amountCents - fromAvailable;
-        await tx.promoWallet.update({
-          where: { userId: row.beneficiaryId },
-          data: {
-            availableCents: { decrement: fromAvailable },
-            ...(remainder > 0 ? { frozenCents: { increment: remainder } } : {}),
+        await applyWalletDelta(tx, {
+          userId: row.beneficiaryId,
+          entryType: "commission_clawback",
+          delta: {
+            availableCents: -fromAvailable,
+            ...(remainder > 0 ? { frozenCents: remainder } : {}),
           },
+          refType: "commission_ledger",
+          refId: row.id,
+          actorType: "system",
+          remark: reason,
         });
       }
 
@@ -182,12 +258,16 @@ export async function settleDueCommissions(limit = 200): Promise<number> {
           where: { id: row.id },
           data: { status: "settled", settledAt: new Date() },
         });
-        await tx.promoWallet.update({
-          where: { userId: row.beneficiaryId },
-          data: {
-            pendingCents: { decrement: row.amountCents },
-            availableCents: { increment: row.amountCents },
+        await applyWalletDelta(tx, {
+          userId: row.beneficiaryId,
+          entryType: "commission_settle",
+          delta: {
+            pendingCents: -row.amountCents,
+            availableCents: row.amountCents,
           },
+          refType: "commission_ledger",
+          refId: row.id,
+          actorType: "system",
         });
       });
       settled += 1;

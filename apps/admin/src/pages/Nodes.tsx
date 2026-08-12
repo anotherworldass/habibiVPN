@@ -15,7 +15,7 @@ type NodeRow = {
 };
 
 export default function NodesPage() {
-  const actionRef = useRef<ActionType>();
+  const actionRef = useRef<ActionType>(undefined);
 
   const columns: ProColumns<NodeRow>[] = [
     { title: "名称", dataIndex: "name" },

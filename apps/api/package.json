@@ -6,22 +6,27 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio",
+    "start": "node habibi-api.js",
+    "prisma:generate": "pnpm exec prisma generate",
+    "prisma:migrate": "pnpm exec prisma migrate dev",
+    "prisma:deploy": "pnpm exec prisma migrate deploy",
+    "prisma:studio": "pnpm exec prisma studio",
     "wireraw:smoke": "tsx scripts/wireraw-smoke.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1100.0",
+    "@aws-sdk/client-sesv2": "^3.1100.0",
     "@fastify/cors": "^11.0.1",
+    "@fastify/multipart": "^9.0.3",
     "@habibi/shared": "workspace:*",
     "@prisma/client": "^6.5.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "fastify-plugin": "^6.0.0",
+    "ioredis": "^6.0.0",
     "jose": "^6.2.3",
+    "undici": "^8.9.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

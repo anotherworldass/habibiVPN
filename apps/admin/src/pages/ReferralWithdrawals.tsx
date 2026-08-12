@@ -1,7 +1,8 @@
 import { useRef } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { PageContainer, ProTable } from "@ant-design/pro-components";
-import { Modal, Space, Tag, message } from "antd";
+import { Modal, Space, Tag } from "antd";
+import { message } from "../lib/antd-message";
 import { adminFetch } from "../lib/api";
 
 type Row = {
@@ -22,7 +23,7 @@ function money(cents: number) {
 }
 
 export default function ReferralWithdrawalsPage() {
-  const actionRef = useRef<ActionType>();
+  const actionRef = useRef<ActionType>(undefined);
 
   async function review(id: string, action: "approve" | "reject" | "paid") {
     Modal.confirm({

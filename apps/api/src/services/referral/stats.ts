@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma.js";
+import { buildTelegramInviteUrl } from "../telegram/bot-config.js";
 import { ensureUserPromoReady } from "./bind.js";
 import { getReferralConfig } from "./config.js";
 
@@ -19,7 +20,11 @@ function maskEmail(email: string | null | undefined): string {
 
 export async function getPromoOverview(userId: string) {
   await ensureUserPromoReady(userId);
-  const config = await getReferralConfig();
+  const userRow = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { projectId: true },
+  });
+  const config = await getReferralConfig(userRow.projectId);
   const wallet = await prisma.promoWallet.findUniqueOrThrow({ where: { userId } });
 
   const todayStart = startOfDay();
@@ -90,14 +95,18 @@ export async function getPromoOverview(userId: string) {
     })
   ).map((r) => r.descendantId);
 
+  const paidOrderWhere = {
+    userId: { in: descendantIds },
+    status: { in: ["paid" as const, "provisioned" as const] },
+    amountCents: { gt: 0 },
+  };
+
   const todayPayStart = todayStart;
-  const [todayTeamRecharge, teamTotalRecharge, myPromoAmount] = await Promise.all([
+  const [todayTeamRecharge, teamTotalRecharge, myPromoAmount, paidUsers] = await Promise.all([
     descendantIds.length
       ? prisma.order.aggregate({
           where: {
-            userId: { in: descendantIds },
-            status: { in: ["paid", "provisioned"] },
-            amountCents: { gt: 0 },
+            ...paidOrderWhere,
             paidAt: { gte: todayPayStart },
           },
           _sum: { amountCents: true },
@@ -105,11 +114,7 @@ export async function getPromoOverview(userId: string) {
       : Promise.resolve({ _sum: { amountCents: 0 } }),
     descendantIds.length
       ? prisma.order.aggregate({
-          where: {
-            userId: { in: descendantIds },
-            status: { in: ["paid", "provisioned"] },
-            amountCents: { gt: 0 },
-          },
+          where: paidOrderWhere,
           _sum: { amountCents: true },
         })
       : Promise.resolve({ _sum: { amountCents: 0 } }),
@@ -120,16 +125,38 @@ export async function getPromoOverview(userId: string) {
       },
       _sum: { orderAmountCents: true },
     }),
+    descendantIds.length
+      ? prisma.order.findMany({
+          where: paidOrderWhere,
+          select: { userId: true },
+          distinct: ["userId"],
+        })
+      : Promise.resolve([] as Array<{ userId: string }>),
   ]);
 
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { inviteCode: true, promoEnabled: true },
+    select: {
+      inviteCode: true,
+      promoEnabled: true,
+      promoGroup: { select: { id: true, code: true, name: true } },
+      inviter: { select: { id: true, uid: true, email: true, inviteCode: true } },
+    },
   });
 
   return {
     invite_code: user.inviteCode,
     promo_enabled: user.promoEnabled,
+    promo_group: user.promoGroup
+      ? { id: user.promoGroup.id, code: user.promoGroup.code, name: user.promoGroup.name }
+      : null,
+    inviter: user.inviter
+      ? {
+          uid: user.inviter.uid,
+          email_masked: maskEmail(user.inviter.email),
+          invite_code: user.inviter.inviteCode,
+        }
+      : null,
     today_earnings_cents: todayAgg._sum.amountCents || 0,
     yesterday_earnings_cents: yesterdayAgg._sum.amountCents || 0,
     total_earnings_cents: totalAgg._sum.amountCents || 0,
@@ -137,8 +164,11 @@ export async function getPromoOverview(userId: string) {
     pending_cents: wallet.pendingCents,
     withdrawn_cents: wallet.withdrawnCents,
     frozen_cents: wallet.frozenCents,
+    spent_cents: wallet.spentCents,
     levels: byLevel,
     team_total: teamTotal,
+    /** Lifetime distinct paid descendants (amount > 0) */
+    paid_users: paidUsers.length,
     new_users_7d: newUsers,
     new_payers_7d: newPayers.length,
     today_team_recharge_cents: todayTeamRecharge._sum.amountCents || 0,
@@ -148,16 +178,98 @@ export async function getPromoOverview(userId: string) {
     min_withdraw_cents: config.minWithdrawCents,
     withdraw_fee_bps: config.withdrawFeeBps,
     withdraw_methods: config.withdrawMethods,
+    catalog_spend_enabled: config.catalogSpendEnabled,
     max_level: config.maxLevel,
   };
 }
 
-export async function getPromoTools(userId: string, webOrigin: string) {
+export async function getPromoTools(
+  userId: string,
+  webOrigin: string,
+  opts?: { preferTelegram?: boolean },
+) {
   const user = await ensureUserPromoReady(userId);
-  const inviteUrl = `${webOrigin.replace(/\/$/, "")}/register?ref=${encodeURIComponent(user.inviteCode)}`;
+  const webInviteUrl = `${webOrigin.replace(/\/$/, "")}/invite/${encodeURIComponent(user.inviteCode)}`;
+
+  const bot = user.projectId
+    ? await prisma.projectTelegramBot.findUnique({
+        where: { projectId: user.projectId },
+        select: { miniAppDirectLink: true, botUsername: true },
+      })
+    : null;
+
+  const tgInviteUrl = buildTelegramInviteUrl(
+    bot?.miniAppDirectLink,
+    bot?.botUsername,
+    user.inviteCode,
+  );
+
+  const inviteUrl =
+    opts?.preferTelegram && tgInviteUrl ? tgInviteUrl : webInviteUrl;
+
   return {
     invite_code: user.inviteCode,
     invite_url: inviteUrl,
+    web_invite_url: webInviteUrl,
+    tg_invite_url: tgInviteUrl,
+  };
+}
+
+/** User-facing commission / withdraw rules for invite & promo UI. */
+export async function getPromoRules(userId: string) {
+  await ensureUserPromoReady(userId);
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: {
+      projectId: true,
+      promoGroupId: true,
+      promoGroup: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          enabled: true,
+          maxLevel: true,
+          levels: { select: { level: true, rateBps: true }, orderBy: { level: "asc" } },
+        },
+      },
+    },
+  });
+  const config = await getReferralConfig(user.projectId);
+
+  let levels = user.promoGroup?.levels.map((l) => ({
+    level: l.level,
+    rate_bps: l.rateBps,
+  }));
+  if (!levels?.length) {
+    levels = config.levels
+      .filter((l) => l.level <= config.maxLevel)
+      .map((l) => ({ level: l.level, rate_bps: l.rateBps }));
+  } else {
+    const maxLv = user.promoGroup?.maxLevel ?? config.maxLevel;
+    levels = levels.filter((l) => l.level <= maxLv);
+  }
+
+  return {
+    enabled: config.enabled,
+    max_level: user.promoGroup?.maxLevel ?? config.maxLevel,
+    levels,
+    settle_days: config.settleDays,
+    min_withdraw_cents: config.minWithdrawCents,
+    withdraw_fee_bps: config.withdrawFeeBps,
+    withdraw_methods: config.withdrawMethods,
+    catalog_spend_enabled: config.catalogSpendEnabled,
+    iap_commission_base_bps: config.iapCommissionBaseBps,
+    play_commission_base_bps: config.playCommissionBaseBps,
+    first_commission_base_bps: config.firstCommissionBaseBps,
+    renew_commission_base_bps: config.renewCommissionBaseBps,
+    promo_group: user.promoGroup
+      ? {
+          id: user.promoGroup.id,
+          code: user.promoGroup.code,
+          name: user.promoGroup.name,
+        }
+      : null,
   };
 }
 
@@ -165,7 +277,11 @@ export async function listTeamInvites(
   userId: string,
   opts: { level?: number; limit?: number; offset?: number } = {},
 ) {
-  const config = await getReferralConfig();
+  const userRow = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { projectId: true },
+  });
+  const config = await getReferralConfig(userRow.projectId);
   const limit = Math.min(opts.limit || 20, 100);
   const offset = opts.offset || 0;
   const where =
@@ -178,7 +294,7 @@ export async function listTeamInvites(
     prisma.inviteClosure.findMany({
       where,
       include: {
-        descendant: { select: { id: true, email: true, createdAt: true, status: true } },
+        descendant: { select: { id: true, uid: true, email: true, createdAt: true, status: true } },
       },
       orderBy: { depth: "asc" },
       take: limit,
@@ -186,15 +302,36 @@ export async function listTeamInvites(
     }),
   ]);
 
+  const pageIds = rows.map((r) => r.descendant.id);
+  const paidCounts =
+    pageIds.length === 0
+      ? []
+      : await prisma.order.groupBy({
+          by: ["userId"],
+          where: {
+            userId: { in: pageIds },
+            status: { in: ["paid", "provisioned"] },
+            amountCents: { gt: 0 },
+          },
+          _count: { _all: true },
+        });
+  const paidCountByUser = new Map(paidCounts.map((r) => [r.userId, r._count._all]));
+
   return {
     total,
-    items: rows.map((r) => ({
-      user_id: r.descendant.id,
-      email_masked: maskEmail(r.descendant.email),
-      level: r.depth,
-      status: r.descendant.status,
-      created_at: r.descendant.createdAt,
-    })),
+    items: rows.map((r) => {
+      const paidCount = paidCountByUser.get(r.descendant.id) || 0;
+      return {
+        user_id: r.descendant.id,
+        uid: r.descendant.uid,
+        email_masked: maskEmail(r.descendant.email),
+        level: r.depth,
+        status: r.descendant.status,
+        created_at: r.descendant.createdAt,
+        has_paid: paidCount > 0,
+        paid_count: paidCount,
+      };
+    }),
   };
 }
 
@@ -245,7 +382,11 @@ export async function listTeamOrders(
   userId: string,
   opts: { limit?: number; offset?: number } = {},
 ) {
-  const config = await getReferralConfig();
+  const userRow = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { projectId: true },
+  });
+  const config = await getReferralConfig(userRow.projectId);
   const limit = Math.min(opts.limit || 20, 100);
   const offset = opts.offset || 0;
 

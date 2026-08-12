@@ -1,15 +1,24 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import {
   ModalForm,
   PageContainer,
   ProFormDigit,
   ProFormSelect,
-  ProFormText,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Drawer, Space, Tag, Typography, message } from "antd";
+import { Button, Drawer, Space, Tag, Typography } from "antd";
+import { message } from "../lib/antd-message";
 import { adminFetch, unwrapList } from "../lib/api";
+
+type ClientUrls = {
+  clash_meta?: string;
+  v2ray?: string;
+  shadowrocket?: string;
+  surge?: string;
+  quantumult_x?: string;
+};
 
 type UpstreamSlot = {
   id: string;
@@ -19,19 +28,54 @@ type UpstreamSlot = {
   upstream_id?: string | null;
   upstream_username?: string;
   subscription_url?: string | null;
+  client_urls?: ClientUrls | null;
   expires_at?: string | null;
   status?: string;
 };
 
+const CLIENT_URL_LABELS: { key: keyof ClientUrls; label: string }[] = [
+  { key: "clash_meta", label: "Mihomo / Clash Meta (YAML)" },
+  { key: "v2ray", label: "Xray / V2Ray (Base64)" },
+  { key: "shadowrocket", label: "Shadowrocket" },
+  { key: "surge", label: "Surge Profile" },
+  { key: "quantumult_x", label: "Quantumult X" },
+];
+
+type PromoGroupBrief = {
+  id: string;
+  name: string;
+  code: string;
+  enabled?: boolean;
+};
+
 type HabibiUser = {
   id: string;
+  uid?: number;
   email?: string | null;
   phone?: string | null;
   status: string;
+  is_anonymous?: boolean;
   created_at: string;
   subscription_count?: number;
   total_recharge_cents?: number;
   invite_count?: number;
+  invite_code?: string;
+  promo_group_id?: string;
+  promo_group?: PromoGroupBrief | null;
+  source_client?: string | null;
+  source_site?: { id: string; name: string; host: string } | null;
+  source_package?: {
+    id: string;
+    name: string;
+    packageName: string;
+    client: string;
+  } | null;
+  preferences?: {
+    connect_mode?: "unset" | "official_app" | "subscription_client";
+    connect_clients?: string[];
+    connect_pref_source?: string | null;
+    connect_pref_at?: string | null;
+  } | null;
   upstreams?: UpstreamSlot[];
 };
 
@@ -39,25 +83,60 @@ function money(cents: number) {
   return (cents / 100).toFixed(2);
 }
 
+function connectModeLabel(mode?: string | null) {
+  if (mode === "official_app") return "本站 App";
+  if (mode === "subscription_client") return "订阅客户端";
+  if (mode === "unset") return "未设置";
+  return "—";
+}
+
 export default function HabibiUsersPage() {
-  const actionRef = useRef<ActionType>();
-  const [provisionUser, setProvisionUser] = useState<HabibiUser | null>(null);
+  const actionRef = useRef<ActionType>(undefined);
   const [renewSlot, setRenewSlot] = useState<{
     user: HabibiUser;
     slot: UpstreamSlot;
   } | null>(null);
   const [detailUser, setDetailUser] = useState<HabibiUser | null>(null);
+  const [groupOptions, setGroupOptions] = useState<PromoGroupBrief[]>([]);
+
+  useEffect(() => {
+    void adminFetch<
+      Array<{ id: string; name: string; code: string; enabled: boolean }>
+    >("/admin/v1/referral/groups")
+      .then((list) =>
+        setGroupOptions(
+          (list || []).map((g) => ({
+            id: g.id,
+            name: g.name,
+            code: g.code,
+            enabled: g.enabled,
+          })),
+        ),
+      )
+      .catch(() => setGroupOptions([]));
+  }, []);
 
   const columns: ProColumns<HabibiUser>[] = [
     {
-      title: "ID",
-      dataIndex: "id",
+      title: "UID",
+      dataIndex: "uid",
       copyable: true,
-      ellipsis: true,
-      width: 200,
+      width: 110,
       search: false,
     },
-    { title: "邮箱", dataIndex: "email", copyable: true },
+    {
+      title: "邮箱",
+      dataIndex: "email",
+      copyable: true,
+      width: 260,
+      ellipsis: true,
+      render: (_, r) =>
+        r.email ? (
+          r.email
+        ) : (
+          <Tag>匿名</Tag>
+        ),
+    },
     {
       title: "状态",
       dataIndex: "status",
@@ -70,18 +149,89 @@ export default function HabibiUsersPage() {
         ),
     },
     {
-      title: "充值金额",
+      title: "充值",
       dataIndex: "total_recharge_cents",
       search: false,
       width: 110,
       render: (_, r) => money(r.total_recharge_cents ?? 0),
     },
     {
-      title: "邀请数量",
+      title: "邀请",
       dataIndex: "invite_count",
       search: false,
       width: 90,
       render: (_, r) => r.invite_count ?? 0,
+    },
+   
+    {
+      title: "来源",
+      search: false,
+      width: 160,
+      render: (_, r) => {
+        if (r.source_package) {
+          return (
+            <span title={r.source_package.packageName}>
+              包:{r.source_package.name}
+            </span>
+          );
+        }
+        if (r.source_site) {
+          return (
+            <span title={r.source_site.host}>站:{r.source_site.name}</span>
+          );
+        }
+        return r.source_client || "—";
+      },
+    },
+    {
+      title: "使用偏好",
+      dataIndex: "connect_mode",
+      width: 130,
+      valueType: "select",
+      fieldProps: {
+        options: [
+          { label: "未设置", value: "unset" },
+          { label: "本站 App", value: "official_app" },
+          { label: "订阅客户端", value: "subscription_client" },
+        ],
+        allowClear: true,
+      },
+      render: (_, r) => {
+        const mode = r.preferences?.connect_mode;
+        if (!mode || mode === "unset") return <Tag>未设置</Tag>;
+        const clients = r.preferences?.connect_clients || [];
+        return (
+          <span title={clients.length ? clients.join(", ") : undefined}>
+            <Tag color={mode === "official_app" ? "blue" : "orange"}>
+              {connectModeLabel(mode)}
+            </Tag>
+          </span>
+        );
+      },
+    },
+    {
+      title: "分佣组",
+      dataIndex: "promo_group_id",
+      width: 120,
+      valueType: "select",
+      fieldProps: {
+        options: groupOptions.map((g) => ({
+          label: g.name,
+          value: g.id,
+        })),
+        allowClear: true,
+      },
+      render: (_, r) => {
+        const name = r.promo_group?.name;
+        if (!name) return <Tag>—</Tag>;
+        const color =
+          r.promo_group?.code === "gold"
+            ? "gold"
+            : r.promo_group?.code === "silver"
+              ? "default"
+              : "blue";
+        return <Tag color={color}>{name}</Tag>;
+      },
     },
     {
       title: "套餐数",
@@ -92,6 +242,7 @@ export default function HabibiUsersPage() {
     {
       title: "上游顾客",
       search: false,
+      width: 240,
       ellipsis: true,
       render: (_, r) => {
         const slots = r.upstreams || [];
@@ -112,13 +263,13 @@ export default function HabibiUsersPage() {
     {
       title: "操作",
       valueType: "option",
-      width: 260,
+      width: 240,
       render: (_, row) => [
+        <Link key="promo" to={`/users/detail?user=${encodeURIComponent(row.id)}`}>
+          用户详情
+        </Link>,
         <a key="detail" onClick={() => setDetailUser(row)}>
           订阅详情
-        </a>,
-        <a key="provision" onClick={() => setProvisionUser(row)}>
-          新增套餐
         </a>,
         <a
           key="sync"
@@ -157,18 +308,21 @@ export default function HabibiUsersPage() {
 
   return (
     <PageContainer
-      title="Habibi 用户"
+      title="用户列表"
       subTitle="一用户可对应多个上游顾客（每个顾客=一个套餐）；续费/改套餐走 upsert 保订阅链接"
     >
       <ProTable<HabibiUser>
         rowKey="id"
         actionRef={actionRef}
         columns={columns}
+        scroll={{ x: 1600 }}
         request={async (params) => {
           const qs = new URLSearchParams();
           qs.set("limit", String(params.pageSize || 20));
           qs.set("offset", String(((params.current || 1) - 1) * (params.pageSize || 20)));
           if (params.email) qs.set("q", String(params.email));
+          if (params.promo_group_id) qs.set("promo_group_id", String(params.promo_group_id));
+          if (params.connect_mode) qs.set("connect_mode", String(params.connect_mode));
           const data = await adminFetch<{ users: HabibiUser[]; total: number }>(
             `/admin/v1/users?${qs}`,
           );
@@ -176,64 +330,6 @@ export default function HabibiUsersPage() {
         }}
         search={{ labelWidth: "auto" }}
       />
-
-      <ModalForm
-        title={`新增套餐（新上游顾客）— ${provisionUser?.email || ""}`}
-        open={!!provisionUser}
-        onOpenChange={(open) => !open && setProvisionUser(null)}
-        modalProps={{ destroyOnClose: true }}
-        onFinish={async (values) => {
-          if (!provisionUser) return false;
-          const body: Record<string, unknown> = {};
-          if (values.plan_id) body.plan_id = values.plan_id;
-          if (values.upstream_plan_ref) body.upstream_plan_ref = values.upstream_plan_ref;
-          if (values.validity_days) {
-            body.validity_seconds = Number(values.validity_days) * 86400;
-          }
-          if (values.note) body.note = values.note;
-          await adminFetch(`/admin/v1/users/${provisionUser.id}/provision`, {
-            method: "POST",
-            body: JSON.stringify(body),
-          });
-          message.success("已创建新上游顾客 / 套餐槽");
-          actionRef.current?.reload();
-          return true;
-        }}
-      >
-        <ProFormSelect
-          name="plan_id"
-          label="本地售卖套餐"
-          request={async () => {
-            const data = await adminFetch<{ plans: { id: string; name: string; code: string }[] }>(
-              "/admin/v1/plans",
-            );
-            return (data.plans || []).map((p) => ({
-              label: `${p.name} (${p.code})`,
-              value: p.id,
-            }));
-          }}
-          allowClear
-          tooltip="同一本地套餐每位用户只能开一次槽；续费请用「续费/改套餐」"
-        />
-        <ProFormSelect
-          name="upstream_plan_ref"
-          label="或直接选上游套餐 code"
-          request={async () => {
-            const data = await adminFetch("/admin/v1/wireraw/customer-plans");
-            const plans = unwrapList<{ code: string; name: string }>(data, ["items", "plans"]);
-            return plans.map((p) => ({ label: `${p.name} (${p.code})`, value: p.code }));
-          }}
-          showSearch
-          allowClear
-        />
-        <ProFormDigit
-          name="validity_days"
-          label="或：直传有效天数"
-          min={1}
-          tooltip="都不选时默认开通 1 天"
-        />
-        <ProFormText name="note" label="备注" />
-      </ModalForm>
 
       <ModalForm
         title={`续费/改套餐（保链接）— ${renewSlot?.slot.upstream_username || ""}`}
@@ -296,11 +392,62 @@ export default function HabibiUsersPage() {
         title={`订阅 — ${detailUser?.email || ""}`}
         open={!!detailUser}
         onClose={() => setDetailUser(null)}
-        width={520}
+        width={640}
       >
         <Space direction="vertical" style={{ width: "100%" }} size="middle">
+          {detailUser && (
+            <div
+              style={{
+                border: "1px solid #f0f0f0",
+                borderRadius: 8,
+                padding: 12,
+                background: "#fafafa",
+              }}
+            >
+              <Typography.Text strong>使用偏好</Typography.Text>
+              <div style={{ marginTop: 6 }}>
+                <Tag
+                  color={
+                    detailUser.preferences?.connect_mode === "official_app"
+                      ? "blue"
+                      : detailUser.preferences?.connect_mode ===
+                          "subscription_client"
+                        ? "orange"
+                        : "default"
+                  }
+                >
+                  {connectModeLabel(detailUser.preferences?.connect_mode)}
+                </Tag>
+                {(detailUser.preferences?.connect_clients || []).length > 0 && (
+                  <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                    {(detailUser.preferences?.connect_clients || []).join(" · ")}
+                  </Typography.Text>
+                )}
+              </div>
+              {detailUser.preferences?.connect_pref_source && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  来源 {detailUser.preferences.connect_pref_source}
+                  {detailUser.preferences.connect_pref_at
+                    ? ` · ${String(detailUser.preferences.connect_pref_at)
+                        .slice(0, 19)
+                        .replace("T", " ")}`
+                    : ""}
+                </Typography.Text>
+              )}
+            </div>
+          )}
           {(detailUser?.upstreams || []).length === 0 && (
-            <Typography.Text type="secondary">暂无套餐槽，可点「新增套餐」</Typography.Text>
+            <Typography.Text type="secondary">
+              暂无套餐槽，请到{" "}
+              {detailUser ? (
+                <Link to={`/users/detail?user=${encodeURIComponent(detailUser.id)}`}>
+                  用户详情
+                </Link>
+              ) : (
+                "用户详情"
+              )}{" "}
+              新增套餐
+            </Typography.Text>
           )}
           {(detailUser?.upstreams || []).map((s) => (
             <div
@@ -323,13 +470,51 @@ export default function HabibiUsersPage() {
                 到期：{s.expires_at?.slice(0, 19).replace("T", " ") || "-"}
               </div>
               {s.subscription_url && (
-                <Typography.Paragraph
-                  copyable
-                  ellipsis={{ rows: 2 }}
-                  style={{ marginTop: 8, marginBottom: 8, fontSize: 12 }}
-                >
-                  {s.subscription_url}
-                </Typography.Paragraph>
+                <>
+                  <Typography.Text
+                    type="secondary"
+                    style={{ display: "block", marginTop: 8, fontSize: 12 }}
+                  >
+                    上游原始订阅
+                  </Typography.Text>
+                  <Typography.Paragraph
+                    copyable
+                    ellipsis={{ rows: 2 }}
+                    style={{ marginBottom: 8, fontSize: 12 }}
+                  >
+                    {s.subscription_url}
+                  </Typography.Paragraph>
+                </>
+              )}
+              {s.client_urls && (
+                <div style={{ marginBottom: 8 }}>
+                  <Typography.Text strong style={{ fontSize: 12 }}>
+                    客户端转换订阅（/api/v1/sub）
+                  </Typography.Text>
+                  <div style={{ marginTop: 6 }}>
+                    {CLIENT_URL_LABELS.map(({ key, label }) => {
+                      const url = s.client_urls?.[key];
+                      if (!url) return null;
+                      return (
+                        <div key={key} style={{ marginBottom: 6 }}>
+                          <Typography.Text
+                            type="secondary"
+                            style={{ fontSize: 11 }}
+                          >
+                            {label}
+                          </Typography.Text>
+                          <Typography.Paragraph
+                            copyable
+                            ellipsis={{ rows: 2 }}
+                            style={{ marginBottom: 0, fontSize: 12 }}
+                          >
+                            {url}
+                          </Typography.Paragraph>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               <Button
                 size="small"

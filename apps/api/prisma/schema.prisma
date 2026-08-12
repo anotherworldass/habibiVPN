@@ -20,10 +20,17 @@ enum AdminRole {
 enum OrderStatus {
   pending
   paid
+  provisioning
   provisioned
   failed
   refunded
   cancelled
+}
+
+/// Whether this paid order is the user's first charge or a renewal (for commission base).
+enum CommissionKind {
+  first
+  renew
 }
 
 enum UpstreamSlotStatus {
@@ -44,10 +51,686 @@ enum WithdrawStatus {
   rejected
 }
 
+/// Wallet catalog redeem product type (phone credit / gift card)
+enum WalletCatalogKind {
+  phone_credit
+  gift_card
+}
+
+enum WalletSpendStatus {
+  pending
+  fulfilled
+  rejected
+}
+
+/// Append-only promo wallet balance movement reasons
+enum PromoWalletEntryType {
+  commission_pending
+  commission_settle
+  commission_invalidate_pending
+  commission_clawback
+  withdraw_hold
+  withdraw_reject
+  withdraw_paid
+  spend_hold
+  spend_reject
+  spend_fulfill
+  freeze_set
+}
+
+/// Habibi slot entitlement change reasons (plan / expiry / traffic)
+enum EntitlementReason {
+  order_paid
+  iap
+  redeem
+  campaign
+  free_claim
+  admin_provision
+  refund_clawback
+}
+
+/// App / store / desktop client for plan catalogs
+enum ClientChannel {
+  ios_appstore
+  ios_alt
+  android_play
+  android_direct
+  h5
+  windows
+  macos
+}
+
+/// User registration / login / bootstrap auth events (not admin audit)
+enum UserAuthEventType {
+  anonymous_bootstrap
+  register
+  register_bind
+  login
+  login_failed
+}
+
+/// How the user prefers to connect (cross-client recommendation)
+enum ConnectMode {
+  unset
+  official_app
+  subscription_client
+}
+
+/// Where the connect preference was last written
+enum ConnectPrefSource {
+  onboarding
+  connect_page
+  settings
+  claim_prompt
+  inferred
+}
+
+/// How an offer may be paid on that client
+enum OfferPaymentMode {
+  inherit
+  iap_only
+  web_only
+  iap_or_web
+}
+
+/// Logical billing shape (store/auto-renew vs one-shot duration pack)
+enum PlanBillingType {
+  one_time
+  renewable
+}
+
+/// WireRaw traffic cycle reset (passed on customer upsert as reset_policy)
+enum PlanResetPolicy {
+  no_reset
+  day
+  week
+  month
+  year
+  custom
+}
+
+enum StorePlatform {
+  app_store
+  google_play
+}
+
+enum StoreProductKind {
+  consumable
+  non_consumable
+  auto_renewing
+  non_renewing
+}
+
+/// Growth: campaign mechanic (claim / lottery). More types can be added later.
+enum CampaignType {
+  daily_claim
+  lottery
+}
+
+enum CampaignStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+enum RewardKind {
+  vpn_duration
+  vpn_traffic
+}
+
+/// How VPN duration rewards stack onto user slots
+enum RewardStackMode {
+  extend_active
+  create_campaign_slot
+}
+
+enum CampaignClaimResult {
+  claimed
+  won
+  lost
+}
+
+enum RedeemCodeStatus {
+  unused
+  redeemed
+  disabled
+}
+
+enum CouponDiscountType {
+  percent
+  fixed_amount
+}
+
+enum CouponStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+/// Brand / product line — pricing & plans are scoped per project
+model Project {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  enabled   Boolean  @default(true)
+  remark    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sites              ProjectSite[]
+  packages           AppPackage[]
+  users              User[]
+  plans              Plan[]
+  planGroups         PlanGroup[]
+  promoGroups        PromoGroup[]
+  referralConfig     ReferralConfig?
+  campaigns          Campaign[]
+  redeemBatches      RedeemBatch[]
+  coupons            Coupon[]
+  walletCatalogItems WalletCatalogItem[]
+  walletSpendRequests WalletSpendRequest[]
+  announcements      Announcement[]
+  telegramBot           ProjectTelegramBot?
+  systemSettings        SystemSetting[]
+  entitlementLedgers    EntitlementLedger[]
+  supportGuests         SupportGuest[]
+  supportConversations  SupportConversation[]
+
+  @@map("projects")
+}
+
+/// Per-project runtime settings (e.g. Amazon SES). Secrets live in value JSON; admin masks on read.
+model SystemSetting {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  /// Stable key, e.g. mail.ses
+  key       String   @db.VarChar(64)
+  value     Json
+  enabled   Boolean  @default(false)
+  remark    String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([key])
+  @@map("system_settings")
+}
+
+/// One Telegram bot per project (Mini App + DM broadcast share the same bot).
+model ProjectTelegramBot {
+  id            String   @id @default(cuid())
+  projectId     String   @unique @map("project_id")
+  enabled       Boolean  @default(false)
+  botUsername   String?  @map("bot_username")
+  /// AES-GCM encrypted bot token (same key as payment credentials)
+  botTokenEnc   String?  @map("bot_token_enc") @db.Text
+  /// Path secret: POST /api/v1/telegram/webhook/:projectCode/:webhookSecret
+  webhookSecret String   @map("webhook_secret")
+  /// Mini App HTTPS URL shown on /start keyboard
+  miniAppUrl    String?  @map("mini_app_url") @db.Text
+  /// t.me direct link base for invite shares: https://t.me/bot or https://t.me/bot/app
+  miniAppDirectLink String? @map("mini_app_direct_link") @db.Text
+  welcomeText   String?  @map("welcome_text") @db.Text
+  /// Official channel invite / public link for Mini App join guide (https://t.me/...)
+  channelUrl    String?  @map("channel_url") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subscribers TelegramSubscriber[]
+  broadcasts  TelegramBroadcastJob[]
+  autoReplies TelegramAutoReplyRule[]
+
+  @@map("project_telegram_bots")
+}
+
+enum TelegramAutoReplyMatch {
+  contains
+  exact
+  starts_with
+}
+
+/// Keyword → auto reply for private bot chats (evaluated after /start welcome).
+model TelegramAutoReplyRule {
+  id        String                 @id @default(cuid())
+  projectId String                 @map("project_id")
+  botId     String                 @map("bot_id")
+  /// Match needle (case-insensitive for contains/exact/starts_with)
+  keyword   String
+  matchMode TelegramAutoReplyMatch @default(contains) @map("match_mode")
+  replyText String                 @map("reply_text") @db.Text
+  enabled   Boolean                @default(true)
+  /// Lower runs first
+  priority  Int                    @default(100)
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+
+  bot ProjectTelegramBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, enabled, priority])
+  @@index([botId, enabled, priority])
+  @@map("telegram_auto_reply_rules")
+}
+
+enum TelegramBroadcastStatus {
+  queued
+  running
+  paused
+  completed
+  cancelled
+  failed
+  /// Deleting previously sent messages via deleteMessage
+  recalling
+  recalled
+}
+
+/// Async DM broadcast job — cursor-batched for large subscriber lists.
+model TelegramBroadcastJob {
+  id            String                  @id @default(cuid())
+  projectId     String                  @map("project_id")
+  botId         String                  @map("bot_id")
+  text          String                  @db.Text
+  status        TelegramBroadcastStatus @default(queued)
+  onlyCanDm     Boolean                 @default(true) @map("only_can_dm")
+  /// Snapshot count at enqueue time
+  totalTargeted Int                     @default(0) @map("total_targeted")
+  sentCount     Int                     @default(0) @map("sent_count")
+  failedCount   Int                     @default(0) @map("failed_count")
+  /// Successfully deleted via recall
+  recalledCount Int                     @default(0) @map("recalled_count")
+  recallFailedCount Int                 @default(0) @map("recall_failed_count")
+  /// Last processed subscriber id (exclusive cursor for next batch)
+  cursorId      String?                 @map("cursor_id")
+  /// Sample of recent errors (JSON array), capped
+  errorSamples  Json                    @default("[]") @map("error_samples")
+  createdBy     String?                 @map("created_by")
+  errorMessage  String?                 @map("error_message") @db.Text
+  startedAt     DateTime?               @map("started_at")
+  finishedAt    DateTime?               @map("finished_at")
+  recallStartedAt  DateTime?            @map("recall_started_at")
+  recallFinishedAt DateTime?            @map("recall_finished_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  bot         ProjectTelegramBot            @relation(fields: [botId], references: [id], onDelete: Cascade)
+  deliveries  TelegramBroadcastDelivery[]
+
+  @@index([projectId, status, createdAt])
+  @@index([status, updatedAt])
+  @@map("telegram_broadcast_jobs")
+}
+
+/// Per-recipient send receipt — enables later deleteMessage recall.
+model TelegramBroadcastDelivery {
+  id                String    @id @default(cuid())
+  jobId             String    @map("job_id")
+  projectId         String    @map("project_id")
+  subscriberId      String?   @map("subscriber_id")
+  chatId            String    @map("chat_id")
+  telegramMessageId String    @map("telegram_message_id")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  job TelegramBroadcastJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, chatId])
+  @@index([jobId, deletedAt, id])
+  @@index([projectId, createdAt])
+  @@map("telegram_broadcast_deliveries")
+}
+
+/// Users who /start-ed the bot or granted Mini App write access (can receive DMs).
+model TelegramSubscriber {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  botId          String   @map("bot_id")
+  /// Telegram user id as string (safe for JS number limits)
+  telegramUserId String   @map("telegram_user_id")
+  chatId         String   @map("chat_id")
+  /// Linked Habibi user when Mini App bind / auth succeeds
+  userId         String?  @map("user_id")
+  username       String?
+  firstName      String?  @map("first_name")
+  lastName       String?  @map("last_name")
+  /// Telegram client UI language, e.g. zh-hans / en
+  languageCode   String?  @map("language_code")
+  /// Telegram Premium
+  isPremium      Boolean? @map("is_premium")
+  isBot          Boolean  @default(false) @map("is_bot")
+  /// Mini App: user allowed write access (requestWriteAccess)
+  allowsWriteToPm Boolean? @map("allows_write_to_pm")
+  /// Mini App profile photo URL when present in initData
+  photoUrl       String?  @map("photo_url") @db.Text
+  /// Allowed to receive bot DMs (false after block / deny write access)
+  canDm          Boolean  @default(true) @map("can_dm")
+  blocked        Boolean  @default(false)
+  /// Opt-in for "friend joined via your invite" bot pushes
+  inviteNotifyEnabled Boolean @default(true) @map("invite_notify_enabled")
+  startedAt      DateTime @default(now()) @map("started_at")
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  bot                  ProjectTelegramBot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  supportConversations SupportConversation[]
+
+  @@unique([botId, telegramUserId])
+  @@index([projectId, canDm, blocked])
+  @@index([projectId, languageCode])
+  @@index([userId])
+  @@map("telegram_subscribers")
+}
+
+/// Multi-channel support desk (web widget, telegram, future app…)
+enum SupportChannel {
+  web
+  telegram
+}
+
+enum SupportConversationStatus {
+  open
+  closed
+}
+
+enum SupportMessageDirection {
+  inbound
+  outbound
+}
+
+enum SupportMessageSource {
+  user
+  admin
+  system
+  auto_reply
+  welcome
+}
+
+/// Anonymous website visitor identity for support chat
+model SupportGuest {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  /// SHA-256 hash of HttpOnly cookie token
+  guestTokenHash String   @unique @map("guest_token_hash")
+  userId         String?  @map("user_id")
+  ip             String?
+  userAgent      String?  @map("user_agent") @db.Text
+  timezone       String?
+  locale         String?
+  osName         String?  @map("os_name")
+  osVersion      String?  @map("os_version")
+  browserName    String?  @map("browser_name")
+  deviceIdHash   String?  @map("device_id_hash")
+  /// Entry surface for ops: h5 (site widget) | app (in-app WebView)
+  clientSource   String?  @map("client_source")
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  conversations SupportConversation[]
+
+  @@index([projectId, lastSeenAt])
+  @@index([userId])
+  @@index([ip, createdAt])
+  @@index([projectId, clientSource])
+  @@map("support_guests")
+}
+
+model SupportConversation {
+  id                   String                    @id @default(cuid())
+  projectId            String                    @map("project_id")
+  channel              SupportChannel
+  status               SupportConversationStatus @default(open)
+  guestId              String?                   @map("guest_id")
+  userId               String?                   @map("user_id")
+  telegramSubscriberId String?                   @map("telegram_subscriber_id")
+  displayName          String?                   @map("display_name")
+  languageCode         String?                   @map("language_code")
+  unreadCount          Int                       @default(0) @map("unread_count")
+  lastMessageAt        DateTime?                 @map("last_message_at")
+  lastMessagePreview   String?                   @map("last_message_preview") @db.Text
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  guest              SupportGuest?       @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  telegramSubscriber TelegramSubscriber? @relation(fields: [telegramSubscriberId], references: [id], onDelete: SetNull)
+  messages           SupportMessage[]
+
+  @@unique([projectId, guestId])
+  @@unique([projectId, telegramSubscriberId])
+  @@index([projectId, channel, lastMessageAt])
+  @@index([projectId, unreadCount])
+  @@index([userId])
+  @@map("support_conversations")
+}
+
+model SupportMessage {
+  id                String                  @id @default(cuid())
+  conversationId    String                  @map("conversation_id")
+  projectId         String                  @map("project_id")
+  direction         SupportMessageDirection
+  source            SupportMessageSource
+  contentType       String                  @default("text") @map("content_type")
+  text              String?                 @db.Text
+  /// Public HTTPS URL for image (or other media)
+  mediaUrl          String?                 @map("media_url") @db.Text
+  /// Telegram message_id or other channel external id
+  externalMessageId String?                 @map("external_message_id")
+  adminUsername     String?                 @map("admin_username")
+  recalledAt        DateTime?               @map("recalled_at")
+  /// Snapshot: ip, userAgent, timezone, locale, osName, osVersion, browserName…
+  clientMeta        Json?                   @map("client_meta")
+  createdAt         DateTime                @default(now()) @map("created_at")
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("support_messages")
+}
+
+/// H5 site under a project (domain → project attribution)
+model ProjectSite {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  name      String
+  /// Primary host, lowercase, no port (e.g. www.example.com)
+  host      String   @unique
+  enabled   Boolean  @default(true)
+  remark    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  users         User[]              @relation("UserSourceSite")
+  announcements AnnouncementSite[]
+
+  @@index([projectId, enabled])
+  @@map("project_sites")
+}
+
+enum AppReleaseStatus {
+  draft
+  published
+  archived
+}
+
+/// App binary / 马甲包 under a project
+model AppPackage {
+  id          String        @id @default(cuid())
+  projectId   String        @map("project_id")
+  name        String
+  /// iOS bundle id / Android applicationId (may match across platforms)
+  packageName String        @map("package_name")
+  platform    String
+  /// Maps to catalog client channel
+  client      ClientChannel
+  isPrimary   Boolean       @default(false) @map("is_primary")
+  enabled     Boolean       @default(true)
+  /// Clients below this versionCode must force-update (null = no package-level floor)
+  minSupportVersionCode Int? @map("min_support_version_code")
+  /// Default store listing URL (App Store / Play); release may override
+  storeUrl    String?       @map("store_url") @db.Text
+  /// Public client remote config (api_bases, flags, extras…). See app-config service.
+  clientConfig Json         @default("{}") @map("client_config")
+  remark      String?       @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  users             User[]              @relation("UserSourcePackage")
+  campaignPackages  CampaignPackage[]
+  releases          AppPackageRelease[]
+  announcements     AnnouncementPackage[]
+
+  /// Same bundle id / applicationId allowed on different platforms (e.g. iOS + Android)
+  @@unique([packageName, platform])
+  @@index([projectId, enabled])
+  @@index([client])
+  @@map("app_packages")
+}
+
+enum AnnouncementType {
+  modal
+  banner
+  top_bar
+}
+
+enum AnnouncementStatus {
+  draft
+  published
+  archived
+}
+
+/// once = hide after dismiss (persisted on client); every_launch = show again next cold start
+enum AnnouncementRepeat {
+  once
+  every_launch
+}
+
+/// Broadcast notice for App / H5 / desktop (not per-user inbox).
+model Announcement {
+  id          String             @id @default(cuid())
+  projectId   String             @map("project_id")
+  /// Optional ops key within project
+  code        String?
+  type        AnnouncementType   @default(banner)
+  status      AnnouncementStatus @default(draft)
+  titleI18n   Json               @default("{}") @map("title_i18n")
+  bodyI18n    Json               @default("{}") @map("body_i18n")
+  actionUrl   String?            @map("action_url") @db.Text
+  /// Higher shows first
+  priority    Int                @default(0)
+  startAt     DateTime?          @map("start_at")
+  endAt       DateTime?          @map("end_at")
+  /// Client may hide after dismiss (modal/banner)
+  dismissible Boolean            @default(true)
+  /// once: remember dismiss; every_launch: show again on next cold start
+  repeat      AnnouncementRepeat @default(once)
+  remark      String?            @db.Text
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clients  AnnouncementClient[]
+  packages AnnouncementPackage[]
+  sites    AnnouncementSite[]
+
+  @@unique([projectId, code])
+  @@index([projectId, status, priority])
+  @@index([status, startAt, endAt])
+  @@map("announcements")
+}
+
+/// Empty set = all clients under the project
+model AnnouncementClient {
+  id             String        @id @default(cuid())
+  announcementId String        @map("announcement_id")
+  client         ClientChannel
+  enabled        Boolean       @default(true)
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, client])
+  @@index([client, enabled])
+  @@map("announcement_clients")
+}
+
+/// Empty set = all packages (when package filter is used)
+model AnnouncementPackage {
+  id             String @id @default(cuid())
+  announcementId String @map("announcement_id")
+  packageId      String @map("package_id")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  package      AppPackage   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, packageId])
+  @@index([packageId])
+  @@map("announcement_packages")
+}
+
+/// Empty set = all H5 sites (when site filter is used)
+model AnnouncementSite {
+  id             String @id @default(cuid())
+  announcementId String @map("announcement_id")
+  siteId         String @map("site_id")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  site         ProjectSite  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, siteId])
+  @@index([siteId])
+  @@map("announcement_sites")
+}
+
+/// Version history under an AppPackage. Multiple `published` allowed; latest = max(versionCode).
+model AppPackageRelease {
+  id            String           @id @default(cuid())
+  packageId     String           @map("package_id")
+  versionName   String           @map("version_name")
+  versionCode   Int              @map("version_code")
+  status        AppReleaseStatus @default(draft)
+  /// Soft force: clients below this release's versionCode should update when this is latest
+  forceUpdate   Boolean          @default(false) @map("force_update")
+  /// Localized titles: { "zh": "...", "en": "..." } — extend by adding locale keys
+  titleI18n     Json             @default("{}") @map("title_i18n")
+  /// Localized changelogs: same shape as titleI18n
+  changelogI18n Json             @default("{}") @map("changelog_i18n")
+  downloadUrl   String?          @map("download_url") @db.Text
+  storeUrl      String?          @map("store_url") @db.Text
+  fileSize      BigInt?          @map("file_size")
+  checksum      String?
+  /// Object key in app_dist buckets when uploaded via Habibi (null = external URL)
+  artifactKey   String?          @map("artifact_key") @db.VarChar(512)
+  publishedAt   DateTime?        @map("published_at")
+  remark        String?          @db.Text
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  package AppPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, versionCode])
+  @@index([packageId, status, versionCode])
+  @@map("app_package_releases")
+}
+
 /// Habibi end-user (App / H5)
 model User {
   id           String     @id @default(cuid())
+  /// Public numeric ID shown in App / account (stable across register bind)
+  uid          Int        @unique
   email        String?    @unique
+  /// When the current email was verified via OTP (null = unverified / anonymous)
+  emailVerifiedAt DateTime? @map("email_verified_at")
   phone        String?    @unique
   passwordHash String     @map("password_hash")
   status       UserStatus @default(active)
@@ -55,24 +738,109 @@ model User {
   inviteCode   String     @unique @map("invite_code")
   /// Permanent inviter binding (null = organic)
   invitedById  String?    @map("invited_by_id")
+  /// When inviter was DMed about this user joining (dedupe TG notify)
+  inviteJoinNotifiedAt DateTime? @map("invite_join_notified_at")
   /// Promotion qualification (can be revoked for fraud)
   promoEnabled Boolean    @default(true) @map("promo_enabled")
+  /// Promo tier group (bronze / silver / gold); rates taken from beneficiary's group
+  promoGroupId String     @default("bronze") @map("promo_group_id")
+  /// One account belongs to exactly one project
+  projectId    String     @default("habibi") @map("project_id")
+  sourceSiteId String?    @map("source_site_id")
+  sourcePackageId String? @map("source_package_id")
+  sourceClient ClientChannel? @map("source_client")
+  /// Preferred connect path: official app vs subscription clients (Shadowrocket etc.)
+  connectMode       ConnectMode       @default(unset) @map("connect_mode")
+  /// Optional detail when connectMode = subscription_client, e.g. ["shadowrocket","clash"]
+  connectClients    Json              @default("[]") @map("connect_clients")
+  connectPrefSource ConnectPrefSource? @map("connect_pref_source")
+  connectPrefAt     DateTime?         @map("connect_pref_at")
+  /// Admin-only ops note (referral / support); not shown to end users
+  adminRemark  String?    @map("admin_remark") @db.Text
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
   inviter              User?              @relation("UserInvites", fields: [invitedById], references: [id], onDelete: SetNull)
   invitees             User[]             @relation("UserInvites")
+  promoGroup           PromoGroup         @relation(fields: [promoGroupId], references: [id], onDelete: Restrict)
+  project              Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  sourceSite           ProjectSite?       @relation("UserSourceSite", fields: [sourceSiteId], references: [id], onDelete: SetNull)
+  sourcePackage        AppPackage?        @relation("UserSourcePackage", fields: [sourcePackageId], references: [id], onDelete: SetNull)
   upstreams            UserUpstream[]
   orders               Order[]
   promoWallet          PromoWallet?
+  promoWalletLedgers   PromoWalletLedger[]
+  entitlementLedgers   EntitlementLedger[]
   commissionsEarned    CommissionLedger[] @relation("CommissionBeneficiary")
   commissionsAsPayer   CommissionLedger[] @relation("CommissionPayer")
   withdrawRequests     WithdrawRequest[]
+  walletSpendRequests  WalletSpendRequest[]
   ancestorClosures     InviteClosure[]    @relation("ClosureAncestor")
   descendantClosures   InviteClosure[]    @relation("ClosureDescendant")
+  campaignClaims       CampaignClaim[]
+  redeemRedemptions    RedeemRedemption[]
+  couponRedemptions    CouponRedemption[]
+  authEvents             UserAuthEvent[]
+  passwordResetTokens    PasswordResetToken[]
+  telegramSubscribers    TelegramSubscriber[]
+  supportGuests          SupportGuest[]
+  supportConversations   SupportConversation[]
 
   @@index([invitedById])
+  @@index([promoGroupId])
+  @@index([projectId])
+  @@index([sourceSiteId])
+  @@index([sourcePackageId])
   @@map("users")
+}
+
+/// Short-lived codes for forgot-password → reset-password flow
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+enum EmailOtpPurpose {
+  register
+  login
+}
+
+/// Pending email OTP (register verify). Password reset stays on PasswordResetToken.
+model EmailOtp {
+  id        String          @id @default(cuid())
+  projectId String          @map("project_id")
+  email     String
+  purpose   EmailOtpPurpose
+  codeHash  String          @map("code_hash")
+  /// register: { passwordHash, inviteCode?, bindUserId? }
+  payload   Json?
+  expiresAt DateTime        @map("expires_at")
+  usedAt    DateTime?       @map("used_at")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([email, purpose, createdAt])
+  @@index([codeHash])
+  @@index([expiresAt])
+  @@map("email_otps")
+}
+
+/// Row-locked counter for allocating public numeric UIDs
+model UidCounter {
+  id      Int @id @default(1)
+  nextUid Int @default(160003) @map("next_uid")
+
+  @@map("uid_counters")
 }
 
 /// Closure table for N-level upline/downline queries
@@ -93,21 +861,52 @@ model InviteClosure {
 }
 
 /// Singleton-ish referral program settings (use id = "default")
+/// Per-project referral settings (switch, settle window, withdraw rules).
+/// Rates live on PromoGroup; ReferralLevelRate is legacy seed template for habibi only.
 model ReferralConfig {
-  id                String   @id @default("default")
+  /// Same as projectId (habibi keeps id=habibi after migration from "default")
+  id                String   @id
+  projectId         String   @unique @map("project_id")
   enabled           Boolean  @default(true)
   maxLevel          Int      @default(5) @map("max_level")
   settleDays        Int      @default(7) @map("settle_days")
   minWithdrawCents  Int      @default(10000) @map("min_withdraw_cents")
   withdrawFeeBps    Int      @default(300) @map("withdraw_fee_bps")
-  /// Max total commission budget in bps (default 20%)
+  /// Soft budget hint in bps (default 20%); not enforced on promo groups
   maxTotalRateBps   Int      @default(2000) @map("max_total_rate_bps")
+  /// App Store IAP commission base = floor(order.amountCents * iapCommissionBaseBps / 10000)
+  iapCommissionBaseBps Int    @default(10000) @map("iap_commission_base_bps")
+  /// Google Play Billing commission base (provider=google_play)
+  playCommissionBaseBps Int   @default(10000) @map("play_commission_base_bps")
+  /// First-charge commission base multiplier (10000 = 100% of amount after store factor)
+  firstCommissionBaseBps Int  @default(10000) @map("first_commission_base_bps")
+  /// Renewal commission base multiplier
+  renewCommissionBaseBps Int  @default(10000) @map("renew_commission_base_bps")
   /// e.g. ["usdt","bank"]
   withdrawMethods   Json     @default("[\"usdt\",\"bank\"]") @map("withdraw_methods")
+  /// Master switch for commission catalog spend (phone credit / gift cards)
+  catalogSpendEnabled Boolean @default(false) @map("catalog_spend_enabled")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@map("referral_configs")
+}
+
+/// App Store Server Notification V2 idempotency log
+model IapNotificationLog {
+  id              String    @id @default(cuid())
+  notificationUuid String   @unique @map("notification_uuid")
+  notificationType String   @map("notification_type")
+  subtype         String?
+  transactionId   String?   @map("transaction_id")
+  payload         Json
+  processedAt     DateTime  @default(now()) @map("processed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([transactionId])
+  @@map("iap_notification_logs")
 }
 
 model ReferralLevelRate {
@@ -122,6 +921,47 @@ model ReferralLevelRate {
   @@map("referral_level_rates")
 }
 
+/// Promo agent tier (e.g. bronze / silver / gold). Scoped per project.
+model PromoGroup {
+  id        String   @id
+  projectId String   @default("habibi") @map("project_id")
+  name      String
+  code      String
+  isDefault Boolean  @default(false) @map("is_default")
+  enabled   Boolean  @default(true)
+  /// null = use global ReferralConfig.maxLevel
+  maxLevel  Int?     @map("max_level")
+  sort      Int      @default(0)
+  remark    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  levels      PromoGroupLevelRate[]
+  users       User[]
+  commissions CommissionLedger[]
+
+  @@unique([projectId, code])
+  @@index([projectId, enabled])
+  @@map("promo_groups")
+}
+
+model PromoGroupLevelRate {
+  id        String   @id @default(cuid())
+  groupId   String   @map("group_id")
+  level     Int
+  /// Basis points: 1400 = 14%
+  rateBps   Int      @map("rate_bps")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  group PromoGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, level])
+  @@index([groupId])
+  @@map("promo_group_level_rates")
+}
+
 model PromoWallet {
   id             String   @id @default(cuid())
   userId         String   @unique @map("user_id")
@@ -129,6 +969,8 @@ model PromoWallet {
   pendingCents   Int      @default(0) @map("pending_cents")
   withdrawnCents Int      @default(0) @map("withdrawn_cents")
   frozenCents    Int      @default(0) @map("frozen_cents")
+  /// Cumulative fulfilled catalog spends (phone credit / gift cards)
+  spentCents     Int      @default(0) @map("spent_cents")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -137,11 +979,101 @@ model PromoWallet {
   @@map("promo_wallets")
 }
 
+/// Append-only balance change ledger for PromoWallet
+model PromoWalletLedger {
+  id              String               @id @default(cuid())
+  userId          String               @map("user_id")
+  entryType       PromoWalletEntryType @map("entry_type")
+  availableDelta  Int                  @default(0) @map("available_delta")
+  pendingDelta    Int                  @default(0) @map("pending_delta")
+  withdrawnDelta  Int                  @default(0) @map("withdrawn_delta")
+  frozenDelta     Int                  @default(0) @map("frozen_delta")
+  spentDelta      Int                  @default(0) @map("spent_delta")
+  availableAfter  Int                  @map("available_after")
+  pendingAfter    Int                  @map("pending_after")
+  withdrawnAfter  Int                  @map("withdrawn_after")
+  frozenAfter     Int                  @map("frozen_after")
+  spentAfter      Int                  @map("spent_after")
+  /// e.g. commission_ledger / withdraw_request / wallet_spend / admin
+  refType         String?              @map("ref_type")
+  refId           String?              @map("ref_id")
+  actorType       String?              @map("actor_type")
+  actorId         String?              @map("actor_id")
+  remark          String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([refType, refId])
+  @@index([entryType, createdAt])
+  @@map("promo_wallet_ledgers")
+}
+
+/// Redeemable catalog SKU paid with promo wallet balance
+model WalletCatalogItem {
+  id              String           @id @default(cuid())
+  projectId       String           @map("project_id")
+  kind            WalletCatalogKind
+  name            String
+  description     String?          @db.Text
+  /// Display face value (e.g. 1000 = ¥10 phone credit)
+  faceValueCents  Int              @map("face_value_cents")
+  /// Actual debit from promo wallet available balance
+  priceCents      Int              @map("price_cents")
+  enabled         Boolean          @default(true)
+  sort            Int              @default(0)
+  /// null = unlimited; 0 = sold out
+  stock           Int?             @map("stock")
+  remark          String?          @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  spends  WalletSpendRequest[]
+
+  @@index([projectId, enabled, sort])
+  @@map("wallet_catalog_items")
+}
+
+/// User spend request against a catalog item (manual fulfill)
+model WalletSpendRequest {
+  id                  String            @id @default(cuid())
+  userId              String            @map("user_id")
+  projectId           String            @map("project_id")
+  catalogItemId       String            @map("catalog_item_id")
+  /// Snapshots at order time
+  itemName            String            @map("item_name")
+  kind                WalletCatalogKind
+  faceValueCents      Int               @map("face_value_cents")
+  priceCents          Int               @map("price_cents")
+  fulfillmentPayload  Json              @map("fulfillment_payload")
+  status              WalletSpendStatus @default(pending)
+  reviewedBy          String?           @map("reviewed_by")
+  reviewedAt          DateTime?         @map("reviewed_at")
+  adminNote           String?           @map("admin_note") @db.Text
+  /// Card code / recharge receipt (admin; gift_card may expose to user when fulfilled)
+  fulfillmentNote     String?           @map("fulfillment_note") @db.Text
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  catalogItem WalletCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@index([projectId, status, createdAt])
+  @@index([catalogItemId])
+  @@map("wallet_spend_requests")
+}
+
 model CommissionLedger {
   id               String           @id @default(cuid())
   orderId          String           @map("order_id")
   beneficiaryId    String           @map("beneficiary_id")
   payerId          String           @map("payer_id")
+  /// Snapshot of beneficiary promo group at settlement time
+  promoGroupId     String?          @map("promo_group_id")
   level            Int
   orderAmountCents Int              @map("order_amount_cents")
   rateBps          Int              @map("rate_bps")
@@ -153,14 +1085,16 @@ model CommissionLedger {
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
-  order       Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  beneficiary User  @relation("CommissionBeneficiary", fields: [beneficiaryId], references: [id], onDelete: Cascade)
-  payer       User  @relation("CommissionPayer", fields: [payerId], references: [id], onDelete: Cascade)
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  beneficiary User        @relation("CommissionBeneficiary", fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  payer       User        @relation("CommissionPayer", fields: [payerId], references: [id], onDelete: Cascade)
+  promoGroup  PromoGroup? @relation(fields: [promoGroupId], references: [id], onDelete: SetNull)
 
   @@unique([orderId, beneficiaryId, level])
   @@index([beneficiaryId, status])
   @@index([status, settleAt])
   @@index([payerId])
+  @@index([promoGroupId])
   @@map("commission_ledgers")
 }
 
@@ -198,6 +1132,19 @@ model UserUpstream {
   subscriptionUrl  String?            @map("subscription_url") @db.Text
   expiresAt        DateTime?          @map("expires_at")
   status           UpstreamSlotStatus @default(active)
+  /// Localized label when planId is null (campaign / redeem): { "zh": "...", "en": "..." }
+  displayNameI18n  Json?              @map("display_name_i18n")
+  /// Cached from last WireRaw sync (stale-while-revalidate for list)
+  usedTrafficBytes            BigInt?   @map("used_traffic_bytes")
+  dataLimitBytes              BigInt?   @map("data_limit_bytes")
+  onlineIpLimit               Int?      @map("online_ip_limit")
+  onlineDeviceCount           Int?      @map("online_device_count")
+  subscriptionOnlineDevices   Int?      @map("subscription_online_devices")
+  onlineAt                    DateTime? @map("online_at")
+  onlineSince                 DateTime? @map("online_since")
+  serviceExpiresAt            DateTime? @map("service_expires_at")
+  /// { id?, name?, region? } from last sync
+  currentNode                 Json?     @map("current_node")
   lastSyncedAt     DateTime?          @map("last_synced_at")
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
@@ -211,6 +1158,45 @@ model UserUpstream {
   @@map("user_upstreams")
 }
 
+/// Append-only Habibi slot entitlement changes (plan / expiry / traffic / status)
+model EntitlementLedger {
+  id                 String            @id @default(cuid())
+  projectId          String            @map("project_id")
+  userId             String            @map("user_id")
+  slotId             String            @map("slot_id")
+  reason             EntitlementReason
+  /// e.g. { created, renew, plan_change, traffic_adjust, expire_adjust, status_change, clawback }
+  changeFlags        Json              @map("change_flags")
+  planIdBefore       String?           @map("plan_id_before")
+  planIdAfter        String?           @map("plan_id_after")
+  expiresAtBefore    DateTime?         @map("expires_at_before")
+  expiresAtAfter     DateTime?         @map("expires_at_after")
+  expireDeltaSeconds Int?              @map("expire_delta_seconds")
+  dataLimitBefore    BigInt?           @map("data_limit_before")
+  dataLimitAfter     BigInt?           @map("data_limit_after")
+  dataLimitDelta     BigInt?           @map("data_limit_delta")
+  statusBefore       String?           @map("status_before")
+  statusAfter        String?           @map("status_after")
+  refType            String?           @map("ref_type")
+  refId              String?           @map("ref_id")
+  actorType          String?           @map("actor_type")
+  actorId            String?           @map("actor_id")
+  remark             String?           @db.Text
+  /// Provision retry idempotency, e.g. order:xxx / clawback:order:xxx
+  idempotencyKey     String?           @unique @map("idempotency_key")
+  createdAt          DateTime          @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+  @@index([slotId, createdAt])
+  @@index([reason, createdAt])
+  @@index([refType, refId])
+  @@map("entitlement_ledgers")
+}
+
 model AdminUser {
   id           String    @id @default(cuid())
   username     String    @unique
@@ -222,52 +1208,457 @@ model AdminUser {
   @@map("admin_users")
 }
 
-/// Local sellable SKU (maps to WireRaw plan / duration)
+/// Catalog display group for sellable plans (e.g. duration vs traffic) — per project
+model PlanGroup {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  code      String
+  /// Denormalized display name (synced from nameI18n, prefer zh)
+  name      String
+  /// Localized names: { "zh": "...", "en": "..." }
+  nameI18n  Json     @default("{}") @map("name_i18n")
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plans   Plan[]
+
+  @@unique([projectId, code])
+  @@index([projectId, enabled])
+  @@map("plan_groups")
+}
+
+/// Local sellable SKU (maps to WireRaw plan / duration) — scoped per project
 model Plan {
-  id               String   @id @default(cuid())
-  code             String   @unique
+  id               String          @id @default(cuid())
+  projectId        String          @default("habibi") @map("project_id")
+  /// Optional catalog display group (null = ungrouped)
+  groupId          String?         @map("group_id")
+  code             String
+  /// Denormalized display name (synced from nameI18n, prefer zh)
   name             String
-  description      String?  @db.Text
-  priceCents       Int      @map("price_cents")
-  currency         String   @default("USD")
-  upstreamPlanRef  String?  @map("upstream_plan_ref")
-  validitySeconds  Int?     @map("validity_seconds")
-  dataLimitBytes   BigInt?  @map("data_limit_bytes")
+  description      String?         @db.Text
+  /// Localized names: { "zh": "...", "en": "..." }
+  nameI18n         Json            @default("{}") @map("name_i18n")
+  /// Localized descriptions: same shape as nameI18n
+  descriptionI18n  Json            @default("{}") @map("description_i18n")
+  priceCents       Int             @map("price_cents")
+  currency         String          @default("USD")
+  upstreamPlanRef  String?         @map("upstream_plan_ref")
+  /// Entitlement grant duration for WireRaw provision (relative seconds)
+  validitySeconds  Int?            @map("validity_seconds")
+  /// Calendar months for provision expire_at (mutually exclusive with validitySeconds).
+  /// e.g. 12 = same day next year; handles month-end (Jan 31 → Feb 28/29).
+  validityCalendarMonths Int?      @map("validity_calendar_months")
+  /// Catalog billing cycle for daily-price / compare (seconds). Not used for provision.
+  /// Fallback for display: billingPeriodSeconds ?? validitySeconds
+  billingPeriodSeconds Int?        @map("billing_period_seconds")
+  dataLimitBytes   BigInt?         @map("data_limit_bytes")
+  /// Traffic cycle reset for WireRaw (`reset_policy`); default = no periodic wipe
+  resetPolicy      PlanResetPolicy @default(no_reset) @map("reset_policy")
+  /// Only when resetPolicy=custom; Go duration e.g. "720h"
+  customResetInterval String?      @map("custom_reset_interval")
+  /// Max concurrent devices for this entitlement (account-level)
+  deviceSlots      Int             @default(1) @map("device_slots")
+  /// one_time = duration pack; renewable = may map to store auto-renew
+  billingType      PlanBillingType @default(one_time) @map("billing_type")
   /// Users can claim once for free after register (no payment)
-  isFreeClaimable  Boolean  @default(false) @map("is_free_claimable")
-  enabled          Boolean  @default(true)
-  sortOrder        Int      @default(0) @map("sort_order")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  isFreeClaimable  Boolean         @default(false) @map("is_free_claimable")
+  enabled          Boolean         @default(true)
+  sortOrder        Int             @default(0) @map("sort_order")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
 
-  orders    Order[]
-  upstreams UserUpstream[]
+  project        Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  group          PlanGroup?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  orders         Order[]
+  upstreams      UserUpstream[]
+  catalogOffers  PlanCatalogOffer[]
+  storeProducts  StoreProduct[]
+  redeemBatches  RedeemBatch[]
 
+  @@unique([projectId, code])
+  @@index([projectId, enabled])
+  @@index([groupId])
   @@map("plans")
 }
 
-model Order {
-  id             String      @id @default(cuid())
-  userId         String      @map("user_id")
-  planId         String      @map("plan_id")
-  status         OrderStatus @default(pending)
-  amountCents    Int         @map("amount_cents")
-  currency       String      @default("USD")
-  provider       String?
-  providerRef    String?     @map("provider_ref")
-  provisionError String?     @map("provision_error") @db.Text
-  paidAt         DateTime?   @map("paid_at")
-  provisionedAt  DateTime?   @map("provisioned_at")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
+/// Per-client visibility / sort / payment mode for a plan
+model PlanCatalogOffer {
+  id          String           @id @default(cuid())
+  planId      String           @map("plan_id")
+  client      ClientChannel
+  enabled     Boolean          @default(true)
+  sortOrder   Int              @default(0) @map("sort_order")
+  paymentMode OfferPaymentMode @default(inherit) @map("payment_mode")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
 
-  user        User               @relation(fields: [userId], references: [id])
-  plan        Plan               @relation(fields: [planId], references: [id])
-  commissions CommissionLedger[]
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, client])
+  @@index([client, enabled])
+  @@map("plan_catalog_offers")
+}
+
+/// App Store / Play product mapping (IAP settlement in later phase)
+model StoreProduct {
+  id          String           @id @default(cuid())
+  planId      String           @map("plan_id")
+  store       StorePlatform
+  productId   String           @map("product_id")
+  productKind StoreProductKind @map("product_kind")
+  /// Marketing / catalog only — App Store Connect is source of truth for trial length
+  trialDays   Int?             @map("trial_days")
+  enabled     Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([store, productId])
+  @@index([planId, store])
+  @@map("store_products")
+}
+
+model Order {
+  id               String         @id @default(cuid())
+  userId           String         @map("user_id")
+  planId           String         @map("plan_id")
+  paymentChannelId String?        @map("payment_channel_id")
+  status           OrderStatus    @default(pending)
+  /// Snapshot for commission: first charge vs renewal
+  commissionKind   CommissionKind @default(first) @map("commission_kind")
+  /// Catalog / list price before coupon (null = legacy orders; treat as amountCents)
+  listPriceCents   Int?           @map("list_price_cents")
+  /// Coupon discount applied (0 if none)
+  discountCents    Int            @default(0) @map("discount_cents")
+  couponId         String?        @map("coupon_id")
+  /// Snapshot of coupon code at order time
+  couponCode       String?        @map("coupon_code")
+  /// Payable amount after discount (source of truth for payment + commission base)
+  amountCents      Int            @map("amount_cents")
+  currency         String         @default("USD")
+  provider         String?
+  providerRef      String?        @map("provider_ref")
+  paymentUrl       String?        @map("payment_url") @db.Text
+  failureReason    String?        @map("failure_reason") @db.Text
+  provisionError   String?        @map("provision_error") @db.Text
+  /// App Store subscription period end (from transaction expiresDate)
+  storeExpiresAt   DateTime?      @map("store_expires_at")
+  /// Raw Apple JWS `price` (currency units × 1000)
+  storePriceMillis Int?           @map("store_price_millis")
+  /// Apple offerType: 1=introductory, 2=promotional, 3=offer code, 4=win-back
+  appleOfferType   String?        @map("apple_offer_type")
+  /// Apple offerDiscountType e.g. FREE_TRIAL, PAY_AS_YOU_GO, PAY_UP_FRONT
+  appleOfferDiscountType String?  @map("apple_offer_discount_type")
+  /// True when this charge is an App Store free-trial period (usually amountCents=0)
+  isTrialPeriod    Boolean        @default(false) @map("is_trial_period")
+  paidAt           DateTime?      @map("paid_at")
+  provisionedAt    DateTime?      @map("provisioned_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  user           User               @relation(fields: [userId], references: [id])
+  plan           Plan               @relation(fields: [planId], references: [id])
+  paymentChannel PaymentChannel?    @relation(fields: [paymentChannelId], references: [id], onDelete: SetNull)
+  coupon         Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  commissions    CommissionLedger[]
 
   @@index([userId])
+  @@index([userId, commissionKind])
   @@index([status])
+  @@index([paymentChannelId])
+  @@index([couponId])
+  @@unique([provider, providerRef])
   @@map("orders")
+}
+
+// ─── Growth: campaigns / redeem codes / coupons ─────────────────────────────
+
+/// Operational campaign (daily claim, lottery, …) scoped to a project
+model Campaign {
+  id        String         @id @default(cuid())
+  projectId String         @map("project_id")
+  code      String
+  name      String
+  type      CampaignType
+  status    CampaignStatus @default(draft)
+  startAt   DateTime?      @map("start_at")
+  endAt     DateTime?      @map("end_at")
+  /// IANA tz for periodKey day boundaries (e.g. Asia/Shanghai)
+  timezone  String         @default("Asia/Shanghai")
+  /// Mechanic rules: limitPerUserPerDay, lottery.winRateBps, audience, …
+  rulesJson Json           @default("{}") @map("rules_json")
+  /// Client copy / entry UI config (title, button, …)
+  uiJson    Json           @default("{}") @map("ui_json")
+  sortOrder Int            @default(0) @map("sort_order")
+  remark    String?        @db.Text
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  project  Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clients  CampaignClient[]
+  packages CampaignPackage[]
+  rewards  CampaignReward[]
+  claims   CampaignClaim[]
+
+  @@unique([projectId, code])
+  @@index([projectId, status])
+  @@index([status, startAt, endAt])
+  @@map("campaigns")
+}
+
+model CampaignClient {
+  id         String        @id @default(cuid())
+  campaignId String        @map("campaign_id")
+  client     ClientChannel
+  enabled    Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, client])
+  @@index([client, enabled])
+  @@map("campaign_clients")
+}
+
+/// Optional package allow-list. Empty = all packages under selected clients.
+model CampaignPackage {
+  id         String   @id @default(cuid())
+  campaignId String   @map("campaign_id")
+  packageId  String   @map("package_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  campaign Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  package  AppPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, packageId])
+  @@index([packageId])
+  @@map("campaign_packages")
+}
+
+model CampaignReward {
+  id              String          @id @default(cuid())
+  campaignId      String          @map("campaign_id")
+  kind            RewardKind      @default(vpn_duration)
+  validitySeconds Int?            @map("validity_seconds")
+  dataLimitBytes  BigInt?         @map("data_limit_bytes")
+  stackMode       RewardStackMode @default(extend_active) @map("stack_mode")
+  sortOrder       Int             @default(0) @map("sort_order")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("campaign_rewards")
+}
+
+/// Per-user participation ledger (idempotent per campaign + period + attempt)
+model CampaignClaim {
+  id              String              @id @default(cuid())
+  campaignId      String              @map("campaign_id")
+  userId          String              @map("user_id")
+  client          ClientChannel
+  /// Day key in campaign timezone, e.g. 2026-07-25
+  periodKey       String              @map("period_key")
+  /// 1-based attempt within the period (supports limitPerUserPerDay > 1)
+  attemptIndex    Int                 @default(1) @map("attempt_index")
+  result          CampaignClaimResult
+  grantedSeconds  Int?                @map("granted_seconds")
+  slotId          String?             @map("slot_id")
+  idempotencyKey  String              @unique @map("idempotency_key")
+  meta            Json?
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId, periodKey, attemptIndex])
+  @@index([userId, createdAt])
+  @@index([campaignId, periodKey, result])
+  @@map("campaign_claims")
+}
+
+/// Batch of redeem codes that grant VPN entitlement (plan slot or custom duration)
+model RedeemBatch {
+  id                   String    @id @default(cuid())
+  projectId            String    @map("project_id")
+  name                 String
+  /// When set, redeem provisions this plan (preferred). Else use validitySeconds.
+  planId               String?   @map("plan_id")
+  kind                 RewardKind @default(vpn_duration)
+  validitySeconds      Int?      @map("validity_seconds")
+  dataLimitBytes       BigInt?   @map("data_limit_bytes")
+  stackMode            RewardStackMode @default(extend_active) @map("stack_mode")
+  startAt              DateTime? @map("start_at")
+  endAt                DateTime? @map("end_at")
+  maxRedemptionsPerUser Int      @default(1) @map("max_redemptions_per_user")
+  enabled              Boolean   @default(true)
+  remark               String?   @db.Text
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plan    Plan?               @relation(fields: [planId], references: [id], onDelete: SetNull)
+  clients RedeemBatchClient[]
+  codes   RedeemCode[]
+
+  @@index([projectId, enabled])
+  @@index([planId])
+  @@map("redeem_batches")
+}
+
+model RedeemBatchClient {
+  id      String        @id @default(cuid())
+  batchId String        @map("batch_id")
+  client  ClientChannel
+  enabled Boolean       @default(true)
+
+  batch RedeemBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, client])
+  @@map("redeem_batch_clients")
+}
+
+model RedeemCode {
+  id         String           @id @default(cuid())
+  batchId    String           @map("batch_id")
+  code       String           @unique
+  status     RedeemCodeStatus @default(unused)
+  redeemedBy String?          @map("redeemed_by")
+  redeemedAt DateTime?        @map("redeemed_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  batch        RedeemBatch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  redemptions  RedeemRedemption[]
+
+  @@index([batchId, status])
+  @@map("redeem_codes")
+}
+
+model RedeemRedemption {
+  id             String        @id @default(cuid())
+  codeId         String        @map("code_id")
+  userId         String        @map("user_id")
+  client         ClientChannel
+  grantedSeconds Int?          @map("granted_seconds")
+  slotId         String?       @map("slot_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  code RedeemCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([codeId])
+  @@map("redeem_redemptions")
+}
+
+/// Checkout coupon (pricing only — not entitlement grant). IAP clients should typically be excluded.
+model Coupon {
+  id               String             @id @default(cuid())
+  projectId        String             @map("project_id")
+  code             String
+  name             String
+  discountType     CouponDiscountType @map("discount_type")
+  /// percent: basis points (1000 = 10%); fixed_amount: cents off
+  discountValue    Int                @map("discount_value")
+  minOrderCents    Int                @default(0) @map("min_order_cents")
+  maxDiscountCents Int?               @map("max_discount_cents")
+  /// Empty = all plans in project; otherwise JSON string[] of plan ids
+  planIdsJson      Json               @default("[]") @map("plan_ids_json")
+  startAt          DateTime?          @map("start_at")
+  endAt            DateTime?          @map("end_at")
+  status           CouponStatus       @default(draft)
+  totalLimit       Int?               @map("total_limit")
+  perUserLimit     Int                @default(1) @map("per_user_limit")
+  remark           String?            @db.Text
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clients     CouponClient[]
+  redemptions CouponRedemption[]
+  orders      Order[]
+
+  @@unique([projectId, code])
+  @@index([projectId, status])
+  @@map("coupons")
+}
+
+model CouponClient {
+  id       String        @id @default(cuid())
+  couponId String        @map("coupon_id")
+  client   ClientChannel
+  enabled  Boolean       @default(true)
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, client])
+  @@map("coupon_clients")
+}
+
+/// Soft ledger for coupon usage (order link optional until paid)
+model CouponRedemption {
+  id        String   @id @default(cuid())
+  couponId  String   @map("coupon_id")
+  userId    String   @map("user_id")
+  orderId   String?  @map("order_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([couponId])
+  @@index([userId])
+  @@index([orderId])
+  @@map("coupon_redemptions")
+}
+
+/// Payment-system configuration. `adapter` selects code implementing the remote protocol.
+/// Non-secret adapter settings live in config; credentials are encrypted separately.
+model PaymentProvider {
+  id                   String   @id @default(cuid())
+  code                 String   @unique
+  name                 String
+  adapter              String
+  enabled              Boolean  @default(false)
+  config               Json
+  credentialsEncrypted String?  @map("credentials_encrypted") @db.Text
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  channels PaymentChannel[]
+
+  @@map("payment_providers")
+}
+
+/// A user-selectable rail within a provider (for example WeChat QR or Alipay native).
+model PaymentChannel {
+  id          String   @id @default(cuid())
+  providerId  String   @map("provider_id")
+  code        String
+  name        String
+  method      String
+  currency    String   @default("CNY")
+  minCents    Int      @map("min_cents")
+  maxCents    Int      @map("max_cents")
+  enabled     Boolean  @default(false)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  provider PaymentProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@unique([providerId, code])
+  @@index([enabled, sortOrder])
+  @@map("payment_channels")
 }
 
 model AuditLog {
@@ -284,4 +1675,31 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model UserAuthEvent {
+  id            String            @id @default(cuid())
+  userId        String?           @map("user_id")
+  eventType     UserAuthEventType @map("event_type")
+  success       Boolean           @default(true)
+  failureReason String?           @map("failure_reason")
+  ip            String?
+  userAgent     String?           @map("user_agent") @db.Text
+  timezone      String?
+  locale        String?
+  client        ClientChannel?    @map("client")
+  appVersion    String?           @map("app_version")
+  osName        String?           @map("os_name")
+  osVersion     String?           @map("os_version")
+  deviceIdHash  String?           @map("device_id_hash")
+  meta          Json?
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([ip, createdAt])
+  @@index([eventType, createdAt])
+  @@index([deviceIdHash, createdAt])
+  @@map("user_auth_events")
 }

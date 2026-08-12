@@ -1,0 +1,97 @@
+import type { FastifyPluginAsync } from "fastify";
+import type { ClientChannel } from "@prisma/client";
+import { z } from "zod";
+import { USER_API_PREFIX } from "@habibi/shared";
+import { CLIENT_CHANNELS } from "../services/catalog.js";
+import { getAppConfigByPackageName } from "../services/app-config.js";
+import { checkAppUpdate } from "../services/app-update.js";
+import { sourceHintsFromRequest } from "../services/project.js";
+
+function softParseClient(raw: string | null | undefined): ClientChannel | null {
+  if (!raw) return null;
+  const v = raw.trim().toLowerCase();
+  if ((CLIENT_CHANNELS as string[]).includes(v)) return v as ClientChannel;
+  return null;
+}
+
+export const userAppRoutes: FastifyPluginAsync = async (app) => {
+  /**
+   * Per-package remote client config (api bases, flags, extras). No auth.
+   * Requires package name (query/header). Same name on iOS/Android needs client/platform.
+   */
+  app.get(`${USER_API_PREFIX}/app/config`, async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const hints = sourceHintsFromRequest(req);
+    const packageName =
+      q.package?.trim() ||
+      q.package_name?.trim() ||
+      hints.packageName?.trim() ||
+      null;
+    if (!packageName) {
+      return reply.code(404).send({ error: "package.unknown" });
+    }
+    try {
+      const client = softParseClient(q.client || hints.client);
+      return await getAppConfigByPackageName(packageName, {
+        client,
+        platform: q.platform || hints.platform,
+      });
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  /**
+   * App version check. No auth required.
+   * Requires package name (query/header) — no silent default project package.
+   */
+  app.get(`${USER_API_PREFIX}/app/update-check`, async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const hints = sourceHintsFromRequest(req);
+    const packageName =
+      q.package?.trim() ||
+      q.package_name?.trim() ||
+      hints.packageName?.trim() ||
+      null;
+    const versionCodeRaw = q.version_code ?? q.versionCode;
+    const parsed = z
+      .object({
+        version_code: z.coerce.number().int().nonnegative(),
+      })
+      .safeParse({ version_code: versionCodeRaw });
+
+    if (!packageName) {
+      return reply.code(404).send({ error: "package.unknown" });
+    }
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation.failed" });
+    }
+
+    try {
+      const client = softParseClient(q.client || hints.client);
+      const locale =
+        q.locale ||
+        q.lang ||
+        (Array.isArray(req.headers["accept-language"])
+          ? req.headers["accept-language"][0]
+          : req.headers["accept-language"]) ||
+        null;
+      const result = await checkAppUpdate({
+        packageName,
+        versionCode: parsed.data.version_code,
+        client,
+        platform: q.platform || hints.platform,
+        locale,
+      });
+      return result;
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+};

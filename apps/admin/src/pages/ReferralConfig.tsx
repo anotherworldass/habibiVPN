@@ -1,31 +1,26 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageContainer } from "@ant-design/pro-components";
-import {
-  Button,
-  Card,
-  Form,
-  InputNumber,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Typography,
-  message,
-} from "antd";
+import { Alert, Button, Card, Form, InputNumber, Select, Space, Switch, Typography } from "antd";
+import { message } from "../lib/antd-message";
 import { adminFetch } from "../lib/api";
-
-type LevelRate = { level: number; rateBps: number };
+import { getProjectId, PROJECT_CHANGE_EVENT } from "../lib/project";
 
 type Config = {
   id: string;
+  projectId?: string;
   enabled: boolean;
   maxLevel: number;
   settleDays: number;
   minWithdrawCents: number;
   withdrawFeeBps: number;
   maxTotalRateBps: number;
+  iapCommissionBaseBps?: number;
+  playCommissionBaseBps?: number;
+  firstCommissionBaseBps?: number;
+  renewCommissionBaseBps?: number;
   withdrawMethods: string[];
-  levels: LevelRate[];
+  catalogSpendEnabled?: boolean;
 };
 
 const { Text } = Typography;
@@ -38,34 +33,32 @@ function centsToYuan(cents: number) {
   return (cents / 100).toFixed(2);
 }
 
-/** Example commission yuan for a 100-yuan order. */
-function exampleCommissionYuan(rateBps: number, orderYuan = 100) {
-  const orderCents = Math.round(orderYuan * 100);
-  return centsToYuan(Math.floor((orderCents * rateBps) / 10000));
-}
-
-function Hint({ children }: { children: ReactNode }) {
-  return (
-    <Text type="secondary" style={{ marginLeft: 8, whiteSpace: "nowrap" }}>
-      {children}
-    </Text>
-  );
-}
-
 export default function ReferralConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [projectId, setProjectIdState] = useState(getProjectId());
   const [form] = Form.useForm();
-  const [levels, setLevels] = useState<LevelRate[]>([]);
 
   const minWithdrawCents = Form.useWatch("minWithdrawCents", form) as number | undefined;
   const withdrawFeeBps = Form.useWatch("withdrawFeeBps", form) as number | undefined;
-  const maxTotalRateBps = Form.useWatch("maxTotalRateBps", form) as number | undefined;
+  const iapCommissionBaseBps = Form.useWatch("iapCommissionBaseBps", form) as
+    | number
+    | undefined;
+  const playCommissionBaseBps = Form.useWatch("playCommissionBaseBps", form) as
+    | number
+    | undefined;
+  const firstCommissionBaseBps = Form.useWatch("firstCommissionBaseBps", form) as
+    | number
+    | undefined;
+  const renewCommissionBaseBps = Form.useWatch("renewCommissionBaseBps", form) as
+    | number
+    | undefined;
 
   async function load() {
     setLoading(true);
     try {
       const cfg = await adminFetch<Config>("/admin/v1/referral/config");
+      setProjectIdState(cfg.projectId || getProjectId());
       form.setFieldsValue({
         enabled: cfg.enabled,
         maxLevel: cfg.maxLevel,
@@ -73,9 +66,13 @@ export default function ReferralConfigPage() {
         minWithdrawCents: cfg.minWithdrawCents,
         withdrawFeeBps: cfg.withdrawFeeBps,
         maxTotalRateBps: cfg.maxTotalRateBps,
+        iapCommissionBaseBps: cfg.iapCommissionBaseBps ?? 10000,
+        playCommissionBaseBps: cfg.playCommissionBaseBps ?? 10000,
+        firstCommissionBaseBps: cfg.firstCommissionBaseBps ?? 10000,
+        renewCommissionBaseBps: cfg.renewCommissionBaseBps ?? 10000,
         withdrawMethods: cfg.withdrawMethods,
+        catalogSpendEnabled: cfg.catalogSpendEnabled ?? false,
       });
-      setLevels(cfg.levels.length ? cfg.levels : [{ level: 1, rateBps: 1400 }]);
     } catch (e) {
       message.error(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -85,17 +82,13 @@ export default function ReferralConfigPage() {
 
   useEffect(() => {
     void load();
+    const onProject = () => void load();
+    window.addEventListener(PROJECT_CHANGE_EVENT, onProject);
+    return () => window.removeEventListener(PROJECT_CHANGE_EVENT, onProject);
   }, []);
 
   async function onSave() {
     const values = await form.validateFields();
-    const total = levels.reduce((s, l) => s + l.rateBps, 0);
-    if (total > values.maxTotalRateBps) {
-      message.error(
-        `各级比例合计 ${bpsToPercent(total)}% 超过预算 ${bpsToPercent(values.maxTotalRateBps)}%`,
-      );
-      return;
-    }
     setSaving(true);
     try {
       await adminFetch("/admin/v1/referral/config", {
@@ -107,8 +100,12 @@ export default function ReferralConfigPage() {
           minWithdrawCents: values.minWithdrawCents,
           withdrawFeeBps: values.withdrawFeeBps,
           maxTotalRateBps: values.maxTotalRateBps,
+          iapCommissionBaseBps: values.iapCommissionBaseBps,
+          playCommissionBaseBps: values.playCommissionBaseBps,
+          firstCommissionBaseBps: values.firstCommissionBaseBps,
+          renewCommissionBaseBps: values.renewCommissionBaseBps,
           withdrawMethods: values.withdrawMethods,
-          levels: levels.map((l, i) => ({ level: i + 1, rateBps: l.rateBps })),
+          catalogSpendEnabled: values.catalogSpendEnabled,
         }),
       });
       message.success("已保存");
@@ -120,7 +117,6 @@ export default function ReferralConfigPage() {
     }
   }
 
-  const totalBps = levels.reduce((s, l) => s + l.rateBps, 0);
   const feeYuanOnMin =
     minWithdrawCents != null && withdrawFeeBps != null
       ? centsToYuan(Math.floor((minWithdrawCents * withdrawFeeBps) / 10000))
@@ -129,12 +125,36 @@ export default function ReferralConfigPage() {
   return (
     <PageContainer title="分销配置">
       <Card loading={loading}>
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            <span>
+              以下为当前项目（{projectId}）的分销开关与提现规则。N 级费率请到{" "}
+              <Link to="/referral/groups">用户组</Link> 配置；结算按受益人所属组取费率。
+            </span>
+          }
+        />
         <Form form={form} layout="vertical" style={{ maxWidth: 860 }}>
           <Form.Item name="enabled" label="启用分销" valuePropName="checked">
             <Switch checkedChildren="开" unCheckedChildren="关" />
           </Form.Item>
+          <Form.Item
+            name="catalogSpendEnabled"
+            label="佣金兑换（话费/购物卡）"
+            valuePropName="checked"
+            extra="关闭后用户不可下单兑换；商品与审核仍可在后台管理"
+          >
+            <Switch checkedChildren="开" unCheckedChildren="关" />
+          </Form.Item>
           <Space wrap size="large" align="start">
-            <Form.Item name="maxLevel" label="最大级数" rules={[{ required: true }]}>
+            <Form.Item
+              name="maxLevel"
+              label="项目最大级数"
+              rules={[{ required: true }]}
+              extra="本项目闭包深度上限；各组可单独设更小级数"
+            >
               <InputNumber min={1} max={10} />
             </Form.Item>
             <Form.Item name="settleDays" label="结算天数" rules={[{ required: true }]}>
@@ -177,15 +197,70 @@ export default function ReferralConfigPage() {
             </Form.Item>
             <Form.Item
               name="maxTotalRateBps"
-              label="佣金预算上限（万分比）"
+              label="参考预算上限（万分比）"
+              rules={[{ required: true }]}
+              extra="仅作参考提示，用户组费率可自由设置，不再强制校验"
+            >
+              <InputNumber min={0} max={10000} style={{ width: 140 }} />
+            </Form.Item>
+            <Form.Item
+              name="iapCommissionBaseBps"
+              label="App Store 计佣基数（万分比）"
               rules={[{ required: true }]}
               extra={
-                maxTotalRateBps != null ? (
+                iapCommissionBaseBps != null ? (
                   <span>
-                    = <Text strong>{bpsToPercent(maxTotalRateBps)}</Text>%
-                    {" "}
-                    · 100 元订单最多分佣{" "}
-                    <Text strong>{exampleCommissionYuan(maxTotalRateBps)}</Text> 元
+                    App Store 订单先按标价的{" "}
+                    <Text strong>{bpsToPercent(iapCommissionBaseBps)}</Text>%，再乘首充/续费系数
+                  </span>
+                ) : (
+                  "App Store 订单分佣基数相对套餐标价的比例"
+                )
+              }
+            >
+              <InputNumber min={0} max={10000} style={{ width: 140 }} />
+            </Form.Item>
+            <Form.Item
+              name="playCommissionBaseBps"
+              label="Google Play 计佣基数（万分比）"
+              rules={[{ required: true }]}
+              extra={
+                playCommissionBaseBps != null ? (
+                  <span>
+                    Google Play 订单先按标价的{" "}
+                    <Text strong>{bpsToPercent(playCommissionBaseBps)}</Text>%，再乘首充/续费系数
+                  </span>
+                ) : (
+                  "Google Play 订单分佣基数相对套餐标价的比例"
+                )
+              }
+            >
+              <InputNumber min={0} max={10000} style={{ width: 140 }} />
+            </Form.Item>
+            <Form.Item
+              name="firstCommissionBaseBps"
+              label="首充计佣基数（万分比）"
+              rules={[{ required: true }]}
+              extra={
+                firstCommissionBaseBps != null ? (
+                  <span>
+                    首笔付费订单再乘{" "}
+                    <Text strong>{bpsToPercent(firstCommissionBaseBps)}</Text>%
+                  </span>
+                ) : null
+              }
+            >
+              <InputNumber min={0} max={10000} style={{ width: 140 }} />
+            </Form.Item>
+            <Form.Item
+              name="renewCommissionBaseBps"
+              label="续费计佣基数（万分比）"
+              rules={[{ required: true }]}
+              extra={
+                renewCommissionBaseBps != null ? (
+                  <span>
+                    非首笔付费（含复购/订阅续订）再乘{" "}
+                    <Text strong>{bpsToPercent(renewCommissionBaseBps)}</Text>%
                   </span>
                 ) : null
               }
@@ -205,69 +280,7 @@ export default function ReferralConfigPage() {
           </Form.Item>
         </Form>
 
-        <Table
-          size="small"
-          rowKey="level"
-          pagination={false}
-          dataSource={levels.map((l, i) => ({ ...l, level: i + 1 }))}
-          columns={[
-            { title: "层级", dataIndex: "level", width: 70 },
-            {
-              title: "比例（万分比）",
-              dataIndex: "rateBps",
-              width: 200,
-              render: (_, row, index) => (
-                <Space>
-                  <InputNumber
-                    min={0}
-                    max={10000}
-                    value={row.rateBps}
-                    onChange={(v) => {
-                      const next = [...levels];
-                      next[index] = { level: index + 1, rateBps: Number(v) || 0 };
-                      setLevels(next);
-                    }}
-                  />
-                  <Hint>= {bpsToPercent(row.rateBps)}%</Hint>
-                </Space>
-              ),
-            },
-            {
-              title: "100 元订单示例",
-              render: (_, row) => (
-                <Text>
-                  <Text strong>{exampleCommissionYuan(row.rateBps)}</Text> 元
-                </Text>
-              ),
-            },
-            {
-              title: "操作",
-              width: 80,
-              render: (_, __, index) =>
-                levels.length > 1 ? (
-                  <a onClick={() => setLevels(levels.filter((_, i) => i !== index))}>删除</a>
-                ) : null,
-            },
-          ]}
-          footer={() => (
-            <Space wrap>
-              <Button
-                disabled={levels.length >= 10}
-                onClick={() =>
-                  setLevels([...levels, { level: levels.length + 1, rateBps: 0 }])
-                }
-              >
-                增加一级
-              </Button>
-              <span>
-                合计：{bpsToPercent(totalBps)}%（{totalBps} bps）· 100 元订单总分佣{" "}
-                <Text strong>{exampleCommissionYuan(totalBps)}</Text> 元
-              </span>
-            </Space>
-          )}
-        />
-
-        <Button type="primary" style={{ marginTop: 16 }} loading={saving} onClick={() => void onSave()}>
+        <Button type="primary" loading={saving} onClick={() => void onSave()}>
           保存配置
         </Button>
       </Card>

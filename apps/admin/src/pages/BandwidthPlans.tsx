@@ -9,7 +9,8 @@ import {
   ProFormTextArea,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Modal, message } from "antd";
+import { Button, Modal } from "antd";
+import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
 import { adminFetch, unwrapList } from "../lib/api";
 
@@ -26,7 +27,7 @@ type BwPlan = {
 };
 
 export default function BandwidthPlansPage() {
-  const actionRef = useRef<ActionType>();
+  const actionRef = useRef<ActionType>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
 
   const columns: ProColumns<BwPlan>[] = [

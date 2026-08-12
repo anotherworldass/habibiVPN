@@ -1,47 +1,23 @@
 /**
  * Phase 0: verify WireRaw credentials & customer-plans.
  * Usage (from repo root): pnpm wireraw:smoke
+ *
+ * Respects WIRERAW_HTTP_PROXY via the shared WireRaw client.
  */
-import { resolve } from "node:path";
-import { config as loadEnv } from "dotenv";
-
-loadEnv({ path: resolve(process.cwd(), "../../.env") });
-loadEnv({ path: resolve(process.cwd(), ".env") });
-
-const host = (process.env.WIRERAW_HOST ?? "").replace(/\/$/, "");
-const keyId = process.env.WIRERAW_KEY_ID ?? "";
-const keySecret = process.env.WIRERAW_KEY_SECRET ?? "";
-
-if (!host || !keyId || !keySecret) {
-  console.error("Missing WIRERAW_HOST / WIRERAW_KEY_ID / WIRERAW_KEY_SECRET in .env");
-  process.exit(1);
-}
+import { wireraw } from "../src/wireraw/client.js";
+import { env } from "../src/config.js";
 
 async function main() {
-  console.log(`→ GET ${host}/v1/proxy/customer-plans`);
-  const res = await fetch(`${host}/v1/proxy/customer-plans`, {
-    headers: {
-      "X-Wireraw-Key-ID": keyId,
-      "X-Wireraw-Key-Secret": keySecret,
-      Accept: "application/json",
-      "X-Request-ID": crypto.randomUUID(),
-    },
-  });
-  const text = await res.text();
-  let body: unknown = text;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    /* keep text */
+  console.log(`→ GET ${env.WIRERAW_HOST}/v1/proxy/customer-plans`);
+  if (env.WIRERAW_HTTP_PROXY) {
+    console.log(`  via proxy ${env.WIRERAW_HTTP_PROXY}`);
+  } else {
+    console.log("  direct (WIRERAW_HTTP_PROXY unset)");
   }
 
-  console.log(`← HTTP ${res.status}`);
+  const body = await wireraw.listCustomerPlans();
+  console.log("← OK");
   console.log(JSON.stringify(body, null, 2));
-
-  if (!res.ok) {
-    process.exit(1);
-  }
-
   console.log("\nSmoke OK: credentials accepted.");
 }
 

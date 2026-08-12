@@ -22,16 +22,26 @@ export type WireRawCustomerView = {
     current_bandwidth_plan_ref?: string | null;
     next_bandwidth_plan_ref?: string | null;
     online_at?: string | null;
+    online_since?: string | null;
+    online_seconds?: number | null;
     current_node?: {
       id: string;
       name: string;
       region: string;
     } | null;
+    source_ips?: string[] | null;
+    source_ip_history?: Array<{
+      ip?: string;
+      source_ip?: string;
+      observed_at?: string;
+    }> | null;
+    last_source_ip?: string | null;
   };
   subscription_url?: string | null;
   uuid?: string;
   password?: string;
   online_device_count?: number;
+  inbounds?: Record<string, string[]>;
   creds_by_protocol?: Record<string, unknown>;
 };
 
@@ -49,6 +59,7 @@ export type WireRawUpsertCustomerInput = {
   current_bandwidth_plan_ref?: string;
   next_bandwidth_plan_ref?: string;
   reset_policy?: string;
+  custom_reset_interval?: string;
 };
 
 export type WireRawExtendInput = {

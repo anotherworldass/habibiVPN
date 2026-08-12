@@ -1,0 +1,34 @@
+const MAP: Record<string, string> = {
+  "auth.email_taken": "该邮箱已被占用，请换一个邮箱",
+  "auth.already_registered": "当前账号已绑定邮箱",
+  "auth.invalid_credentials": "邮箱或密码不正确",
+  "auth.email_unverified": "邮箱尚未验证，暂不能用邮箱登录，请先完成验证",
+  "auth.verify_code_required": "请先获取并填写邮箱验证码",
+  "auth.verify_code_invalid": "验证码无效或已过期",
+  "auth.password_required": "请先设置密码后再获取验证码",
+  "auth.code_cooldown": "验证码发送过于频繁，请稍后再试",
+  "mail.ses.not_configured": "邮件服务未配置，请稍后重试或联系客服",
+  "auth.user_disabled": "账号已停用，请联系客服",
+  "auth.anonymous_no_password": "请先绑定邮箱后再改密",
+  "validation.failed": "请检查邮箱和密码格式",
+  "auth.bootstrap_rate_limited": "操作太频繁，请稍后再试",
+  "auth.bootstrap_device_limited": "今日创建账号已达上限",
+  "auth.device_id_required": "缺少设备标识，请重开小程序",
+  "plan.not_found": "套餐不存在或已下架",
+  "plan.not_free_claimable": "该套餐不可免费领取",
+  "subscription.plan_already_owned": "你已拥有该套餐",
+  "subscription.not_found": "找不到该订阅",
+  "user.not_found": "用户不存在",
+  "user.disabled": "账号已停用",
+  "invite.code_invalid": "邀请码无效",
+  "promo.disabled": "推广资格已停用",
+  "referral.disabled": "推广功能暂时关闭",
+  "payment.channel_unavailable": "该支付通道暂不可用",
+  "payment.create_failed": "创建支付订单失败，请稍后重试",
+  "order.not_found": "订单不存在",
+};
+
+export function friendlyError(err: unknown, fallback = "操作失败，请稍后重试") {
+  const raw = err instanceof Error ? err.message : String(err || "");
+  return MAP[raw] || (raw.startsWith("http.") ? fallback : raw || fallback);
+}

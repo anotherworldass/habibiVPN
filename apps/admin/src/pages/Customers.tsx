@@ -10,17 +10,8 @@ import {
   ProFormTextArea,
   ProTable,
 } from "@ant-design/pro-components";
-import {
-  Button,
-  Descriptions,
-  Dropdown,
-  Modal,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-  message,
-} from "antd";
+import { Button, Descriptions, Dropdown, Modal, Space, Spin, Tag, Typography } from "antd";
+import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { adminFetch, unwrapList } from "../lib/api";
@@ -208,7 +199,7 @@ async function loadBandwidthPlanOptions() {
 }
 
 export default function CustomersPage() {
-  const actionRef = useRef<ActionType>();
+  const actionRef = useRef<ActionType>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [editRow, setEditRow] = useState<CustomerRow | null>(null);
   const [extendRow, setExtendRow] = useState<CustomerRow | null>(null);
@@ -778,10 +769,45 @@ export default function CustomersPage() {
                   )}
                 </Descriptions.Item>
                 <Descriptions.Item label="源 IP 历史" span={2}>
-                  {Array.isArray(detail.end_user.source_ips) &&
-                  detail.end_user.source_ips.length
-                    ? detail.end_user.source_ips.join(", ")
-                    : "暂无源 IP 历史（顾客通过节点建立真实连接后采集）"}
+                  {Array.isArray(detail.end_user.source_ip_history) &&
+                  detail.end_user.source_ip_history.length
+                    ? detail.end_user.source_ip_history.map((row, idx) => {
+                        const o =
+                          row && typeof row === "object"
+                            ? (row as Record<string, unknown>)
+                            : null;
+                        const ip =
+                          typeof row === "string"
+                            ? row
+                            : typeof o?.ip === "string"
+                              ? o.ip
+                              : typeof o?.source_ip === "string"
+                                ? o.source_ip
+                                : typeof o?.["来源 IP"] === "string"
+                                  ? o["来源 IP"]
+                                  : null;
+                        const at =
+                          typeof o?.observed_at === "string"
+                            ? o.observed_at
+                            : typeof o?.observedAt === "string"
+                              ? o.observedAt
+                              : typeof o?.OBSERVEDAT === "string"
+                                ? o.OBSERVEDAT
+                                : null;
+                        if (!ip) return null;
+                        return (
+                          <div key={`${ip}-${idx}`}>
+                            <Typography.Text copyable={{ text: String(ip) }}>
+                              {String(ip)}
+                              {at ? ` ${formatTime(String(at))}` : ""}
+                            </Typography.Text>
+                          </div>
+                        );
+                      })
+                    : Array.isArray(detail.end_user.source_ips) &&
+                        detail.end_user.source_ips.length
+                      ? detail.end_user.source_ips.join(", ")
+                      : "暂无源 IP 历史（顾客通过节点建立真实连接后采集，最多保留 8 个）"}
                 </Descriptions.Item>
                 <Descriptions.Item label="顾客 SDK 应用 ID">
                   {dash(detail.end_user.sdk_app_id)}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PageContainer, ProCard, StatisticCard } from "@ant-design/pro-components";
-import { Button, DatePicker, Space, Table, message } from "antd";
+import { Button, DatePicker, Space, Table } from "antd";
+import { message } from "../lib/antd-message";
 import dayjs, { type Dayjs } from "dayjs";
 import { adminFetch } from "../lib/api";
 

@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { ensurePromoWallet } from "./bind.js";
 import { getReferralConfig } from "./config.js";
+import { applyWalletDelta } from "./wallet.js";
 
 function feeFor(amountCents: number, feeBps: number): number {
   return Math.floor((amountCents * feeBps) / 10000);
@@ -14,12 +15,12 @@ export async function createWithdrawRequest(input: {
   method: string;
   accountPayload: Prisma.InputJsonValue;
 }) {
-  const config = await getReferralConfig();
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } });
+  const config = await getReferralConfig(user.projectId);
   if (!config.enabled) {
     throw Object.assign(new Error("referral.disabled"), { statusCode: 400 });
   }
 
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } });
   if (user.status !== "active" || !user.promoEnabled) {
     throw Object.assign(new Error("promo.disabled"), { statusCode: 403 });
   }
@@ -46,12 +47,7 @@ export async function createWithdrawRequest(input: {
       throw Object.assign(new Error("withdraw.insufficient_balance"), { statusCode: 400 });
     }
 
-    await tx.promoWallet.update({
-      where: { userId: input.userId },
-      data: { availableCents: { decrement: input.amountCents } },
-    });
-
-    return tx.withdrawRequest.create({
+    const request = await tx.withdrawRequest.create({
       data: {
         userId: input.userId,
         amountCents: input.amountCents,
@@ -62,6 +58,18 @@ export async function createWithdrawRequest(input: {
         status: "pending",
       },
     });
+
+    await applyWalletDelta(tx, {
+      userId: input.userId,
+      entryType: "withdraw_hold",
+      delta: { availableCents: -input.amountCents },
+      refType: "withdraw_request",
+      refId: request.id,
+      actorType: "user",
+      actorId: input.userId,
+    });
+
+    return request;
   });
 }
 
@@ -122,9 +130,15 @@ export async function reviewWithdrawRequest(input: {
       throw Object.assign(new Error("withdraw.invalid_status"), { statusCode: 400 });
     }
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.promoWallet.update({
-        where: { userId: row.userId },
-        data: { availableCents: { increment: row.amountCents } },
+      await applyWalletDelta(tx, {
+        userId: row.userId,
+        entryType: "withdraw_reject",
+        delta: { availableCents: row.amountCents },
+        refType: "withdraw_request",
+        refId: row.id,
+        actorType: "admin",
+        actorId: input.adminId,
+        remark: input.adminNote,
       });
       return tx.withdrawRequest.update({
         where: { id: row.id },
@@ -151,9 +165,15 @@ export async function reviewWithdrawRequest(input: {
     throw Object.assign(new Error("withdraw.invalid_status"), { statusCode: 400 });
   }
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.promoWallet.update({
-      where: { userId: row.userId },
-      data: { withdrawnCents: { increment: row.amountCents } },
+    await applyWalletDelta(tx, {
+      userId: row.userId,
+      entryType: "withdraw_paid",
+      delta: { withdrawnCents: row.amountCents },
+      refType: "withdraw_request",
+      refId: row.id,
+      actorType: "admin",
+      actorId: input.adminId,
+      remark: input.adminNote,
     });
     return tx.withdrawRequest.update({
       where: { id: row.id },

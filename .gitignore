@@ -20,6 +20,9 @@ out
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
 
+# support chat image uploads
+apps/api/data/support-uploads/
+
 # logs / ide
 logs
 *.log
@@ -38,3 +41,33 @@ coverage
 .umi-production
 src/.umi
 src/.umi-production
+
+# Flutter clients (clients/<brand>/)
+clients/**/.dart_tool/
+clients/**/.flutter-plugins
+clients/**/.flutter-plugins-dependencies
+clients/**/.packages
+clients/**/.pub-cache/
+clients/**/.pub/
+clients/**/build/
+clients/**/.cxx/
+clients/**/android/.gradle/
+clients/**/android/local.properties
+clients/**/android/app/libs/
+clients/**/ios/Pods/
+clients/**/ios/.symlinks/
+clients/**/ios/Flutter/Flutter.framework
+clients/**/ios/Flutter/Flutter.podspec
+clients/**/ios/Frameworks/
+clients/**/macos/Pods/
+clients/**/macos/Frameworks/
+clients/**/linux/flutter/ephemeral/
+clients/**/windows/flutter/ephemeral/
+clients/**/*.iml
+clients/**/GeneratedPluginRegistrant.*
+clients/**/*.ipa
+clients/**/*.apk
+clients/**/*.aab
+clients/**/*.app
+clients/**/ios/Local.xcconfig
+clients/**/hiddify-core/bin/

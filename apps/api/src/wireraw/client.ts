@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { env } from "../config.js";
 
 export class WireRawError extends Error {
@@ -20,6 +21,10 @@ export type WireRawRequestOptions = {
   body?: unknown;
   idempotencyKey?: string;
 };
+
+const proxyDispatcher = env.WIRERAW_HTTP_PROXY
+  ? new ProxyAgent(env.WIRERAW_HTTP_PROXY)
+  : undefined;
 
 function buildUrl(path: string, query?: WireRawRequestOptions["query"]): string {
   const base = env.WIRERAW_HOST.replace(/\/$/, "");
@@ -52,10 +57,11 @@ export async function wirerawRequest<T = unknown>(
     headers["Idempotency-Key"] = options.idempotencyKey;
   }
 
-  const res = await fetch(buildUrl(options.path, options.query), {
+  const res = await undiciFetch(buildUrl(options.path, options.query), {
     method,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
   });
 
   const text = await res.text();
@@ -148,6 +154,16 @@ export const wireraw = {
       method: "POST",
       path: "/v1/proxy/subscriptions/refresh",
       body: { user_id: userId },
+    }),
+
+  /** Rendered subscription payload (merchant-auth). Body is base64 bytes. */
+  getSubscription: (userId: string, format?: string) =>
+    wirerawRequest<{
+      available_formats?: string[];
+      payload?: { ContentType?: string; Body?: string };
+    }>({
+      path: `/v1/proxy/subscriptions/${userId}`,
+      query: format ? { format } : undefined,
     }),
 
   listOnlineUsernames: (query?: { limit?: number; offset?: number }) =>
