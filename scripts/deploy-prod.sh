@@ -47,14 +47,24 @@ if [[ "$need_build" -eq 0 ]]; then
   exit 0
 fi
 
+echo "[deploy] dropping stale compose containers..."
+"${COMPOSE[@]}" down --remove-orphans || true
+docker rm -f habibivpn-api-1 habibivpn-web-1 habibivpn-tg-1 habibivpn-admin-1 2>/dev/null || true
+
 echo "[deploy] building and switching containers..."
-"${COMPOSE[@]}" up -d --build --remove-orphans
+if ! "${COMPOSE[@]}" up -d --build --remove-orphans; then
+  echo "[deploy] up failed, retry after cleanup..."
+  "${COMPOSE[@]}" down --remove-orphans || true
+  docker rm -f habibivpn-api-1 habibivpn-web-1 habibivpn-tg-1 habibivpn-admin-1 2>/dev/null || true
+  "${COMPOSE[@]}" up -d --remove-orphans
+fi
 
 echo "[deploy] waiting for API..."
 for _ in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:3001/health/ready >/dev/null; then
     echo "[deploy] API ready"
     curl -fsSI http://127.0.0.1:3000 >/dev/null || true
+    curl -fsSI http://127.0.0.1:3002 >/dev/null || true
     "${COMPOSE[@]}" ps
     exit 0
   fi

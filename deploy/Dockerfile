@@ -31,6 +31,7 @@ RUN pnpm --filter @habibi/shared build \
   && pnpm --filter @habibi/api prisma:generate \
   && pnpm --filter @habibi/api build \
   && pnpm --filter @habibi/web build \
+  && pnpm --filter @habibi/tg build \
   && pnpm --filter @habibi/admin build
 
 FROM base AS api
@@ -54,6 +55,16 @@ ENV PORT=3000
 ENV HABIBI_API_ORIGIN=http://host.docker.internal:3001
 EXPOSE 3000
 CMD ["node", "habibi-web.js"]
+
+FROM base AS tg
+COPY --from=build /app /app
+WORKDIR /app/apps/tg
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3002
+ENV HABIBI_API_ORIGIN=http://host.docker.internal:3001
+EXPOSE 3002
+CMD ["node", "habibi-tg.js"]
 
 FROM nginx:1.27-alpine AS admin
 COPY deploy/nginx-admin.conf /etc/nginx/conf.d/default.conf
