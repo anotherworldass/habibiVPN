@@ -483,27 +483,16 @@ next build 没有执行，或者构建中途失败。
     pm2 save
     # 宝塔「Node 项目管理器」里对应项目也停掉或删除
 
-3. 生产 `.env` 必改主机名：容器访问宿主机 MySQL / Redis 不能再用 127.0.0.1。
+3. 生产 `.env` 里 MySQL / Redis 继续写本机地址（API 使用 host 网络，和 PM2 时一样）：
 
-    DATABASE_URL=mysql://用户:密码@host.docker.internal:3306/habibivpn
-    REDIS_URL=redis://host.docker.internal:6379
+    DATABASE_URL=mysql://用户:密码@127.0.0.1:3306/habibivpn
+    REDIS_URL=redis://127.0.0.1:6379
 
-   MySQL 还要允许 Docker 网桥连进来（否则 API 会一直 unhealthy）：
+   若 Redis 开了 requirepass：
 
-   - 绑定地址不要只监听 127.0.0.1（宝塔 → 数据库 → 配置修改，改为 0.0.0.0）。
-   - 防火墙 / 安全组仍然不要对公网开放 3306。
-   - 数据库用户主机不能只是 localhost。给运行用户加 `%` 或 `172.%`，例如：
+    REDIS_URL=redis://:密码@127.0.0.1:6379
 
-         CREATE USER 'habibi'@'%' IDENTIFIED BY '同一密码';
-         GRANT ALL ON habibivpn.* TO 'habibi'@'%';
-         FLUSH PRIVILEGES;
-
-     若宝塔里该用户已经是「所有人 (%)」，可跳过。
-
-   Redis 同样不要只绑 127.0.0.1（`bind 0.0.0.0`），防火墙仍不要对公网开放 6379。
-   若开了 requirepass，REDIS_URL 写成：
-
-    REDIS_URL=redis://:密码@host.docker.internal:6379
+   不要设置 WIRERAW_HTTP_PROXY（那是本地 Clash 用的）。
 
    其余变量与第十二节相同，例如：
 
@@ -555,8 +544,8 @@ next build 没有执行，或者构建中途失败。
 后台容器内部已经做了：
 
     /           → SPA
-    /admin/v1/  → api:3001
-    /health     → api:3001
+    /admin/v1/  → 宿主机 3001
+    /health     → 宿主机 3001
 
 因此宝塔后台站点不必再单独写 /admin/v1/ 反代。
 
@@ -601,9 +590,12 @@ next build 没有执行，或者构建中途失败。
 
     docker compose -f docker-compose.prod.yml logs api
 
-   多半是 DATABASE_URL / REDIS_URL 仍是 127.0.0.1，密码特殊字符没做 URL 编码，
-   或 MySQL 用户只允许 localhost（容器过来的是 172.x，会被拒绝）。
-   Redis 若只 bind 127.0.0.1，容器也连不上。
+   先看日志：
+
+    docker compose -f docker-compose.prod.yml logs --tail 120 api
+
+   常见原因：DATABASE_URL 密码特殊字符没做 URL 编码、库不存在、3001 被旧 PM2 占用、
+   或缺少 JWT / WIRERAW 等必填环境变量。
 
 2. 构建被杀 / 内存不足
 

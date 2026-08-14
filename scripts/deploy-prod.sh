@@ -20,18 +20,6 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-if grep -Eq 'DATABASE_URL=.*@127\.0\.0\.1:' .env; then
-  echo "[deploy] DATABASE_URL still points at 127.0.0.1 — inside Docker this is the container, not host MySQL." >&2
-  echo "[deploy] change the host to host.docker.internal (port stays 3306)." >&2
-  exit 1
-fi
-
-if grep -Eq 'REDIS_URL=.*127\.0\.0\.1' .env; then
-  echo "[deploy] REDIS_URL still points at 127.0.0.1 — inside Docker this is the container, not host Redis." >&2
-  echo "[deploy] change to redis://host.docker.internal:6379" >&2
-  exit 1
-fi
-
 need_build=0
 if [[ "${FORCE:-0}" == "1" ]]; then
   need_build=1
