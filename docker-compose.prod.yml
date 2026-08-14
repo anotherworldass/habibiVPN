@@ -1,0 +1,87 @@
+# 生产环境：API + Web + Admin
+# 用法：docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# MySQL / Redis 继续用宝塔本机实例，不要用本文件起。
+# 容器内访问宿主机：把 .env 里主机改成 host.docker.internal
+#   DATABASE_URL=mysql://user:pass@host.docker.internal:3306/habibivpn
+#   REDIS_URL=redis://host.docker.internal:6379
+
+name: habibivpn
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: api
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: "3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - habibi_support_uploads:/app/apps/api/data/support-uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: web
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      HABIBI_API_ORIGIN: http://api:3001
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  admin:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: admin
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  habibi_support_uploads:

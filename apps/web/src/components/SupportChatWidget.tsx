@@ -474,19 +474,34 @@ export default function SupportChatWidget({
         }
         if (cursor) messagesTailRef.current = cursor;
 
-        const outboundIds = merged
-          .filter((m) => m.direction === "outbound" && !m.recalled_at)
-          .map((m) => m.id);
-        if (opts?.silent && outboundPrimedRef.current) {
-          const hasNew = outboundIds.some(
-            (id) => !lastOutboundSeenRef.current.has(id),
+        // Only agent→user messages should chime. Detect from this fetch's
+        // `incoming` (not the full merged list): a send/poll echo of our own
+        // inbound can otherwise make previously-seen outbound look "new" if
+        // lastOutboundSeen was replaced with a smaller snapshot.
+        // Incremental (`after`) polls only — a full reload can include the
+        // whole window and must not ding for history.
+        const seen = lastOutboundSeenRef.current;
+        const rememberOutbound = (items: SupportMessage[]) => {
+          for (const m of items) {
+            if (m.direction === "outbound" && !m.recalled_at) {
+              seen.add(m.id);
+            }
+          }
+        };
+        if (opts?.silent && outboundPrimedRef.current && after) {
+          const hasNewAgentReply = incoming.some(
+            (m) =>
+              m.direction === "outbound" &&
+              !m.recalled_at &&
+              !seen.has(m.id),
           );
-          if (hasNew) {
+          if (hasNewAgentReply) {
             playDingDong();
             if (!openRef.current) setUnread((n) => n + 1);
           }
         }
-        lastOutboundSeenRef.current = new Set(outboundIds);
+        rememberOutbound(merged);
+        rememberOutbound(incoming);
         outboundPrimedRef.current = true;
 
         setReady(true);

@@ -23,6 +23,9 @@ apps/api/prisma/*.db-journal
 # support chat image uploads
 apps/api/data/support-uploads/
 
+# deploy lock (scripts/deploy-prod.sh)
+.deploy.lock
+
 # logs / ide
 logs
 *.log

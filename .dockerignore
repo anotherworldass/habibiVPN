@@ -1,0 +1,27 @@
+# deps / build artifacts
+node_modules
+**/node_modules
+.pnpm-store
+**/.next
+**/dist
+**/build
+**/*.tsbuildinfo
+.git
+.gitignore
+
+# secrets — inject at runtime via compose env_file
+.env
+.env.*
+!.env.example
+info.txt
+
+# not needed in app images
+clients
+docs
+scripts
+*.md
+部署文档.txt
+**/.DS_Store
+**/*.log
+coverage
+apps/api/data

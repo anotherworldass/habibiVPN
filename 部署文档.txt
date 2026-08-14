@@ -448,3 +448,175 @@ next build 没有执行，或者构建中途失败。
 [ ] SSL 和强制 HTTPS 已启用
 [ ] 3000、3001、3306 未直接暴露公网
 [ ] PM2 已执行 pm2 save
+
+
+十六、Docker 生产部署（推荐，替代宝塔 Node / PM2）
+------------------------------------------------
+
+目标：Node 进程全部进 Docker；宝塔只保留 Nginx（SSL）、本机 MySQL、本机 Redis。
+代码推到 Git 后，计划任务自动 pull + 重建容器。
+
+不要把现有生产库迁进 Docker。本地 `docker-compose.yml` 只给开发用。
+
+
+16.1 仓库里已有的文件
+
+    docker-compose.prod.yml     # api / web / admin
+    deploy/Dockerfile           # 多阶段构建
+    deploy/nginx-admin.conf     # 后台 SPA + /admin/v1 反代
+    scripts/deploy-prod.sh      # 有新提交才构建
+
+
+16.2 服务器一次性准备
+
+1. 宝塔安装 Docker（软件商店「Docker 管理器」）。确认：
+
+    docker version
+    docker compose version
+
+   需要 Docker Compose v2（`docker compose`，不是旧的 `docker-compose`）。
+   建议内存 ≥ 2GB；1GB 机器请加 2GB swap，否则 next build 容易 OOM。
+
+2. 停掉原来的 PM2 / 宝塔 Node 项目，避免占 3000 / 3001：
+
+    pm2 delete habibi-api habibi-web
+    pm2 save
+    # 宝塔「Node 项目管理器」里对应项目也停掉或删除
+
+3. 生产 `.env` 必改主机名：容器访问宿主机 MySQL / Redis 不能再用 127.0.0.1。
+
+    DATABASE_URL=mysql://用户:密码@host.docker.internal:3306/habibivpn
+    REDIS_URL=redis://host.docker.internal:6379
+
+   MySQL 还要允许 Docker 网桥连进来（否则 API 会一直 unhealthy）：
+
+   - 绑定地址不要只监听 127.0.0.1（宝塔 → 数据库 → 配置修改，改为 0.0.0.0）。
+   - 防火墙 / 安全组仍然不要对公网开放 3306。
+   - 数据库用户主机不能只是 localhost。给运行用户加 `%` 或 `172.%`，例如：
+
+         CREATE USER 'habibi'@'%' IDENTIFIED BY '同一密码';
+         GRANT ALL ON habibivpn.* TO 'habibi'@'%';
+         FLUSH PRIVILEGES;
+
+     若宝塔里该用户已经是「所有人 (%)」，可跳过。
+
+   Redis 同样不要只绑 127.0.0.1（`bind 0.0.0.0`），防火墙仍不要对公网开放 6379。
+   若开了 requirepass，REDIS_URL 写成：
+
+    REDIS_URL=redis://:密码@host.docker.internal:6379
+
+   其余变量与第十二节相同，例如：
+
+    NODE_ENV=production
+    CORS_ORIGINS=https://www.tizi.work,https://admin.example.com
+    WEB_PUBLIC_ORIGIN=https://www.tizi.work
+    API_PUBLIC_ORIGIN=https://www.tizi.work
+    JWT_USER_SECRET=...
+    JWT_ADMIN_SECRET=...
+    PAYMENT_CONFIG_ENCRYPTION_KEY=...
+
+4. 代码目录建议仍是：
+
+    /www/wwwroot/habibiVPN
+
+   该目录是 git clone，并能访问 Git 远程（部署密钥或 https 凭据）。
+
+
+16.3 第一次上线
+
+    cd /www/wwwroot/habibiVPN
+    chmod +x scripts/deploy-prod.sh
+    FORCE=1 bash scripts/deploy-prod.sh
+
+首次会完整构建镜像（约数分钟）。成功标志：
+
+    curl http://127.0.0.1:3001/health/ready
+    curl -I http://127.0.0.1:3000
+    curl -I http://127.0.0.1:8000
+
+容器只绑 127.0.0.1，公网仍走宝塔 Nginx 的 80/443。
+
+
+16.4 宝塔网站（Nginx）怎么改
+
+用户站 www.tizi.work：继续反代
+
+    http://127.0.0.1:3000
+
+可选 API 域名：继续反代
+
+    http://127.0.0.1:3001
+
+管理后台：不要再把网站根目录指到 apps/admin/dist。
+改成整站反代到 Docker 里的 admin：
+
+    http://127.0.0.1:8000
+
+后台容器内部已经做了：
+
+    /           → SPA
+    /admin/v1/  → api:3001
+    /health     → api:3001
+
+因此宝塔后台站点不必再单独写 /admin/v1/ 反代。
+
+
+16.5 定时自动部署
+
+宝塔 → 计划任务 → Shell 脚本，建议每 5 分钟：
+
+    bash /www/wwwroot/habibiVPN/scripts/deploy-prod.sh
+
+脚本逻辑：
+
+    git fetch
+    与远程一致 → 直接退出
+    有新提交 → git pull --ff-only → docker compose up -d --build
+    检查 /health/ready
+
+手动强制重建：
+
+    FORCE=1 bash /www/wwwroot/habibiVPN/scripts/deploy-prod.sh
+
+看日志：
+
+    cd /www/wwwroot/habibiVPN
+    docker compose -f docker-compose.prod.yml logs -f --tail 200
+
+
+16.6 和宝塔 Node 方案的差异
+
+    | 事项            | 旧（PM2）              | 新（Docker）                    |
+    | pnpm / Node 版本 | 服务器自己装，易踩坑     | 镜像内固定 Node 20 + pnpm 9.15 |
+    | 构建            | 在服务器源码目录构建     | 镜像构建，不污染 www 目录       |
+    | 迁移            | 手动 prisma:deploy     | 容器启动时自动 migrate deploy   |
+    | 后台静态文件     | Nginx 指 dist          | 反代 127.0.0.1:8000            |
+    | MySQL           | 宝塔 3306              | 仍是宝塔 3306（不要迁库）       |
+    | Redis           | 宝塔 / 本机 6379       | 仍是宿主机 6379                 |
+
+
+16.7 常见问题
+
+1. API 起不来，ready 失败
+
+    docker compose -f docker-compose.prod.yml logs api
+
+   多半是 DATABASE_URL / REDIS_URL 仍是 127.0.0.1，密码特殊字符没做 URL 编码，
+   或 MySQL 用户只允许 localhost（容器过来的是 172.x，会被拒绝）。
+   Redis 若只 bind 127.0.0.1，容器也连不上。
+
+2. 构建被杀 / 内存不足
+
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+
+3. 定时任务没更新
+
+   确认仓库能 git pull（部署公钥已加到 GitHub），且计划任务用户对 Docker 有权限（root 或在 docker 组）。
+
+4. 管理后台 404 / 接口 404
+
+   后台网站必须反代 8000，不能再当纯静态站。
+

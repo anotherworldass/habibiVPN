@@ -17,7 +17,11 @@
     "db:migrate": "pnpm --filter @habibi/api exec prisma migrate dev",
     "db:migrate:init": "cd apps/api && DATABASE_URL='mysql://root:root@127.0.0.1:3308/habibivpn' pnpm exec prisma migrate dev",
     "db:generate": "pnpm --filter @habibi/api prisma:generate",
-    "wireraw:smoke": "pnpm --filter @habibi/api wireraw:smoke"
+    "wireraw:smoke": "pnpm --filter @habibi/api wireraw:smoke",
+    "prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
+    "prod:down": "docker compose -f docker-compose.prod.yml down",
+    "prod:logs": "docker compose -f docker-compose.prod.yml logs -f --tail 200",
+    "prod:deploy": "bash scripts/deploy-prod.sh"
   },
   "engines": {
     "node": ">=20"

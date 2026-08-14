@@ -1,11 +1,14 @@
 import type { NextConfig } from "next";
 
+const apiOrigin =
+  process.env.HABIBI_API_ORIGIN || "http://127.0.0.1:3001";
+
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://127.0.0.1:3001/api/:path*",
+        destination: `${apiOrigin}/api/:path*`,
       },
     ];
   },
