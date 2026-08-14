@@ -20,6 +20,9 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
+# deps 阶段为了装 devDependencies 设了 development；next build 必须是 production，
+# 否则 15.5 预渲染 /404 会报 <Html> should not be imported outside of pages/_document
+ENV NODE_ENV=production
 # Next.js rewrites 在 build 时写入 routes-manifest，必须指向 compose 服务名
 ENV HABIBI_API_ORIGIN=http://api:3001
 ENV DATABASE_URL=mysql://build:build@127.0.0.1:3306/build
