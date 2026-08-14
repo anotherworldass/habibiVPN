@@ -607,18 +607,23 @@ Telegram Mini App（新建站点，例如 tg.tizi.work）：整站反代
    常见原因：DATABASE_URL 密码特殊字符没做 URL 编码、库不存在、3001 被旧 PM2 占用、
    或缺少 JWT / WIRERAW 等必填环境变量。
 
-2. 构建被杀 / 内存不足
+2. 迁移报 CAST ... AS JSON / MariaDB syntax
+
+   宝塔默认经常是 MariaDB。本项目迁移按 MySQL 8 写，必须装 MySQL 8.0/8.4，不要 MariaDB。
+   全新库在 MariaDB 上迁失败后：换成 MySQL 8，重建空库 habibivpn，再重启 api 容器。
+
+3. 构建被杀 / 内存不足
 
     fallocate -l 2G /swapfile
     chmod 600 /swapfile
     mkswap /swapfile
     swapon /swapfile
 
-3. 定时任务没更新
+4. 定时任务没更新
 
    确认仓库能 git pull（部署公钥已加到 GitHub），且计划任务用户对 Docker 有权限（root 或在 docker 组）。
 
-4. 管理后台 404 / 接口 404
+5. 管理后台 404 / 接口 404
 
    后台网站必须反代 8000，不能再当纯静态站。
 
