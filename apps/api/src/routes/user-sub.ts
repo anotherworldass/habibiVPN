@@ -12,7 +12,7 @@ import {
  * GET /api/v1/sub/:token
  * GET /api/v1/sub/:token/:format
  * GET /api/v1/sub/:token/:format/:title  (title ignored; for Shadowrocket URL-name fallback)
- *   format: clash | mihomo | clash_meta | v2ray | xray | base64 | shadowrocket | surge | quantumult_x
+ *   format: clash | mihomo | clash_meta | hiddify | v2ray | xray | base64 | shadowrocket | surge | quantumult_x
  */
 export const userSubRoutes: FastifyPluginAsync = async (app) => {
   app.get(`${USER_API_PREFIX}/sub/:token`, async (req, reply) => {
@@ -40,6 +40,7 @@ export const userSubRoutes: FastifyPluginAsync = async (app) => {
     return {
       formats: [
         { id: "clash", aliases: ["mihomo", "clash_meta"], kind: "yaml" },
+        { id: "hiddify", aliases: ["hiddify-next", "hiddifynext"], kind: "yaml" },
         { id: "v2ray", aliases: ["xray", "base64"], kind: "base64" },
         { id: "shadowrocket", aliases: ["sr"], kind: "base64" },
         { id: "surge", aliases: [], kind: "conf" },

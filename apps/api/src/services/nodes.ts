@@ -1,9 +1,12 @@
+import { regionZhName } from "../lib/regions.js";
 import { wireraw } from "../wireraw/client.js";
 
 type UpstreamNode = {
   name?: string;
   region?: string;
   status?: string;
+  public_ip?: string;
+  advertise_host?: string;
 };
 
 export type RegionPool = {
@@ -15,28 +18,6 @@ export type RegionPool = {
   other: number;
   /** overall: active | partial | offline */
   status: "active" | "partial" | "offline";
-};
-
-const REGION_NAMES: Record<string, string> = {
-  AE: "阿联酋",
-  AU: "澳大利亚",
-  BR: "巴西",
-  CA: "加拿大",
-  CH: "瑞士",
-  DE: "德国",
-  FR: "法国",
-  GB: "英国",
-  HK: "香港",
-  IN: "印度",
-  JP: "日本",
-  KR: "韩国",
-  NL: "荷兰",
-  PH: "菲律宾",
-  SE: "瑞典",
-  SG: "新加坡",
-  TW: "台湾",
-  US: "美国",
-  VN: "越南",
 };
 
 function unwrapNodes(data: unknown): UpstreamNode[] {
@@ -51,7 +32,46 @@ function unwrapNodes(data: unknown): UpstreamNode[] {
 }
 
 function regionName(code: string) {
-  return REGION_NAMES[code] || code;
+  return regionZhName(code);
+}
+
+const NODE_REGION_CACHE_TTL_MS = 90_000;
+let nodeRegionCache: { map: Map<string, string>; at: number } | null = null;
+let nodeRegionInflight: Promise<Map<string, string>> | null = null;
+
+/** advertise_host / public_ip → ISO region, for subscription name rewrite. */
+export async function getNodeRegionByHost(): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (nodeRegionCache && now - nodeRegionCache.at < NODE_REGION_CACHE_TTL_MS) {
+    return nodeRegionCache.map;
+  }
+  if (nodeRegionInflight) return nodeRegionInflight;
+
+  nodeRegionInflight = (async () => {
+    try {
+      const raw = await wireraw.listNodes();
+      const nodes = unwrapNodes(raw);
+      const map = new Map<string, string>();
+      for (const n of nodes) {
+        const region = (n.region || "").trim().toUpperCase();
+        if (!region) continue;
+        if (n.advertise_host?.trim()) {
+          map.set(n.advertise_host.trim().toLowerCase(), region);
+        }
+        if (n.public_ip?.trim()) {
+          map.set(n.public_ip.trim().toLowerCase(), region);
+        }
+      }
+      nodeRegionCache = { map, at: Date.now() };
+      return map;
+    } catch {
+      return nodeRegionCache?.map || new Map();
+    } finally {
+      nodeRegionInflight = null;
+    }
+  })();
+
+  return nodeRegionInflight;
 }
 
 function classifyStatus(status?: string): "active" | "inactive" | "other" {

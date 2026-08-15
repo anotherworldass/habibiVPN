@@ -14,6 +14,10 @@ export const SETTING_KEYS = {
   TELEGRAM_WEBHOOK_ORIGIN: "telegram.webhook_origin",
   /** User-facing support chat: latest N messages window. */
   SUPPORT_CLIENT_MESSAGE_WINDOW: "support.client_message_window",
+  /** Extra notice nodes prepended to converted subscriptions. */
+  SUBSCRIPTION_NOTICE: "subscription.notice",
+  /** How converted subscription node names are rewritten. */
+  SUBSCRIPTION_NODE_NAME: "subscription.node_name",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */
@@ -106,6 +110,73 @@ const SUPPORT_CLIENT_MESSAGE_WINDOW_CACHE_TTL_MS = 30_000;
 const supportClientMessageWindowCache = new Map<
   string,
   { value: SupportClientMessageWindowValue; at: number }
+>();
+
+/** Clients that can receive prepended notice nodes. */
+export const SUBSCRIPTION_NOTICE_CLIENTS = [
+  "shadowrocket",
+  "clash",
+  "hiddify",
+  "v2ray",
+  "surge",
+  "quantumult_x",
+] as const;
+
+export type SubscriptionNoticeClient =
+  (typeof SUBSCRIPTION_NOTICE_CLIENTS)[number];
+
+export const SUBSCRIPTION_NOTICE_ITEM_MAX = 80;
+export const SUBSCRIPTION_NOTICE_ITEMS_MAX = 15;
+
+export const subscriptionNoticeClientBlockSchema = z.object({
+  enabled: z.boolean(),
+  items: z
+    .array(z.string().trim().min(1).max(SUBSCRIPTION_NOTICE_ITEM_MAX))
+    .max(SUBSCRIPTION_NOTICE_ITEMS_MAX),
+});
+
+export type SubscriptionNoticeClientBlock = z.infer<
+  typeof subscriptionNoticeClientBlockSchema
+>;
+
+export const subscriptionNoticeValueSchema = z.object({
+  by_client: z.object({
+    shadowrocket: subscriptionNoticeClientBlockSchema,
+    clash: subscriptionNoticeClientBlockSchema,
+    hiddify: subscriptionNoticeClientBlockSchema,
+    v2ray: subscriptionNoticeClientBlockSchema,
+    surge: subscriptionNoticeClientBlockSchema,
+    quantumult_x: subscriptionNoticeClientBlockSchema,
+  }),
+});
+
+export type SubscriptionNoticeValue = z.infer<
+  typeof subscriptionNoticeValueSchema
+>;
+
+function emptyNoticeClientBlock(): SubscriptionNoticeClientBlock {
+  return { enabled: false, items: [] };
+}
+
+export function emptySubscriptionNoticeByClient(): SubscriptionNoticeValue["by_client"] {
+  return {
+    shadowrocket: emptyNoticeClientBlock(),
+    clash: emptyNoticeClientBlock(),
+    hiddify: emptyNoticeClientBlock(),
+    v2ray: emptyNoticeClientBlock(),
+    surge: emptyNoticeClientBlock(),
+    quantumult_x: emptyNoticeClientBlock(),
+  };
+}
+
+export const DEFAULT_SUBSCRIPTION_NOTICE_VALUE: SubscriptionNoticeValue = {
+  by_client: emptySubscriptionNoticeByClient(),
+};
+
+const SUBSCRIPTION_NOTICE_CACHE_TTL_MS = 30_000;
+const subscriptionNoticeCache = new Map<
+  string,
+  { value: SubscriptionNoticeValue | null; at: number }
 >();
 
 const SECRET_MASK = "********";
@@ -470,6 +541,245 @@ export function primeSupportClientMessageWindowCache(
     value,
     at: Date.now(),
   });
+}
+
+function sanitizeNoticeItems(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.slice(0, SUBSCRIPTION_NOTICE_ITEM_MAX))
+    .slice(0, SUBSCRIPTION_NOTICE_ITEMS_MAX);
+}
+
+export function parseSubscriptionNoticeValue(
+  raw: unknown,
+): SubscriptionNoticeValue {
+  const o = asObject(raw);
+  const byClient = emptySubscriptionNoticeByClient();
+  const incoming = asObject(o.by_client);
+
+  if (Object.keys(incoming).length) {
+    for (const id of SUBSCRIPTION_NOTICE_CLIENTS) {
+      const block = asObject(incoming[id]);
+      byClient[id] = {
+        enabled: block.enabled === true,
+        items: sanitizeNoticeItems(block.items),
+      };
+    }
+  } else {
+    // Legacy: one shared list + selected clients.
+    const items = sanitizeNoticeItems(o.items);
+    const allow = new Set<string>(SUBSCRIPTION_NOTICE_CLIENTS);
+    const selected = new Set(
+      Array.isArray(o.clients)
+        ? o.clients.filter(
+            (x): x is SubscriptionNoticeClient =>
+              typeof x === "string" && allow.has(x),
+          )
+        : [],
+    );
+    for (const id of SUBSCRIPTION_NOTICE_CLIENTS) {
+      const on = selected.has(id);
+      byClient[id] = {
+        enabled: on && items.length > 0,
+        items: on ? [...items] : [],
+      };
+    }
+  }
+
+  return subscriptionNoticeValueSchema.parse({ by_client: byClient });
+}
+
+export async function getSubscriptionNoticeConfig(projectId: string): Promise<{
+  enabled: boolean;
+  value: SubscriptionNoticeValue;
+  remark: string | null;
+}> {
+  const row = await getProjectSetting(
+    projectId,
+    SETTING_KEYS.SUBSCRIPTION_NOTICE,
+  );
+  if (!row) {
+    return {
+      enabled: false,
+      value: {
+        by_client: emptySubscriptionNoticeByClient(),
+      },
+      remark: null,
+    };
+  }
+  const value = parseSubscriptionNoticeValue(row.value);
+  const raw = asObject(row.value);
+  // Legacy shared list used the row-level switch; keep it off until re-saved.
+  if (!raw.by_client && !row.enabled) {
+    for (const id of SUBSCRIPTION_NOTICE_CLIENTS) {
+      value.by_client[id].enabled = false;
+    }
+  }
+  const anyEnabled = SUBSCRIPTION_NOTICE_CLIENTS.some(
+    (id) => value.by_client[id].enabled && value.by_client[id].items.length > 0,
+  );
+  return {
+    enabled: anyEnabled,
+    value,
+    remark: row.remark,
+  };
+}
+
+/**
+ * Effective notice lines for a convert format.
+ * Per-client disabled / empty → [].
+ */
+export async function getSubscriptionNoticeLines(
+  projectId: string,
+  format: string,
+): Promise<string[]> {
+  const hit = subscriptionNoticeCache.get(projectId);
+  const now = Date.now();
+  let policy: SubscriptionNoticeValue | null;
+  if (hit && now - hit.at < SUBSCRIPTION_NOTICE_CACHE_TTL_MS) {
+    policy = hit.value;
+  } else {
+    const cfg = await getSubscriptionNoticeConfig(projectId);
+    policy = cfg.value;
+    subscriptionNoticeCache.set(projectId, { value: policy, at: now });
+  }
+  if (!policy) return [];
+  const client = noticeClientForFormat(format);
+  if (!client) return [];
+  const block = policy.by_client[client];
+  if (!block?.enabled || !block.items.length) return [];
+  return block.items;
+}
+
+export function primeSubscriptionNoticeCache(
+  projectId: string,
+  value: SubscriptionNoticeValue | null,
+) {
+  subscriptionNoticeCache.set(projectId, { value, at: Date.now() });
+}
+
+export function invalidateSubscriptionNoticeCache(projectId: string) {
+  subscriptionNoticeCache.delete(projectId);
+}
+
+/** Map /sub/:format aliases onto the admin client checkboxes. */
+export function noticeClientForFormat(
+  format: string,
+): SubscriptionNoticeClient | null {
+  switch (format) {
+    case "shadowrocket":
+      return "shadowrocket";
+    case "clash":
+    case "mihomo":
+    case "clash_meta":
+      return "clash";
+    case "hiddify":
+      return "hiddify";
+    case "v2ray":
+    case "xray":
+    case "base64":
+      return "v2ray";
+    case "surge":
+      return "surge";
+    case "quantumult_x":
+      return "quantumult_x";
+    default:
+      return null;
+  }
+}
+
+export const SUBSCRIPTION_NODE_NAME_MODES = [
+  "original",
+  "zh_region",
+  "code_region",
+] as const;
+
+export type SubscriptionNodeNameMode =
+  (typeof SUBSCRIPTION_NODE_NAME_MODES)[number];
+
+export const subscriptionNodeNameValueSchema = z.object({
+  mode: z.enum(SUBSCRIPTION_NODE_NAME_MODES),
+});
+
+export type SubscriptionNodeNameValue = z.infer<
+  typeof subscriptionNodeNameValueSchema
+>;
+
+export const DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE: SubscriptionNodeNameValue = {
+  mode: "original",
+};
+
+const SUBSCRIPTION_NODE_NAME_CACHE_TTL_MS = 30_000;
+const subscriptionNodeNameCache = new Map<
+  string,
+  { value: SubscriptionNodeNameValue; at: number }
+>();
+
+export function parseSubscriptionNodeNameValue(
+  raw: unknown,
+): SubscriptionNodeNameValue {
+  const o = asObject(raw);
+  const mode =
+    typeof o.mode === "string" &&
+    (SUBSCRIPTION_NODE_NAME_MODES as readonly string[]).includes(o.mode)
+      ? (o.mode as SubscriptionNodeNameMode)
+      : DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE.mode;
+  return subscriptionNodeNameValueSchema.parse({ mode });
+}
+
+export async function getSubscriptionNodeNameConfig(
+  projectId: string,
+): Promise<{
+  enabled: boolean;
+  value: SubscriptionNodeNameValue;
+  remark: string | null;
+}> {
+  const row = await getProjectSetting(
+    projectId,
+    SETTING_KEYS.SUBSCRIPTION_NODE_NAME,
+  );
+  if (!row) {
+    return {
+      enabled: true,
+      value: { ...DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE },
+      remark: null,
+    };
+  }
+  return {
+    enabled: row.enabled,
+    value: parseSubscriptionNodeNameValue(row.value),
+    remark: row.remark,
+  };
+}
+
+/** Effective rewrite mode. Missing / disabled → keep original names. */
+export async function getSubscriptionNodeNameMode(
+  projectId: string,
+): Promise<SubscriptionNodeNameMode> {
+  const hit = subscriptionNodeNameCache.get(projectId);
+  if (
+    hit &&
+    Date.now() - hit.at < SUBSCRIPTION_NODE_NAME_CACHE_TTL_MS
+  ) {
+    return hit.value.mode;
+  }
+  const cfg = await getSubscriptionNodeNameConfig(projectId);
+  const value =
+    cfg.enabled === false
+      ? { ...DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE }
+      : cfg.value;
+  subscriptionNodeNameCache.set(projectId, { value, at: Date.now() });
+  return value.mode;
+}
+
+export function primeSubscriptionNodeNameCache(
+  projectId: string,
+  value: SubscriptionNodeNameValue,
+) {
+  subscriptionNodeNameCache.set(projectId, { value, at: Date.now() });
 }
 
 /** Normalize TG / ops language codes → short key used on quick replies. */

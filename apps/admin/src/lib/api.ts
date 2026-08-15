@@ -29,7 +29,14 @@ export async function adminFetch<T = unknown>(path: string, init?: RequestInit):
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
 
-  if (res.status === 401 && path !== "/admin/v1/auth/login") {
+  // Only admin JWT failures should kick the session. Upstream WireRaw 401
+  // (e.g. auth.sdk_key.unauthorized) is not a logged-out admin.
+  const errorCode = typeof data?.error === "string" ? data.error : "";
+  if (
+    res.status === 401 &&
+    path !== "/admin/v1/auth/login" &&
+    (errorCode === "auth.required" || errorCode === "auth.invalid_token")
+  ) {
     clearSession();
     if (!window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";

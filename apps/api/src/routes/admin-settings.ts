@@ -8,9 +8,13 @@ import { sendMailWithSesConfig } from "../services/mail/ses.js";
 import { probeStorageS3Profile } from "../services/storage/s3-probe.js";
 import {
   DEFAULT_MAIL_RATE_LIMIT_VALUE,
+  DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE,
   DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE,
   SETTING_KEYS,
   STORAGE_S3_ROLES,
+  SUBSCRIPTION_NOTICE_CLIENTS,
+  SUBSCRIPTION_NOTICE_ITEM_MAX,
+  SUBSCRIPTION_NOTICE_ITEMS_MAX,
   SUPPORT_CLIENT_MESSAGE_WINDOW_MAX,
   SUPPORT_CLIENT_MESSAGE_WINDOW_MIN,
   authEmailValueSchema,
@@ -19,12 +23,20 @@ import {
   getAuthEmailConfig,
   getMailRateLimitConfig,
   getMailSesConfig,
+  getSubscriptionNoticeConfig,
+  getSubscriptionNodeNameConfig,
   getSupportClientMessageWindowConfig,
   listStorageS3ProfilesPublic,
   mailRateLimitValueSchema,
   mergeMailSesValue,
   primeMailRateLimitCache,
+  primeSubscriptionNoticeCache,
+  primeSubscriptionNodeNameCache,
   primeSupportClientMessageWindowCache,
+  SUBSCRIPTION_NODE_NAME_MODES,
+  subscriptionNoticeClientBlockSchema,
+  subscriptionNoticeValueSchema,
+  subscriptionNodeNameValueSchema,
   supportClientMessageWindowValueSchema,
   updateStorageS3Bindings,
   updateStorageS3Profile,
@@ -72,6 +84,23 @@ const supportClientMessageWindowPatch = z.object({
     .int()
     .min(SUPPORT_CLIENT_MESSAGE_WINDOW_MIN)
     .max(SUPPORT_CLIENT_MESSAGE_WINDOW_MAX),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const subscriptionNoticePatch = z.object({
+  by_client: z.object({
+    shadowrocket: subscriptionNoticeClientBlockSchema,
+    clash: subscriptionNoticeClientBlockSchema,
+    hiddify: subscriptionNoticeClientBlockSchema,
+    v2ray: subscriptionNoticeClientBlockSchema,
+    surge: subscriptionNoticeClientBlockSchema,
+    quantumult_x: subscriptionNoticeClientBlockSchema,
+  }),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const subscriptionNodeNamePatch = z.object({
+  mode: z.enum(SUBSCRIPTION_NODE_NAME_MODES),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -406,6 +435,154 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         max: SUPPORT_CLIENT_MESSAGE_WINDOW_MAX,
         default_size:
           DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE.messageWindowSize,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/subscription/notice`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const cfg = await getSubscriptionNoticeConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_NOTICE,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        item_max: SUBSCRIPTION_NOTICE_ITEM_MAX,
+        items_max: SUBSCRIPTION_NOTICE_ITEMS_MAX,
+        available_clients: SUBSCRIPTION_NOTICE_CLIENTS,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/subscription/notice`, async (req, reply) => {
+    const parsed = subscriptionNoticePatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const value = subscriptionNoticeValueSchema.parse({
+        by_client: parsed.data.by_client,
+      });
+      const anyEnabled = SUBSCRIPTION_NOTICE_CLIENTS.some(
+        (id) =>
+          value.by_client[id].enabled && value.by_client[id].items.length > 0,
+      );
+      await upsertProjectSetting({
+        projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_NOTICE,
+        value,
+        enabled: anyEnabled,
+        remark: parsed.data.remark ?? null,
+      });
+
+      primeSubscriptionNoticeCache(projectId, value);
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.subscription_notice.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: {
+          enabled: anyEnabled,
+          clients: SUBSCRIPTION_NOTICE_CLIENTS.filter(
+            (id) => value.by_client[id].enabled,
+          ),
+        },
+      });
+
+      const cfg = await getSubscriptionNoticeConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_NOTICE,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        item_max: SUBSCRIPTION_NOTICE_ITEM_MAX,
+        items_max: SUBSCRIPTION_NOTICE_ITEMS_MAX,
+        available_clients: SUBSCRIPTION_NOTICE_CLIENTS,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/subscription/node-name`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const cfg = await getSubscriptionNodeNameConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_NODE_NAME,
+        remark: cfg.remark,
+        modes: SUBSCRIPTION_NODE_NAME_MODES,
+        default_mode: DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE.mode,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/subscription/node-name`, async (req, reply) => {
+    const parsed = subscriptionNodeNamePatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const value = subscriptionNodeNameValueSchema.parse({
+        mode: parsed.data.mode,
+      });
+      await upsertProjectSetting({
+        projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_NODE_NAME,
+        value,
+        enabled: true,
+        remark: parsed.data.remark ?? null,
+      });
+      primeSubscriptionNodeNameCache(projectId, value);
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.subscription_node_name.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: { mode: value.mode },
+      });
+
+      const cfg = await getSubscriptionNodeNameConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_NODE_NAME,
+        remark: cfg.remark,
+        modes: SUBSCRIPTION_NODE_NAME_MODES,
+        default_mode: DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE.mode,
         ...cfg.value,
       };
     } catch (err) {

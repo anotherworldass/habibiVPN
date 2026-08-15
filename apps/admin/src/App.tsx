@@ -39,6 +39,7 @@ import {
   MailOutlined,
   CloudUploadOutlined,
   SafetyCertificateOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Select, Space } from "antd";
 import DashboardPage from "./pages/Dashboard";
@@ -77,6 +78,7 @@ import SupportSettingsPage from "./pages/SupportSettings";
 import MailSettingsPage from "./pages/MailSettings";
 import AuthEmailSettingsPage from "./pages/AuthEmailSettings";
 import StorageSettingsPage from "./pages/StorageSettings";
+import SubscriptionNoticeSettingsPage from "./pages/SubscriptionNoticeSettings";
 import { adminFetch } from "./lib/api";
 import { clearSession, getAdmin, getToken } from "./lib/auth";
 import { getProjectId, setProjectId } from "./lib/project";
@@ -148,6 +150,11 @@ function ProtectedLayout() {
                 path: "/settings/support",
                 name: "客服",
                 icon: <CustomerServiceOutlined />,
+              },
+              {
+                path: "/settings/subscription-notice",
+                name: "订阅转换",
+                icon: <FileTextOutlined />,
               },
             ],
           },
@@ -311,6 +318,10 @@ function ProtectedLayout() {
         <Route path="/settings/storage" element={<StorageSettingsPage />} />
         <Route path="/settings/auth-email" element={<AuthEmailSettingsPage />} />
         <Route path="/settings/support" element={<SupportSettingsPage />} />
+        <Route
+          path="/settings/subscription-notice"
+          element={<SubscriptionNoticeSettingsPage />}
+        />
         <Route path="/sell-plans" element={<SellPlansPage />} />
         <Route path="/sell-plans/groups" element={<PlanGroupsPage />} />
         <Route path="/sell-plans/preview" element={<CatalogPreviewPage />} />

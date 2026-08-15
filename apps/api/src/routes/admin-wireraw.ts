@@ -14,8 +14,15 @@ export const adminWirerawRoutes: FastifyPluginAsync = async (app) => {
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof WireRawError) {
-      return reply.code(err.status >= 400 && err.status < 600 ? err.status : 502).send({
-        error: err.code,
+      // Upstream SDK-key 401 is not an admin session failure — do not forward 401.
+      const status =
+        err.status === 401
+          ? 502
+          : err.status >= 400 && err.status < 600
+            ? err.status
+            : 502;
+      return reply.code(status).send({
+        error: err.status === 401 ? "wireraw.unauthorized" : err.code,
         request_id: err.requestId,
         upstream: err.body,
       });

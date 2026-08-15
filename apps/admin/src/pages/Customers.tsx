@@ -11,6 +11,7 @@ import {
   ProTable,
 } from "@ant-design/pro-components";
 import { Button, Descriptions, Dropdown, Modal, Space, Spin, Tag, Typography } from "antd";
+import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -359,9 +360,14 @@ export default function CustomersPage() {
     {
       title: "订阅链接",
       dataIndex: "subscription_url",
-      copyable: true,
       ellipsis: true,
       search: false,
+      render: (_, r) =>
+        r.subscription_url ? (
+          <CopyableUrlWithQr url={r.subscription_url} label="订阅链接" ellipsis />
+        ) : (
+          "-"
+        ),
     },
     {
       title: "操作",
@@ -862,14 +868,14 @@ export default function CustomersPage() {
                   {detail.subscription_url ||
                   detail.subscription?.subscription_url ||
                   detail.subscription?.url ? (
-                    <Typography.Paragraph
-                      copyable
-                      style={{ marginBottom: 0, wordBreak: "break-all" }}
-                    >
-                      {detail.subscription_url ||
+                    <CopyableUrlWithQr
+                      url={
+                        detail.subscription_url ||
                         detail.subscription?.subscription_url ||
-                        detail.subscription?.url}
-                    </Typography.Paragraph>
+                        detail.subscription?.url
+                      }
+                      label="订阅链接"
+                    />
                   ) : detail.subscription?.revoked_at ? (
                     <Typography.Text type="danger">已撤销</Typography.Text>
                   ) : (

@@ -9,6 +9,12 @@ import { env } from "../../config.js";
 import { prisma } from "../../lib/prisma.js";
 import { WireRawError, wireraw } from "../../wireraw/client.js";
 import { localizePlanCopy } from "../plan-i18n.js";
+import { getNodeRegionByHost } from "../nodes.js";
+import {
+  getSubscriptionNodeNameMode,
+  getSubscriptionNoticeLines,
+} from "../system-settings.js";
+import { applyNodeNameStyle } from "./node-names.js";
 import {
   type ClientSubscriptionUrls,
   SUB_CLIENT_URL_KEYS,
@@ -17,6 +23,7 @@ import {
   type SubClientFormat,
 } from "./formats.js";
 import {
+  cloneNodeWithName,
   extractShareUris,
   parseShareUri,
   uniqueNames,
@@ -155,7 +162,21 @@ export async function convertSubscriptionByToken(input: {
     throw err;
   }
 
-  const rendered = renderSubscription(kind, nodes, profileName);
+  const nameMode = await getSubscriptionNodeNameMode(project.id);
+  if (nameMode !== "original") {
+    const hostRegions = await getNodeRegionByHost();
+    nodes = applyNodeNameStyle(nodes, nameMode, hostRegions);
+  }
+
+  const noticeLines = await getSubscriptionNoticeLines(project.id, format);
+  if (noticeLines.length) {
+    const source = nodes[0]!;
+    nodes = [
+      ...noticeLines.map((text) => cloneNodeWithName(source, text)),
+      ...nodes,
+    ];
+  }
+
   const expireSec = slot.expiresAt
     ? Math.floor(slot.expiresAt.getTime() / 1000)
     : 0;
@@ -165,6 +186,11 @@ export async function convertSubscriptionByToken(input: {
     `total=0`,
     `expire=${expireSec}`,
   ].join("; ");
+  const announce = sanitizeHeaderValue(project.remark);
+  const rendered = renderSubscription(kind, nodes, profileName, {
+    userinfo,
+    announce,
+  });
 
   const profileTitleB64 = Buffer.from(profileName, "utf8").toString("base64");
   const headers: Record<string, string> = {
@@ -175,7 +201,6 @@ export async function convertSubscriptionByToken(input: {
     // Secondary for Clash-family / browsers; not Shadowrocket's sub-name source.
     "content-disposition": buildContentDisposition(profileName, fileExtFor(kind)),
   };
-  const announce = sanitizeHeaderValue(project.remark);
   if (announce) {
     // Non-ASCII / newlines are illegal in Node HTTP headers; use base64 form.
     headers["announce"] = `base64:${Buffer.from(announce, "utf8").toString("base64")}`;
@@ -388,6 +413,7 @@ function sanitizeFilenameHeader(name: string): string {
 function fileExtFor(kind: ReturnType<typeof renderKindFor>): string {
   switch (kind) {
     case "clash":
+    case "hiddify":
       return ".yaml";
     case "surge":
       return ".conf";

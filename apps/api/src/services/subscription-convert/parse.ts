@@ -363,11 +363,33 @@ export function renameNode(node: ProxyNode, projectName: string): ProxyNode {
   const name = node.name.startsWith(prefix)
     ? node.name
     : `${prefix} | ${node.name}`;
-  // Also rewrite fragment in raw URI when possible
-  const hashIdx = node.raw.indexOf("#");
-  const rawBase = hashIdx >= 0 ? node.raw.slice(0, hashIdx) : node.raw;
-  const raw = `${rawBase}#${encodeURIComponent(name)}`;
-  return { ...node, name, raw };
+  return cloneNodeWithName(node, name);
+}
+
+/** Clone a working node and rewrite its display name (share URI remark). */
+export function cloneNodeWithName(node: ProxyNode, name: string): ProxyNode {
+  const trimmed = name.trim();
+  if (!trimmed) return { ...node };
+  return { ...node, name: trimmed, raw: rewriteShareUriName(node, trimmed) };
+}
+
+function rewriteShareUriName(node: ProxyNode, name: string): string {
+  const raw = node.raw;
+  if (node.type === "vmess" || raw.toLowerCase().startsWith("vmess://")) {
+    const payload = raw.replace(/^vmess:\/\//i, "");
+    try {
+      const json = JSON.parse(
+        Buffer.from(payload, "base64").toString("utf8"),
+      ) as Record<string, unknown>;
+      json.ps = name;
+      return `vmess://${Buffer.from(JSON.stringify(json), "utf8").toString("base64")}`;
+    } catch {
+      /* fall through to hash rewrite */
+    }
+  }
+  const hashIdx = raw.indexOf("#");
+  const rawBase = hashIdx >= 0 ? raw.slice(0, hashIdx) : raw;
+  return `${rawBase}#${encodeURIComponent(name)}`;
 }
 
 export function uniqueNames(nodes: ProxyNode[]): ProxyNode[] {

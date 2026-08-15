@@ -21,6 +21,7 @@ import { haptic, hapticSuccess } from "../../lib/telegram";
 
 type ClientUrls = {
   clash_meta?: string;
+  hiddify?: string;
   v2ray?: string;
   shadowrocket?: string;
   surge?: string;
@@ -51,6 +52,7 @@ const AIRPORT_CLIENTS: Array<{
 }> = [
   { key: "shadowrocket", label: "Shadowrocket" },
   { key: "clash_meta", label: "Clash" },
+  { key: "hiddify", label: "Hiddify" },
   { key: "quantumult_x", label: "Quantumult X" },
   { key: "surge", label: "Surge" },
 ];

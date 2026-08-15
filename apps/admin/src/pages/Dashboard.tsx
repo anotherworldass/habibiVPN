@@ -27,6 +27,8 @@ export default function DashboardPage() {
     (async () => {
       try {
         const h = await adminFetch<{ ok: boolean }>("/health");
+        setStats((s) => ({ ...s, health: h.ok ? "ok" : "down" }));
+
         const plans = unwrapList(
           await adminFetch("/admin/v1/wireraw/customer-plans"),
           ["items", "plans"],
@@ -75,7 +77,12 @@ export default function DashboardPage() {
           merchantExpires,
         });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "load_failed");
+        const msg = e instanceof Error ? e.message : "load_failed";
+        setError(
+          msg === "wireraw.unauthorized" || msg === "http.401" || msg.includes("sdk_key")
+            ? "上游 WireRaw SDK Key 无效或已吊销，总览上游数据暂不可用。请检查服务器 .env 的 WIRERAW_KEY_ID / WIRERAW_KEY_SECRET。"
+            : msg,
+        );
       } finally {
         setLoading(false);
       }

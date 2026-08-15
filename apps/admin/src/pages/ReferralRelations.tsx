@@ -32,6 +32,7 @@ import {
   EntitlementLedgerDetailModal,
   type EntitlementLedgerDetailRow,
 } from "../components/EntitlementLedgerDetailModal";
+import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { adminFetch, unwrapList } from "../lib/api";
 
 type RelationListItem = {
@@ -109,6 +110,7 @@ type RelationRes = {
 
 type ClientUrls = {
   clash_meta?: string;
+  hiddify?: string;
   v2ray?: string;
   shadowrocket?: string;
   surge?: string;
@@ -117,6 +119,7 @@ type ClientUrls = {
 
 const CLIENT_URL_LABELS: { key: keyof ClientUrls; label: string }[] = [
   { key: "clash_meta", label: "Mihomo / Clash Meta (YAML)" },
+  { key: "hiddify", label: "Hiddify" },
   { key: "v2ray", label: "Xray / V2Ray (Base64)" },
   { key: "shadowrocket", label: "Shadowrocket" },
   { key: "surge", label: "Surge Profile" },
@@ -2422,16 +2425,10 @@ export default function ReferralRelationsPage() {
                         <Descriptions size="small" column={1} bordered>
                           <Descriptions.Item label="上游原始订阅">
                             {s.subscription_url ? (
-                              <Typography.Paragraph
-                                copyable
-                                style={{
-                                  marginBottom: 0,
-                                  wordBreak: "break-all",
-                                  fontSize: 12,
-                                }}
-                              >
-                                {s.subscription_url}
-                              </Typography.Paragraph>
+                              <CopyableUrlWithQr
+                                url={s.subscription_url}
+                                label="上游原始订阅"
+                              />
                             ) : s.revoked_at ? (
                               <Typography.Text type="danger">已撤销</Typography.Text>
                             ) : (
@@ -2443,16 +2440,7 @@ export default function ReferralRelationsPage() {
                             if (!url) return null;
                             return (
                               <Descriptions.Item key={key} label={label}>
-                                <Typography.Paragraph
-                                  copyable
-                                  style={{
-                                    marginBottom: 0,
-                                    wordBreak: "break-all",
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  {url}
-                                </Typography.Paragraph>
+                                <CopyableUrlWithQr url={url} label={label} />
                               </Descriptions.Item>
                             );
                           })}

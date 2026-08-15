@@ -9,11 +9,13 @@ import {
   ProTable,
 } from "@ant-design/pro-components";
 import { Button, Drawer, Space, Tag, Typography } from "antd";
+import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { message } from "../lib/antd-message";
 import { adminFetch, unwrapList } from "../lib/api";
 
 type ClientUrls = {
   clash_meta?: string;
+  hiddify?: string;
   v2ray?: string;
   shadowrocket?: string;
   surge?: string;
@@ -35,6 +37,7 @@ type UpstreamSlot = {
 
 const CLIENT_URL_LABELS: { key: keyof ClientUrls; label: string }[] = [
   { key: "clash_meta", label: "Mihomo / Clash Meta (YAML)" },
+  { key: "hiddify", label: "Hiddify" },
   { key: "v2ray", label: "Xray / V2Ray (Base64)" },
   { key: "shadowrocket", label: "Shadowrocket" },
   { key: "surge", label: "Surge Profile" },
@@ -477,13 +480,13 @@ export default function HabibiUsersPage() {
                   >
                     上游原始订阅
                   </Typography.Text>
-                  <Typography.Paragraph
-                    copyable
-                    ellipsis={{ rows: 2 }}
-                    style={{ marginBottom: 8, fontSize: 12 }}
-                  >
-                    {s.subscription_url}
-                  </Typography.Paragraph>
+                  <div style={{ marginBottom: 8 }}>
+                    <CopyableUrlWithQr
+                      url={s.subscription_url}
+                      label="上游原始订阅"
+                      ellipsis={{ rows: 2 }}
+                    />
+                  </div>
                 </>
               )}
               {s.client_urls && (
@@ -503,13 +506,11 @@ export default function HabibiUsersPage() {
                           >
                             {label}
                           </Typography.Text>
-                          <Typography.Paragraph
-                            copyable
+                          <CopyableUrlWithQr
+                            url={url}
+                            label={label}
                             ellipsis={{ rows: 2 }}
-                            style={{ marginBottom: 0, fontSize: 12 }}
-                          >
-                            {url}
-                          </Typography.Paragraph>
+                          />
                         </div>
                       );
                     })}

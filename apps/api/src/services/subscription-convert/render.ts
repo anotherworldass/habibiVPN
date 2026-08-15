@@ -259,15 +259,56 @@ export function renderBase64(nodes: ProxyNode[], profileName?: string): string {
   return Buffer.from(body, "utf8").toString("base64");
 }
 
+export type SubRenderMeta = {
+  userinfo?: string | null;
+  announce?: string | null;
+};
+
+/** Body-level comments Hiddify reads when CDNs/proxies strip HTTP headers. */
+export function renderHiddifyPreamble(
+  profileName: string,
+  meta?: SubRenderMeta,
+): string {
+  const title = profileName.trim();
+  const lines = [
+    `#profile-title: base64:${Buffer.from(title || "VPN", "utf8").toString("base64")}`,
+    `#profile-update-interval: 24`,
+  ];
+  if (meta?.userinfo?.trim()) {
+    lines.push(`#subscription-userinfo: ${meta.userinfo.trim()}`);
+  }
+  if (meta?.announce?.trim()) {
+    lines.push(
+      `#announce: base64:${Buffer.from(meta.announce.trim(), "utf8").toString("base64")}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderHiddifyYaml(
+  nodes: ProxyNode[],
+  profileName: string,
+  meta?: SubRenderMeta,
+): string {
+  return renderHiddifyPreamble(profileName, meta) + renderClashYaml(nodes, profileName);
+}
+
 export function renderSubscription(
   kind: SubRenderKind,
   nodes: ProxyNode[],
   profileName: string,
+  meta?: SubRenderMeta,
 ): { body: string; contentType: string; filename: string } {
   switch (kind) {
     case "clash":
       return {
         body: renderClashYaml(nodes, profileName),
+        contentType: "text/yaml; charset=utf-8",
+        filename: `${sanitizeFilename(profileName)}.yaml`,
+      };
+    case "hiddify":
+      return {
+        body: renderHiddifyYaml(nodes, profileName, meta),
         contentType: "text/yaml; charset=utf-8",
         filename: `${sanitizeFilename(profileName)}.yaml`,
       };
