@@ -15,6 +15,7 @@ import {
   SUBSCRIPTION_NOTICE_CLIENTS,
   SUBSCRIPTION_NOTICE_ITEM_MAX,
   SUBSCRIPTION_NOTICE_ITEMS_MAX,
+  SUBSCRIPTION_PROFILE_TITLE_MAX,
   SUPPORT_CLIENT_MESSAGE_WINDOW_MAX,
   SUPPORT_CLIENT_MESSAGE_WINDOW_MIN,
   authEmailValueSchema,
@@ -456,6 +457,7 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         remark: cfg.remark,
         item_max: SUBSCRIPTION_NOTICE_ITEM_MAX,
         items_max: SUBSCRIPTION_NOTICE_ITEMS_MAX,
+        profile_title_max: SUBSCRIPTION_PROFILE_TITLE_MAX,
         available_clients: SUBSCRIPTION_NOTICE_CLIENTS,
         ...cfg.value,
       };
@@ -515,6 +517,7 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         remark: cfg.remark,
         item_max: SUBSCRIPTION_NOTICE_ITEM_MAX,
         items_max: SUBSCRIPTION_NOTICE_ITEMS_MAX,
+        profile_title_max: SUBSCRIPTION_PROFILE_TITLE_MAX,
         available_clients: SUBSCRIPTION_NOTICE_CLIENTS,
         ...cfg.value,
       };

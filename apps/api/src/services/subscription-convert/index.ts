@@ -11,9 +11,16 @@ import { WireRawError, wireraw } from "../../wireraw/client.js";
 import { localizePlanCopy } from "../plan-i18n.js";
 import { getNodeRegionByHost } from "../nodes.js";
 import {
+  getSubscriptionClientCopy,
   getSubscriptionNodeNameMode,
-  getSubscriptionNoticeLines,
 } from "../system-settings.js";
+import {
+  applySubCopyVars,
+  buildShadowrocketStatus,
+  buildSubCopyVars,
+  bytesToNumber,
+  resolveProfileTitle,
+} from "./copy-vars.js";
 import { applyNodeNameStyle } from "./node-names.js";
 import {
   type ClientSubscriptionUrls,
@@ -60,10 +67,12 @@ export { signSubToken, verifySubToken } from "./token.js";
 export function buildProfileTitle(
   siteName: string | null | undefined,
   planName: string | null | undefined,
+  template?: string | null,
 ): string {
-  const site = (siteName || "VPN").trim() || "VPN";
-  const plan = (planName || "").trim();
-  return plan ? `${site}-${plan}` : site;
+  return resolveProfileTitle(
+    template,
+    buildSubCopyVars({ siteName, planName }),
+  );
 }
 
 export function buildClientSubscriptionUrls(
@@ -132,10 +141,15 @@ export async function convertSubscriptionByToken(input: {
   const project = slot.user.project;
   const siteName = (project.name || project.code || "VPN").trim();
   const planName = resolveSlotPlanName(slot);
-  // Shadowrocket / Clash profile title: 网站名称-套餐名
-  const profileName = planName ? `${siteName}-${planName}` : siteName;
   const format = normalizeSubFormat(input.formatRaw);
   const kind = renderKindFor(format);
+  const clientCopy = await getSubscriptionClientCopy(project.id, format);
+  const copyVars = buildSubCopyVars({
+    siteName,
+    planName,
+    expiresAt: slot.expiresAt,
+  });
+  const profileName = resolveProfileTitle(clientCopy.profileTitle, copyVars);
 
   if (slot.expiresAt && slot.expiresAt.getTime() < Date.now()) {
     const err = new Error("sub.expired");
@@ -168,11 +182,12 @@ export async function convertSubscriptionByToken(input: {
     nodes = applyNodeNameStyle(nodes, nameMode, hostRegions);
   }
 
-  const noticeLines = await getSubscriptionNoticeLines(project.id, format);
-  if (noticeLines.length) {
+  if (clientCopy.items.length) {
     const source = nodes[0]!;
     nodes = [
-      ...noticeLines.map((text) => cloneNodeWithName(source, text)),
+      ...clientCopy.items.map((text) =>
+        cloneNodeWithName(source, applySubCopyVars(text, copyVars)),
+      ),
       ...nodes,
     ];
   }
@@ -180,16 +195,28 @@ export async function convertSubscriptionByToken(input: {
   const expireSec = slot.expiresAt
     ? Math.floor(slot.expiresAt.getTime() / 1000)
     : 0;
+  const usedBytes = bytesToNumber(slot.usedTrafficBytes);
+  const limitBytes = bytesToNumber(slot.dataLimitBytes);
   const userinfo = [
     `upload=0`,
-    `download=0`,
-    `total=0`,
+    `download=${Math.round(usedBytes)}`,
+    `total=${Math.round(limitBytes)}`,
     `expire=${expireSec}`,
   ].join("; ");
   const announce = sanitizeHeaderValue(project.remark);
+  const statusLine =
+    format === "shadowrocket"
+      ? buildShadowrocketStatus({
+          uploadBytes: 0,
+          downloadBytes: usedBytes,
+          limitBytes,
+          expiresAt: slot.expiresAt,
+        })
+      : undefined;
   const rendered = renderSubscription(kind, nodes, profileName, {
     userinfo,
     announce,
+    statusLine,
   });
 
   const profileTitleB64 = Buffer.from(profileName, "utf8").toString("base64");

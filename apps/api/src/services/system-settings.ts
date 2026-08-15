@@ -127,12 +127,14 @@ export type SubscriptionNoticeClient =
 
 export const SUBSCRIPTION_NOTICE_ITEM_MAX = 80;
 export const SUBSCRIPTION_NOTICE_ITEMS_MAX = 15;
+export const SUBSCRIPTION_PROFILE_TITLE_MAX = 80;
 
 export const subscriptionNoticeClientBlockSchema = z.object({
   enabled: z.boolean(),
   items: z
     .array(z.string().trim().min(1).max(SUBSCRIPTION_NOTICE_ITEM_MAX))
     .max(SUBSCRIPTION_NOTICE_ITEMS_MAX),
+  profile_title: z.string().trim().max(SUBSCRIPTION_PROFILE_TITLE_MAX),
 });
 
 export type SubscriptionNoticeClientBlock = z.infer<
@@ -155,7 +157,7 @@ export type SubscriptionNoticeValue = z.infer<
 >;
 
 function emptyNoticeClientBlock(): SubscriptionNoticeClientBlock {
-  return { enabled: false, items: [] };
+  return { enabled: false, items: [], profile_title: "" };
 }
 
 export function emptySubscriptionNoticeByClient(): SubscriptionNoticeValue["by_client"] {
@@ -566,6 +568,10 @@ export function parseSubscriptionNoticeValue(
       byClient[id] = {
         enabled: block.enabled === true,
         items: sanitizeNoticeItems(block.items),
+        profile_title:
+          typeof block.profile_title === "string"
+            ? block.profile_title.trim().slice(0, SUBSCRIPTION_PROFILE_TITLE_MAX)
+            : "",
       };
     }
   } else {
@@ -585,6 +591,7 @@ export function parseSubscriptionNoticeValue(
       byClient[id] = {
         enabled: on && items.length > 0,
         items: on ? [...items] : [],
+        profile_title: "",
       };
     }
   }
@@ -628,6 +635,33 @@ export async function getSubscriptionNoticeConfig(projectId: string): Promise<{
   };
 }
 
+async function loadSubscriptionNoticePolicy(
+  projectId: string,
+): Promise<SubscriptionNoticeValue | null> {
+  const hit = subscriptionNoticeCache.get(projectId);
+  const now = Date.now();
+  if (hit && now - hit.at < SUBSCRIPTION_NOTICE_CACHE_TTL_MS) {
+    return hit.value;
+  }
+  const cfg = await getSubscriptionNoticeConfig(projectId);
+  subscriptionNoticeCache.set(projectId, { value: cfg.value, at: now });
+  return cfg.value;
+}
+
+export async function getSubscriptionClientCopy(
+  projectId: string,
+  format: string,
+): Promise<{ items: string[]; profileTitle: string }> {
+  const policy = await loadSubscriptionNoticePolicy(projectId);
+  const client = noticeClientForFormat(format);
+  if (!client || !policy) return { items: [], profileTitle: "" };
+  const block = policy.by_client[client];
+  return {
+    items: block?.enabled && block.items.length ? block.items : [],
+    profileTitle: block?.profile_title?.trim() || "",
+  };
+}
+
 /**
  * Effective notice lines for a convert format.
  * Per-client disabled / empty → [].
@@ -636,22 +670,8 @@ export async function getSubscriptionNoticeLines(
   projectId: string,
   format: string,
 ): Promise<string[]> {
-  const hit = subscriptionNoticeCache.get(projectId);
-  const now = Date.now();
-  let policy: SubscriptionNoticeValue | null;
-  if (hit && now - hit.at < SUBSCRIPTION_NOTICE_CACHE_TTL_MS) {
-    policy = hit.value;
-  } else {
-    const cfg = await getSubscriptionNoticeConfig(projectId);
-    policy = cfg.value;
-    subscriptionNoticeCache.set(projectId, { value: policy, at: now });
-  }
-  if (!policy) return [];
-  const client = noticeClientForFormat(format);
-  if (!client) return [];
-  const block = policy.by_client[client];
-  if (!block?.enabled || !block.items.length) return [];
-  return block.items;
+  const copy = await getSubscriptionClientCopy(projectId, format);
+  return copy.items;
 }
 
 export function primeSubscriptionNoticeCache(

@@ -246,22 +246,33 @@ export function renderQuantumultX(
   ].join("\n");
 }
 
-export function renderBase64(nodes: ProxyNode[], profileName?: string): string {
+export function renderBase64(
+  nodes: ProxyNode[],
+  profileName?: string,
+  meta?: SubRenderMeta,
+): string {
   const title = profileName?.trim();
-  const meta = title
-    ? [
-        // Body-level metadata (Hiddify / some Shadowrocket paths) when proxies strip headers
-        `#profile-title: base64:${Buffer.from(title, "utf8").toString("base64")}`,
-        `#profile-update-interval: 24`,
-      ].join("\n") + "\n"
-    : "";
-  const body = meta + nodes.map((n) => n.raw).join("\n");
+  const head: string[] = [];
+  if (meta?.statusLine?.trim()) {
+    head.push(meta.statusLine.trim());
+  }
+  if (title) {
+    // Body-level metadata (Hiddify / some Shadowrocket paths) when proxies strip headers
+    head.push(
+      `#profile-title: base64:${Buffer.from(title, "utf8").toString("base64")}`,
+    );
+    head.push(`#profile-update-interval: 24`);
+  }
+  const prefix = head.length ? `${head.join("\n")}\n` : "";
+  const body = prefix + nodes.map((n) => n.raw).join("\n");
   return Buffer.from(body, "utf8").toString("base64");
 }
 
 export type SubRenderMeta = {
   userinfo?: string | null;
   announce?: string | null;
+  /** Shadowrocket: first decoded line, e.g. STATUS=⬆️:0B,⏬:1GB,剩余:10GB,过期:2026-09-04 */
+  statusLine?: string | null;
 };
 
 /** Body-level comments Hiddify reads when CDNs/proxies strip HTTP headers. */
@@ -326,7 +337,7 @@ export function renderSubscription(
       };
     default:
       return {
-        body: renderBase64(nodes, profileName),
+        body: renderBase64(nodes, profileName, meta),
         contentType: "text/plain; charset=utf-8",
         filename: `${sanitizeFilename(profileName)}.txt`,
       };

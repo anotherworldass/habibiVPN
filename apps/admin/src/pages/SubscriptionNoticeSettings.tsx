@@ -43,6 +43,7 @@ type NodeNameConfig = {
 type NoticeClientBlock = {
   enabled: boolean;
   items: string[];
+  profile_title?: string;
 };
 
 type NoticeConfig = {
@@ -53,6 +54,7 @@ type NoticeConfig = {
   by_client: Record<string, NoticeClientBlock>;
   item_max: number;
   items_max: number;
+  profile_title_max?: number;
   available_clients: string[];
 };
 
@@ -61,7 +63,7 @@ const CLIENT_IDS = Object.keys(CLIENT_LABELS);
 function emptyByClient(): Record<string, NoticeClientBlock> {
   const out: Record<string, NoticeClientBlock> = {};
   for (const id of CLIENT_IDS) {
-    out[id] = { enabled: false, items: [""] };
+    out[id] = { enabled: false, items: [""], profile_title: "" };
   }
   return out;
 }
@@ -73,6 +75,7 @@ export default function SubscriptionNoticeSettingsPage() {
   const [meta, setMeta] = useState({
     itemMax: 80,
     itemsMax: 15,
+    titleMax: 80,
     availableClients: Object.keys(CLIENT_LABELS),
   });
   const [form] = Form.useForm();
@@ -98,6 +101,7 @@ export default function SubscriptionNoticeSettingsPage() {
       setMeta({
         itemMax: cfg.item_max,
         itemsMax: cfg.items_max,
+        titleMax: cfg.profile_title_max || 80,
         availableClients: available,
       });
       const byClient = emptyByClient();
@@ -106,6 +110,7 @@ export default function SubscriptionNoticeSettingsPage() {
         byClient[id] = {
           enabled: !!block?.enabled,
           items: block?.items?.length ? block.items : [""],
+          profile_title: block?.profile_title || "",
         };
       }
       form.setFieldsValue({
@@ -141,7 +146,11 @@ export default function SubscriptionNoticeSettingsPage() {
         );
         return;
       }
-      byClient[id] = { enabled, items };
+      byClient[id] = {
+        enabled,
+        items,
+        profile_title: (raw[id]?.profile_title || "").trim(),
+      };
     }
     setSaving(true);
     try {
@@ -261,6 +270,15 @@ export default function SubscriptionNoticeSettingsPage() {
             </li>
             <li>原有可用节点全部保留；用户误点说明节点仍可连通。</li>
             <li>顺序即展示顺序：第 1 条在最顶上。</li>
+            <li>
+              显示名称和说明文案都可用变量：
+              <Typography.Text code>{"{plan_name}"}</Typography.Text>{" "}
+              套餐名、
+              <Typography.Text code>{"{site_name}"}</Typography.Text>{" "}
+              站点名、
+              <Typography.Text code>{"{expire_date}"}</Typography.Text>{" "}
+              到期日。
+            </li>
           </ul>
         }
       />
@@ -288,6 +306,22 @@ export default function SubscriptionNoticeSettingsPage() {
               label: CLIENT_LABELS[id] || id,
               children: (
                 <div>
+                  <Form.Item
+                    name={["by_client", id, "profile_title"]}
+                    label="订阅显示名称"
+                    extra="客户端里看到的套餐/订阅名。留空则默认 {site_name}-{plan_name}"
+                    rules={[
+                      {
+                        max: meta.titleMax,
+                        message: `不超过 ${meta.titleMax} 字`,
+                      },
+                    ]}
+                  >
+                    <Input
+                      placeholder="{site_name}-{plan_name}"
+                      maxLength={meta.titleMax}
+                    />
+                  </Form.Item>
                   <Form.Item
                     name={["by_client", id, "enabled"]}
                     label="启用该客户端说明节点"
@@ -332,7 +366,7 @@ export default function SubscriptionNoticeSettingsPage() {
                               ]}
                             >
                               <Input
-                                placeholder="例如：官网 habibi.xxx · 剩余天数看套餐页"
+                                placeholder="例如：当前套餐 {plan_name} · 到期 {expire_date}"
                                 maxLength={meta.itemMax}
                               />
                             </Form.Item>
