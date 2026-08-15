@@ -265,9 +265,9 @@ export function renderBase64(
 }
 
 /**
- * Shadowrocket reads STATUS=/REMARKS= as plaintext *before* the base64 payload
- * (and also as the first decoded lines, same as common Chinese panels).
- * Do not wrap these in # comments — SR will ignore them.
+ * Whole body must be valid Base64. Shadowrocket rejects a plaintext prefix
+ * ("无法获取订阅节点"). STATUS=/REMARKS= go on the first decoded lines,
+ * same as common Chinese panels.
  */
 export function renderShadowrocket(
   nodes: ProxyNode[],
@@ -276,15 +276,11 @@ export function renderShadowrocket(
 ): string {
   const status = meta?.statusLine?.replace(/[\r\n]+/g, " ").trim() || "";
   const remarks = profileName.replace(/[\r\n]+/g, " ").trim();
-  const inner: string[] = [];
-  if (status) inner.push(status);
-  if (remarks) inner.push(`REMARKS=${remarks}`);
-  inner.push(...nodes.map((n) => n.raw));
-  const encoded = Buffer.from(inner.join("\n"), "utf8").toString("base64");
-  const prefix: string[] = [];
-  if (status) prefix.push(status);
-  if (remarks) prefix.push(`REMARKS=${remarks}`);
-  return prefix.length ? `${prefix.join("\n")}\n${encoded}` : encoded;
+  const lines: string[] = [];
+  if (status) lines.push(status);
+  if (remarks) lines.push(`REMARKS=${remarks}`);
+  lines.push(...nodes.map((n) => n.raw));
+  return Buffer.from(lines.join("\n"), "utf8").toString("base64");
 }
 
 export type SubRenderMeta = {
