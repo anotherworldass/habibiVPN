@@ -77,23 +77,15 @@ export function buildProfileTitle(
 
 export function buildClientSubscriptionUrls(
   slotId: string,
-  opts?: { profileTitle?: string },
 ): ClientSubscriptionUrls {
   const token = signSubToken(slotId);
   const origin = env.API_PUBLIC_ORIGIN.replace(/\/$/, "");
   const base = `${origin}${USER_API_PREFIX}/sub/${encodeURIComponent(token)}`;
   const out = {} as ClientSubscriptionUrls;
   for (const item of SUB_CLIENT_URL_KEYS) {
-    let url = `${base}/${item.format}`;
-    if (opts?.profileTitle?.trim()) {
-      const title = opts.profileTitle.trim();
-      // Path segment → Shadowrocket "URL default name" fallback (last path part).
-      // Hash → import-time remark for sub:// / some SR versions.
-      if (item.key === "shadowrocket") {
-        url += `/${encodeURIComponent(title)}#${encodeURIComponent(title)}`;
-      }
-    }
-    out[item.key] = url;
+    // Do not embed the title in path or #hash. Shadowrocket treats #remark as a
+    // user-assigned name and will not overwrite it on refresh.
+    out[item.key] = `${base}/${item.format}`;
   }
   return out;
 }
@@ -455,9 +447,9 @@ function fileExtFor(kind: ReturnType<typeof renderKindFor>): string {
  */
 function buildContentDisposition(displayName: string, ext: string): string {
   const base = displayName.trim() || "subscription";
-  const withExt = base.toLowerCase().endsWith(ext) ? base : `${base}${ext}`;
-  const ascii = sanitizeFilenameHeader(withExt);
-  const encoded = encodeURIComponent(withExt).replace(/['()]/g, (c) =>
+  // filename* is the subscription title some clients read — no file extension.
+  const ascii = sanitizeFilenameHeader(`${base}${ext}`);
+  const encoded = encodeURIComponent(base).replace(/['()]/g, (c) =>
     `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;

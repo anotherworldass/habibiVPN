@@ -14,10 +14,7 @@ import {
   updateUpstreamSlot,
 } from "../services/provision.js";
 import { listUserAuthEvents } from "../services/auth-events.js";
-import {
-  buildClientSubscriptionUrls,
-  buildProfileTitle,
-} from "../services/subscription-convert/index.js";
+import { buildClientSubscriptionUrls } from "../services/subscription-convert/index.js";
 import { WireRawError } from "../wireraw/client.js";
 
 const provisionBody = z.object({
@@ -156,12 +153,7 @@ export const adminUsersRoutes: FastifyPluginAsync = async (app) => {
           upstream_username: s.upstreamUsername,
           subscription_url: s.subscriptionUrl,
           client_urls: s.subscriptionUrl
-            ? buildClientSubscriptionUrls(s.id, {
-                profileTitle: buildProfileTitle(
-                  u.project?.name || u.project?.code,
-                  s.plan?.name,
-                ),
-              })
+            ? buildClientSubscriptionUrls(s.id)
             : null,
           expires_at: s.expiresAt,
           status: s.status,

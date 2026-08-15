@@ -11,7 +11,7 @@ import {
  *
  * GET /api/v1/sub/:token
  * GET /api/v1/sub/:token/:format
- * GET /api/v1/sub/:token/:format/:title  (title ignored; for Shadowrocket URL-name fallback)
+ * GET /api/v1/sub/:token/:format/:title  (title ignored; old links still work)
  *   format: clash | mihomo | clash_meta | hiddify | v2ray | xray | base64 | shadowrocket | surge | quantumult_x
  */
 export const userSubRoutes: FastifyPluginAsync = async (app) => {
@@ -60,7 +60,6 @@ async function serveSub(
     type: (t: string) => unknown;
     send: (b: unknown) => unknown;
     code: (n: number) => { send: (b: unknown) => unknown };
-    raw: { setHeader: (k: string, v: string | number | readonly string[]) => void };
   },
 ) {
   try {
@@ -70,22 +69,8 @@ async function serveSub(
       userAgent,
     });
     for (const [k, v] of Object.entries(result.headers)) {
-      // Profile-Title handled below (Shadowrocket prefers raw UTF-8 bytes).
-      if (k === "profile-title") continue;
       reply.header(k, v);
     }
-
-    // Shadowrocket reads Profile-Title first. Many SR builds expect raw UTF-8
-    // header bytes (not `base64:`). Node rejects unicode in setHeader, so we
-    // smuggle UTF-8 bytes as a latin1 string on the raw response.
-    const rawTitle = utf8HeaderValue(result.profileName);
-    reply.raw.setHeader("Profile-Title", rawTitle);
-    // Keep Clash Meta compatible form as well.
-    reply.raw.setHeader(
-      "Profile-Title-Base64",
-      result.headers["profile-title"] ||
-        `base64:${Buffer.from(result.profileName, "utf8").toString("base64")}`,
-    );
 
     reply.header("cache-control", "no-store");
     reply.type(result.contentType);
@@ -98,9 +83,4 @@ async function serveSub(
     }
     return reply.code(status).send({ error: message });
   }
-}
-
-/** Encode UTF-8 so Node's header validator accepts it; wire bytes stay UTF-8. */
-function utf8HeaderValue(text: string): string {
-  return Buffer.from(text, "utf8").toString("latin1");
 }

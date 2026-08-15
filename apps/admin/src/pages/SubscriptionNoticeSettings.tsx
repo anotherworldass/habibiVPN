@@ -309,7 +309,7 @@ export default function SubscriptionNoticeSettingsPage() {
                   <Form.Item
                     name={["by_client", id, "profile_title"]}
                     label="订阅显示名称"
-                    extra="客户端里看到的套餐/订阅名。留空则默认 {site_name}-{plan_name}"
+                    extra="客户端里看到的套餐/订阅名。留空则默认 {site_name}-{plan_name}。小火箭若旧链接带 #名称，请删掉 # 及后面的字后再更新，或用后台新链接重新导入。"
                     rules={[
                       {
                         max: meta.titleMax,
