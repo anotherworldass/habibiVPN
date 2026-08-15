@@ -253,11 +253,7 @@ export function renderBase64(
 ): string {
   const title = profileName?.trim();
   const head: string[] = [];
-  if (meta?.statusLine?.trim()) {
-    head.push(meta.statusLine.trim());
-  }
   if (title) {
-    // Body-level metadata (Hiddify / some Shadowrocket paths) when proxies strip headers
     head.push(
       `#profile-title: base64:${Buffer.from(title, "utf8").toString("base64")}`,
     );
@@ -266,6 +262,29 @@ export function renderBase64(
   const prefix = head.length ? `${head.join("\n")}\n` : "";
   const body = prefix + nodes.map((n) => n.raw).join("\n");
   return Buffer.from(body, "utf8").toString("base64");
+}
+
+/**
+ * Shadowrocket reads STATUS=/REMARKS= as plaintext *before* the base64 payload
+ * (and also as the first decoded lines, same as common Chinese panels).
+ * Do not wrap these in # comments — SR will ignore them.
+ */
+export function renderShadowrocket(
+  nodes: ProxyNode[],
+  profileName: string,
+  meta?: SubRenderMeta,
+): string {
+  const status = meta?.statusLine?.replace(/[\r\n]+/g, " ").trim() || "";
+  const remarks = profileName.replace(/[\r\n]+/g, " ").trim();
+  const inner: string[] = [];
+  if (status) inner.push(status);
+  if (remarks) inner.push(`REMARKS=${remarks}`);
+  inner.push(...nodes.map((n) => n.raw));
+  const encoded = Buffer.from(inner.join("\n"), "utf8").toString("base64");
+  const prefix: string[] = [];
+  if (status) prefix.push(status);
+  if (remarks) prefix.push(`REMARKS=${remarks}`);
+  return prefix.length ? `${prefix.join("\n")}\n${encoded}` : encoded;
 }
 
 export type SubRenderMeta = {
@@ -332,6 +351,12 @@ export function renderSubscription(
     case "quantumult_x":
       return {
         body: renderQuantumultX(nodes, profileName),
+        contentType: "text/plain; charset=utf-8",
+        filename: `${sanitizeFilename(profileName)}.txt`,
+      };
+    case "shadowrocket":
+      return {
+        body: renderShadowrocket(nodes, profileName, meta),
         contentType: "text/plain; charset=utf-8",
         filename: `${sanitizeFilename(profileName)}.txt`,
       };

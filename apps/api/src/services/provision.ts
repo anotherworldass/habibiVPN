@@ -13,7 +13,10 @@ import {
   snapshotFromSlot,
 } from "./entitlement-ledger.js";
 import { localizePlanCopy } from "./plan-i18n.js";
-import { buildClientSubscriptionUrls } from "./subscription-convert/index.js";
+import {
+  buildClientSubscriptionUrls,
+  buildProfileTitle,
+} from "./subscription-convert/index.js";
 import type { ClientSubscriptionUrls } from "./subscription-convert/formats.js";
 
 function asDisplayNameI18n(raw: unknown): Record<string, string> {
@@ -707,6 +710,8 @@ function toSubscriptionView(
     slot.plan?.name ||
     growthLabel?.text ||
     null;
+  const siteName =
+    slot.user?.project?.name || slot.user?.project?.code || null;
 
   const bw = view?.bandwidth_policy;
   const cachedNode = parseCachedNode(slot.currentNode);
@@ -757,7 +762,11 @@ function toSubscriptionView(
     custom_reset_interval: customResetInterval,
     next_reset_at: nextResetAt,
     subscription_url: url,
-    client_urls: url ? buildClientSubscriptionUrls(slot.id) : null,
+    client_urls: url
+      ? buildClientSubscriptionUrls(slot.id, {
+          profileTitle: buildProfileTitle(siteName, planName),
+        })
+      : null,
     online_ip_limit:
       toNum(end?.online_ip_limit) ?? toNum(slot.onlineIpLimit),
     online_device_count:

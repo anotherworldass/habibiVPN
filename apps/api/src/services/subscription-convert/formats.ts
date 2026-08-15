@@ -15,7 +15,13 @@ export const SUB_CLIENT_FORMATS = [
 
 export type SubClientFormat = (typeof SUB_CLIENT_FORMATS)[number];
 
-export type SubRenderKind = "clash" | "hiddify" | "base64" | "surge" | "quantumult_x";
+export type SubRenderKind =
+  | "clash"
+  | "hiddify"
+  | "base64"
+  | "shadowrocket"
+  | "surge"
+  | "quantumult_x";
 
 const ALIAS: Record<string, SubClientFormat> = {
   clash: "clash",
@@ -56,6 +62,8 @@ export function renderKindFor(format: SubClientFormat): SubRenderKind {
       return "surge";
     case "quantumult_x":
       return "quantumult_x";
+    case "shadowrocket":
+      return "shadowrocket";
     default:
       return "base64";
   }

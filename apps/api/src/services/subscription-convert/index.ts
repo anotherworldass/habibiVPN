@@ -77,15 +77,20 @@ export function buildProfileTitle(
 
 export function buildClientSubscriptionUrls(
   slotId: string,
+  opts?: { profileTitle?: string },
 ): ClientSubscriptionUrls {
   const token = signSubToken(slotId);
   const origin = env.API_PUBLIC_ORIGIN.replace(/\/$/, "");
   const base = `${origin}${USER_API_PREFIX}/sub/${encodeURIComponent(token)}`;
   const out = {} as ClientSubscriptionUrls;
   for (const item of SUB_CLIENT_URL_KEYS) {
-    // Do not embed the title in path or #hash. Shadowrocket treats #remark as a
-    // user-assigned name and will not overwrite it on refresh.
-    out[item.key] = `${base}/${item.format}`;
+    let url = `${base}/${item.format}`;
+    // Path title is Shadowrocket's import-time name (last segment).
+    // Do not add #hash — that locks the name and blocks REMARKS= updates.
+    if (item.key === "shadowrocket" && opts?.profileTitle?.trim()) {
+      url += `/${encodeURIComponent(opts.profileTitle.trim())}`;
+    }
+    out[item.key] = url;
   }
   return out;
 }
@@ -213,13 +218,15 @@ export async function convertSubscriptionByToken(input: {
 
   const profileTitleB64 = Buffer.from(profileName, "utf8").toString("base64");
   const headers: Record<string, string> = {
-    // Clash Meta / Stash: base64: form.
     "profile-title": `base64:${profileTitleB64}`,
     "profile-update-interval": "24",
-    "subscription-userinfo": userinfo,
-    // Secondary for Clash-family / browsers; not Shadowrocket's sub-name source.
     "content-disposition": buildContentDisposition(profileName, fileExtFor(kind)),
   };
+  // Shadowrocket prefers STATUS=/REMARKS= body fields. subscription-userinfo
+  // makes it show English Upload/Download/Expire labels instead.
+  if (format !== "shadowrocket") {
+    headers["subscription-userinfo"] = userinfo;
+  }
   if (announce) {
     // Non-ASCII / newlines are illegal in Node HTTP headers; use base64 form.
     headers["announce"] = `base64:${Buffer.from(announce, "utf8").toString("base64")}`;
