@@ -487,8 +487,8 @@ next build 没有执行，或者构建中途失败。
     pm2 delete habibi-api habibi-web
     pm2 save
 
-3. 生产 `.env` 里 MySQL / Redis 继续写本机地址。API 已改为桥接网络，
-   入口脚本会把 127.0.0.1 改成 host.docker.internal，所以 .env 不用改：
+3. 生产 `.env` 里 MySQL / Redis 继续写本机地址。API 使用 host 网络，
+   才能连上 1Panel 只监听 127.0.0.1 的 MySQL，.env 不用改：
 
     DATABASE_URL=mysql://用户:密码@127.0.0.1:3306/habibivpn
     REDIS_URL=redis://127.0.0.1:6379

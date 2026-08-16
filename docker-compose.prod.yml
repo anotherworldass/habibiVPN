@@ -1,9 +1,10 @@
 # 生产环境：API + Web + TG Mini App + Admin
 # 由 scripts/deploy-prod.sh 按 blue/green 两套端口拉起，OpenResty reload 后切流量。
 #
-# MySQL / Redis 用本机。API 走桥接网络，入口脚本会把 127.0.0.1 改成 host.docker.internal：
+# MySQL / Redis 用本机，且通常只听 127.0.0.1，所以 API 走 host 网络：
 #   DATABASE_URL=mysql://user:pass@127.0.0.1:3306/habibivpn
 #   REDIS_URL=redis://127.0.0.1:6379
+# web / tg / admin 经 api-gw（compose 别名 api）转到本槽 API 端口。
 
 services:
   api:
@@ -14,16 +15,13 @@ services:
       target: api
     restart: unless-stopped
     init: true
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     env_file:
       - .env
     environment:
       NODE_ENV: production
       API_HOST: 0.0.0.0
-      API_PORT: "3001"
-    ports:
-      - "127.0.0.1:${API_HOST_PORT:-3001}:3001"
+      API_PORT: "${API_HOST_PORT:-3001}"
     volumes:
       - habibi_support_uploads:/app/apps/api/data/support-uploads
     labels:
@@ -34,12 +32,34 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3001/health/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "const p=process.env.API_PORT||'3001'; fetch('http://127.0.0.1:'+p+'/health/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 60s
+
+  api-gw:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      API_HOST_PORT: ${API_HOST_PORT:-3001}
+      NGINX_ENVSUBST_FILTER: API_HOST_PORT
+    volumes:
+      - ./deploy/nginx-api-gw.conf.template:/etc/nginx/templates/default.conf.template:ro
+    expose:
+      - "3001"
+    labels:
+      habibi.slot: ${HABIBI_SLOT:-blue}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - api
 
   web:
     image: habibivpn-web:prod
@@ -63,6 +83,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      api-gw:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -98,6 +120,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      api-gw:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -127,6 +151,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      api-gw:
+        condition: service_started
 
 volumes:
   habibi_support_uploads:
