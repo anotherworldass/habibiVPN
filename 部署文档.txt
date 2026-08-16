@@ -450,40 +450,45 @@ next build 没有执行，或者构建中途失败。
 [ ] PM2 已执行 pm2 save
 
 
-十六、Docker 生产部署（推荐，替代宝塔 Node / PM2）
+十六、Docker 生产部署（推荐，替代面板 Node / PM2）
 ------------------------------------------------
 
-目标：Node 进程全部进 Docker；宝塔只保留 Nginx（SSL）、本机 MySQL、本机 Redis。
-代码推到 Git 后，计划任务自动 pull + 重建容器。
+目标：Node 进程全部进 Docker；1Panel 只保留 OpenResty（SSL）、本机 MySQL、本机 Redis。
+代码推到 Git 后，计划任务自动 pull，在空闲槽构建并启动，OpenResty reload 后再停旧槽。
 
 不要把现有生产库迁进 Docker。本地 `docker-compose.yml` 只给开发用。
 
 
 16.1 仓库里已有的文件
 
-    docker-compose.prod.yml     # api / web / tg / admin
-    deploy/Dockerfile           # 多阶段构建
-    deploy/nginx-admin.conf     # 后台 SPA + /admin/v1 反代
-    scripts/deploy-prod.sh      # 有新提交才构建
+    docker-compose.prod.yml              # api / web / tg / admin（端口由槽位决定）
+    deploy/Dockerfile                    # 多阶段构建
+    deploy/nginx-admin.conf              # 后台 SPA + /admin/v1 反代到同槽 api
+    deploy/slots/blue.env                # 3000 / 3001 / 3002 / 8000
+    deploy/slots/green.env               # 3010 / 3011 / 3012 / 8010
+    deploy/openresty/habibi-upstreams.conf
+    deploy/openresty/site-proxy.example.conf
+    scripts/deploy-prod.sh               # 有新提交才蓝绿切换
 
 
 16.2 服务器一次性准备
 
-1. 宝塔安装 Docker（软件商店「Docker 管理器」）。确认：
+1. 1Panel 安装 Docker（应用商店）。确认：
 
     docker version
     docker compose version
 
    需要 Docker Compose v2（`docker compose`，不是旧的 `docker-compose`）。
    建议内存 ≥ 2GB；1GB 机器请加 2GB swap，否则 next build 容易 OOM。
+   蓝绿期间新旧两套容器会短暂同时在线，内存再多留一点。
 
-2. 停掉原来的 PM2 / 宝塔 Node 项目，避免占 3000 / 3001：
+2. 停掉原来的 PM2 / 面板 Node 项目，避免占 3000 / 3001：
 
     pm2 delete habibi-api habibi-web
     pm2 save
-    # 宝塔「Node 项目管理器」里对应项目也停掉或删除
 
-3. 生产 `.env` 里 MySQL / Redis 继续写本机地址（API 使用 host 网络，和 PM2 时一样）：
+3. 生产 `.env` 里 MySQL / Redis 继续写本机地址。API 已改为桥接网络，
+   入口脚本会把 127.0.0.1 改成 host.docker.internal，所以 .env 不用改：
 
     DATABASE_URL=mysql://用户:密码@127.0.0.1:3306/habibivpn
     REDIS_URL=redis://127.0.0.1:6379
@@ -504,112 +509,130 @@ next build 没有执行，或者构建中途失败。
     JWT_ADMIN_SECRET=...
     PAYMENT_CONFIG_ENCRYPTION_KEY=...
 
-4. 代码目录建议仍是：
+4. 代码目录（1Panel 站点目录）：
 
-    /www/wwwroot/habibiVPN
+    /opt/1panel/www/sites/habibiVPN
 
    该目录是 git clone，并能访问 Git 远程（部署密钥或 https 凭据）。
+   这个站点在 1Panel 里必须是「反向代理」，不要当静态网站根目录打开。
 
 
 16.3 第一次上线
 
-    cd /www/wwwroot/habibiVPN
+    cd /opt/1panel/www/sites/habibiVPN
     chmod +x scripts/deploy-prod.sh
     FORCE=1 bash scripts/deploy-prod.sh
 
-首次会完整构建镜像（约数分钟）。成功标志：
+首次会完整构建镜像（约数分钟），默认落在 blue 槽。成功标志：
 
     curl http://127.0.0.1:3001/health/ready
     curl -I http://127.0.0.1:3000
     curl -I http://127.0.0.1:3002
     curl -I http://127.0.0.1:8000
 
-容器只绑 127.0.0.1，公网仍走宝塔 Nginx 的 80/443。
+容器只绑 127.0.0.1。当前槽写在 `.deploy-slot`。
 
 
-16.4 宝塔网站（Nginx）怎么改
+16.4 1Panel 网站（OpenResty）怎么改
 
-用户站 www.tizi.work：继续反代
+这一步必须做，否则第二次发布不会切流量，旧站点会在停旧槽后 502。
 
-    http://127.0.0.1:3000
+1. 确认脚本已把 upstream 写进 OpenResty 的 conf.d（一般是）：
 
-可选 API 域名：继续反代
+    /opt/1panel/apps/openresty/openresty/conf/conf.d/00-habibi-upstreams.conf
 
-    http://127.0.0.1:3001
+   若路径不同，部署时带上：
 
-Telegram Mini App（新建站点，例如 tg.tizi.work）：整站反代
+    OPENRESTY_CONF_DIR=/实际/conf.d FORCE=1 bash scripts/deploy-prod.sh
 
-    http://127.0.0.1:3002
+   OpenResty 若在容器里且 127.0.0.1 指不到宿主机，改成网关地址：
 
-申请 SSL 并强制 HTTPS。BotFather 的 Mini App URL、后台「Telegram Bot」里的 Mini App URL
-都填这个 HTTPS 地址。CORS_ORIGINS 也要加上该域名，例如：
+    HABIBI_UPSTREAM_HOST=172.17.0.1 FORCE=1 bash scripts/deploy-prod.sh
+
+2. 各站点「反向代理」不要写死端口，改成 upstream 名（只改 proxy_pass，其余头保持面板原样）。
+   1Panel 反代文件一般在：
+
+    /opt/1panel/www/sites/<站点别名>/proxy/*.conf
+
+   代码仓库在 habibiVPN 这一份；www / tg / admin 若是另建的站点，各自改自己的 proxy：
+
+    用户站 www.tizi.work          →  proxy_pass http://habibi_web;
+    可选 API 域名                 →  proxy_pass http://habibi_api;
+    Telegram Mini App             →  proxy_pass http://habibi_tg;
+    管理后台                      →  proxy_pass http://habibi_admin;
+
+   示例见 deploy/openresty/site-proxy.example.conf。
+   改完后在 1Panel 里 Reload OpenResty，不要用 Restart。
+
+3. 申请 SSL 并强制 HTTPS。BotFather 的 Mini App URL、后台「Telegram Bot」里的 Mini App URL
+   都填这个 HTTPS 地址。CORS_ORIGINS 也要加上该域名，例如：
 
     CORS_ORIGINS=https://www.tizi.work,https://tg.tizi.work,https://admin.example.com
 
-管理后台：不要再把网站根目录指到 apps/admin/dist。
-改成整站反代到 Docker 里的 admin：
-
-    http://127.0.0.1:8000
-
-后台容器内部已经做了：
+4. 管理后台不要再把网站根目录指到 apps/admin/dist，整站反代 habibi_admin。
+   后台容器内部已经做了：
 
     /           → SPA
-    /admin/v1/  → 宿主机 3001
-    /health     → 宿主机 3001
+    /admin/v1/  → 同槽 api:3001
+    /health     → 同槽 api:3001
 
-因此宝塔后台站点不必再单独写 /admin/v1/ 反代。
+   因此后台站点不必再单独写 /admin/v1/ 反代。
 
 
 16.5 定时自动部署
 
-宝塔 → 计划任务 → Shell 脚本，建议每 5 分钟：
+1Panel → 计划任务 → Shell 脚本，建议每 5 分钟：
 
-    bash /www/wwwroot/habibiVPN/scripts/deploy-prod.sh
+    bash /opt/1panel/www/sites/habibiVPN/scripts/deploy-prod.sh
 
 脚本逻辑：
 
     git fetch
     与远程一致 → 直接退出
-    有新提交 → git pull --ff-only → docker compose up -d --build
-    检查 /health/ready
+    有新提交 → git pull --ff-only
+    在空闲槽（blue↔green）构建并启动
+    等新槽 /health/ready
+    写入 OpenResty upstream → nginx -t → reload
+    排空数秒后停旧槽
 
 手动强制重建：
 
-    FORCE=1 bash /www/wwwroot/habibiVPN/scripts/deploy-prod.sh
+    FORCE=1 bash /opt/1panel/www/sites/habibiVPN/scripts/deploy-prod.sh
 
-看日志：
+看当前槽日志（把 blue 换成 .deploy-slot 里的值）：
 
-    cd /www/wwwroot/habibiVPN
-    docker compose -f docker-compose.prod.yml logs -f --tail 200
+    cd /opt/1panel/www/sites/habibiVPN
+    docker compose -p habibivpn-blue -f docker-compose.prod.yml \
+      --env-file .env --env-file deploy/slots/blue.env logs -f --tail 200
+
+新槽不健康时不会切流量，旧槽继续服务。
 
 
-16.6 和宝塔 Node 方案的差异
+16.6 和面板 Node 方案的差异
 
-    | 事项            | 旧（PM2）              | 新（Docker）                    |
-    | pnpm / Node 版本 | 服务器自己装，易踩坑     | 镜像内固定 Node 20 + pnpm 9.15 |
-    | 构建            | 在服务器源码目录构建     | 镜像构建，不污染 www 目录       |
-    | 迁移            | 手动 prisma:deploy     | 容器启动时自动 migrate deploy   |
-    | 后台静态文件     | Nginx 指 dist          | 反代 127.0.0.1:8000            |
-    | MySQL           | 宝塔 3306              | 仍是宝塔 3306（不要迁库）       |
-    | Redis           | 宝塔 / 本机 6379       | 仍是宿主机 6379                 |
+    | 事项            | 旧（PM2）              | 新（Docker 蓝绿）                 |
+    | pnpm / Node 版本 | 服务器自己装，易踩坑     | 镜像内固定 Node 20 + pnpm 9.15    |
+    | 构建            | 在服务器源码目录构建     | 镜像构建，不污染 www 目录          |
+    | 发布            | 停进程再起，会中断       | 空闲槽就绪后 OpenResty reload     |
+    | 迁移            | 手动 prisma:deploy     | 新槽启动时自动 migrate deploy     |
+    | 后台静态文件     | Nginx 指 dist          | 反代 habibi_admin                 |
+    | MySQL           | 面板 3306              | 仍是本机 3306（不要迁库）          |
+    | Redis           | 面板 / 本机 6379       | 仍是宿主机 6379                    |
 
 
 16.7 常见问题
 
 1. API 起不来，ready 失败
 
-    docker compose -f docker-compose.prod.yml logs api
-
-   先看日志：
-
-    docker compose -f docker-compose.prod.yml logs --tail 120 api
+    docker compose -p habibivpn-blue -f docker-compose.prod.yml \
+      --env-file .env --env-file deploy/slots/blue.env logs --tail 120 api
 
    常见原因：DATABASE_URL 密码特殊字符没做 URL 编码、库不存在、3001 被旧 PM2 占用、
    或缺少 JWT / WIRERAW 等必填环境变量。
 
 2. 迁移报 CAST ... AS JSON / MariaDB syntax
 
-   宝塔默认经常是 MariaDB。本项目迁移按 MySQL 8 写，必须装 MySQL 8.0/8.4，不要 MariaDB。
+   面板默认经常是 MariaDB。本项目迁移按 MySQL 8 写，必须装 MySQL 8.0/8.4，不要 MariaDB。
    全新库在 MariaDB 上迁失败后：换成 MySQL 8，重建空库 habibivpn，再重启 api 容器。
 
 3. 构建被杀 / 内存不足
@@ -625,5 +648,16 @@ Telegram Mini App（新建站点，例如 tg.tizi.work）：整站反代
 
 5. 管理后台 404 / 接口 404
 
-   后台网站必须反代 8000，不能再当纯静态站。
+   后台网站必须反代 habibi_admin，不能再当纯静态站。
+
+6. 第二次发布提示 still use fixed ports
+
+   1Panel 站点还在写死 127.0.0.1:3000。按 16.4 改成 habibi_web / habibi_tg / habibi_admin，
+   Reload OpenResty 后再 FORCE=1。新槽会先起来，未改反代前旧槽不会停。
+
+7. OpenResty reload 失败 / 找不到 conf.d
+
+    docker ps | grep -i openresty
+    OPENRESTY_CONTAINER=容器名 OPENRESTY_CONF_DIR=/实际/conf.d \
+      FORCE=1 bash scripts/deploy-prod.sh
 

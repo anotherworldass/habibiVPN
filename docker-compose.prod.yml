@@ -1,29 +1,33 @@
 # 生产环境：API + Web + TG Mini App + Admin
-# 用法：docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# 由 scripts/deploy-prod.sh 按 blue/green 两套端口拉起，OpenResty reload 后切流量。
 #
-# MySQL / Redis 用宝塔本机。API 走 host 网络，所以 .env 里继续用 127.0.0.1：
+# MySQL / Redis 用本机。API 走桥接网络，入口脚本会把 127.0.0.1 改成 host.docker.internal：
 #   DATABASE_URL=mysql://user:pass@127.0.0.1:3306/habibivpn
 #   REDIS_URL=redis://127.0.0.1:6379
 
-name: habibivpn
-
 services:
   api:
+    image: habibivpn-api:prod
     build:
       context: .
       dockerfile: deploy/Dockerfile
       target: api
     restart: unless-stopped
     init: true
-    network_mode: host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
       NODE_ENV: production
       API_HOST: 0.0.0.0
       API_PORT: "3001"
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-3001}:3001"
     volumes:
       - habibi_support_uploads:/app/apps/api/data/support-uploads
+    labels:
+      habibi.slot: ${HABIBI_SLOT:-blue}
     healthcheck:
       test:
         [
@@ -38,6 +42,7 @@ services:
       start_period: 60s
 
   web:
+    image: habibivpn-web:prod
     build:
       context: .
       dockerfile: deploy/Dockerfile
@@ -50,9 +55,11 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3000"
-      HABIBI_API_ORIGIN: http://host.docker.internal:3001
+      HABIBI_API_ORIGIN: http://api:3001
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
+    labels:
+      habibi.slot: ${HABIBI_SLOT:-blue}
     depends_on:
       api:
         condition: service_healthy
@@ -70,6 +77,7 @@ services:
       start_period: 20s
 
   tg:
+    image: habibivpn-tg:prod
     build:
       context: .
       dockerfile: deploy/Dockerfile
@@ -82,9 +90,11 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3002"
-      HABIBI_API_ORIGIN: http://host.docker.internal:3001
+      HABIBI_API_ORIGIN: http://api:3001
     ports:
-      - "127.0.0.1:3002:3002"
+      - "127.0.0.1:${TG_HOST_PORT:-3002}:3002"
+    labels:
+      habibi.slot: ${HABIBI_SLOT:-blue}
     depends_on:
       api:
         condition: service_healthy
@@ -102,6 +112,7 @@ services:
       start_period: 20s
 
   admin:
+    image: habibivpn-admin:prod
     build:
       context: .
       dockerfile: deploy/Dockerfile
@@ -110,10 +121,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:8000:80"
+      - "127.0.0.1:${ADMIN_HOST_PORT:-8000}:80"
+    labels:
+      habibi.slot: ${HABIBI_SLOT:-blue}
     depends_on:
       api:
         condition: service_healthy
 
 volumes:
   habibi_support_uploads:
+    name: habibivpn_habibi_support_uploads

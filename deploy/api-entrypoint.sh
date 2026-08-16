@@ -1,13 +1,13 @@
 #!/bin/sh
 set -eu
 
-# host 网络下宿主机 MySQL / Redis 就是 127.0.0.1
+# 桥接网络里 127.0.0.1 是容器自己，本机 MySQL / Redis 走 host.docker.internal
 if [ -n "${DATABASE_URL:-}" ]; then
-  DATABASE_URL=$(printf '%s' "$DATABASE_URL" | sed 's/@host.docker.internal:/@127.0.0.1:/g')
+  DATABASE_URL=$(printf '%s' "$DATABASE_URL" | sed 's/@127.0.0.1:/@host.docker.internal:/g; s/@localhost:/@host.docker.internal:/g')
   export DATABASE_URL
 fi
 if [ -n "${REDIS_URL:-}" ]; then
-  REDIS_URL=$(printf '%s' "$REDIS_URL" | sed 's#://host.docker.internal:#://127.0.0.1:#g')
+  REDIS_URL=$(printf '%s' "$REDIS_URL" | sed 's#://127.0.0.1:#://host.docker.internal:#g; s#://localhost:#://host.docker.internal:#g')
   export REDIS_URL
 fi
 

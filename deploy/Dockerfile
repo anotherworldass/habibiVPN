@@ -23,8 +23,8 @@ COPY . .
 # deps 阶段为了装 devDependencies 设了 development；next build 必须是 production，
 # 否则 15.5 预渲染 /404 会报 <Html> should not be imported outside of pages/_document
 ENV NODE_ENV=production
-# Next.js rewrites 在 build 时写入 routes-manifest。API 走 host 网络，从 web 容器走宿主机
-ENV HABIBI_API_ORIGIN=http://host.docker.internal:3001
+# Next.js rewrites 在 build 时写入 routes-manifest。同 compose 项目内走服务名 api
+ENV HABIBI_API_ORIGIN=http://api:3001
 ENV DATABASE_URL=mysql://build:build@127.0.0.1:3306/build
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN pnpm --filter @habibi/shared build \
@@ -52,7 +52,7 @@ WORKDIR /app/apps/web
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
-ENV HABIBI_API_ORIGIN=http://host.docker.internal:3001
+ENV HABIBI_API_ORIGIN=http://api:3001
 EXPOSE 3000
 CMD ["node", "habibi-web.js"]
 
@@ -62,7 +62,7 @@ WORKDIR /app/apps/tg
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3002
-ENV HABIBI_API_ORIGIN=http://host.docker.internal:3001
+ENV HABIBI_API_ORIGIN=http://api:3001
 EXPOSE 3002
 CMD ["node", "habibi-tg.js"]
 
