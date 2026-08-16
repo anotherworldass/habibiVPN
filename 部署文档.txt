@@ -565,9 +565,11 @@ next build 没有执行，或者构建中途失败。
 
 16.5 定时自动部署
 
-1Panel → 计划任务 → Shell 脚本，建议每 5 分钟：
+1Panel → 计划任务 → Shell 脚本，周期选「每分钟」：
 
     bash /opt/1panel/www/sites/habibiVPN/scripts/deploy-prod.sh
+
+脚本有 flock，上一轮还在构建时这一轮会直接跳过。没新提交时只做 git fetch，很快。
 
 脚本逻辑：
 

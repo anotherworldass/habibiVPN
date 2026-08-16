@@ -113,7 +113,7 @@ function ProtectedLayout() {
 
   return (
     <ProLayout
-      title="HabibiVPN"
+      title="TiTiVPN"
       layout="mix"
       location={{ pathname: location.pathname }}
       route={{
