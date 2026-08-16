@@ -21,6 +21,7 @@ fi
 
 SLOT_FILE="$ROOT/.deploy-slot"
 UPSTREAM_SRC="$ROOT/deploy/openresty/habibi-upstreams.conf"
+EDGE_CONF="$ROOT/deploy/nginx-edge.conf"
 EDGE_COMPOSE="$ROOT/docker-compose.edge.yml"
 DRAIN_SECONDS="${DRAIN_SECONDS:-5}"
 UPSTREAM_HOST="${HABIBI_UPSTREAM_HOST:-127.0.0.1}"
@@ -28,7 +29,7 @@ MODE="${1:-deploy}"
 
 slot_api_port() {
   case "$1" in
-    blue) echo 3001 ;;
+    blue) echo 3021 ;;
     green) echo 3011 ;;
     *) echo "" ;;
   esac
@@ -36,7 +37,7 @@ slot_api_port() {
 
 slot_web_port() {
   case "$1" in
-    blue) echo 3000 ;;
+    blue) echo 3020 ;;
     green) echo 3010 ;;
     *) echo "" ;;
   esac
@@ -44,7 +45,7 @@ slot_web_port() {
 
 slot_tg_port() {
   case "$1" in
-    blue) echo 3002 ;;
+    blue) echo 3022 ;;
     green) echo 3012 ;;
     *) echo "" ;;
   esac
@@ -52,7 +53,7 @@ slot_tg_port() {
 
 slot_admin_port() {
   case "$1" in
-    blue) echo 8000 ;;
+    blue) echo 8020 ;;
     green) echo 8010 ;;
     *) echo "" ;;
   esac
@@ -79,7 +80,7 @@ compose() {
 
 url_ok() {
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$1" || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$1" 2>/dev/null || true)"
   [[ "$code" =~ ^[23] ]]
 }
 
@@ -106,6 +107,10 @@ saved_slot() {
   fi
 }
 
+edge_running() {
+  docker ps --format '{{.Names}}' | grep -qE 'habibivpn-edge'
+}
+
 detect_live_slot() {
   local saved
   saved="$(saved_slot || true)"
@@ -115,12 +120,17 @@ detect_live_slot() {
       return
     fi
   fi
-  if api_ready 3001; then
+  if api_ready 3011; then
+    echo green
+    return
+  fi
+  if api_ready 3021; then
     echo blue
     return
   fi
-  if api_ready 3011; then
-    echo green
+  # 旧 blue 直接占 3001（还没有 edge）
+  if ! edge_running && api_ready 3001; then
+    echo blue
     return
   fi
   echo none
@@ -216,29 +226,126 @@ reload_openresty() {
   return 1
 }
 
+write_edge_conf() {
+  local slot="$1"
+  local web api tg admin
+  web="$(slot_web_port "$slot")"
+  api="$(slot_api_port "$slot")"
+  tg="$(slot_tg_port "$slot")"
+  admin="$(slot_admin_port "$slot")"
+  cat > "$EDGE_CONF" <<EOF
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 127.0.0.1:3000;
+    client_max_body_size 512m;
+    location / {
+        proxy_pass http://127.0.0.1:${web};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+    }
+}
+
+server {
+    listen 127.0.0.1:3001;
+    client_max_body_size 512m;
+    location / {
+        proxy_pass http://127.0.0.1:${api};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_request_buffering off;
+    }
+}
+
+server {
+    listen 127.0.0.1:3002;
+    client_max_body_size 512m;
+    location / {
+        proxy_pass http://127.0.0.1:${tg};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+    }
+}
+
+server {
+    listen 127.0.0.1:8000;
+    client_max_body_size 512m;
+    location / {
+        proxy_pass http://127.0.0.1:${admin};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+}
+
 stop_edge() {
+  echo "[deploy] stopping edge"
   docker compose -p habibivpn-edge -f "$EDGE_COMPOSE" down --remove-orphans >/dev/null 2>&1 || true
   docker rm -f habibivpn-edge-edge-1 habibi-edge 2>/dev/null || true
 }
 
+reload_edge() {
+  local name
+  name="$(docker ps --format '{{.Names}}' | grep -E 'habibivpn-edge' | head -n 1 || true)"
+  if [[ -z "$name" ]]; then
+    return 1
+  fi
+  docker exec "$name" nginx -t
+  docker exec "$name" nginx -s reload
+  echo "[deploy] reloaded edge $name"
+}
+
 start_edge() {
-  echo "[deploy] starting edge 3000/3001/3002/8000 -> green"
+  local slot="$1"
+  write_edge_conf "$slot"
+  echo "[deploy] starting edge 3000/3001/3002/8000 -> $slot"
   docker compose -p habibivpn-edge -f "$EDGE_COMPOSE" up -d
   if ! wait_url "http://127.0.0.1:3000" 15; then
     echo "[deploy] edge :3000 did not become ready" >&2
     docker compose -p habibivpn-edge -f "$EDGE_COMPOSE" logs --tail 40 || true
     return 1
   fi
-  echo "[deploy] edge ready"
+  echo "[deploy] edge ready -> $slot"
 }
 
 sync_edge() {
   local slot="$1"
-  if [[ "$slot" == "green" ]]; then
-    start_edge
+  write_edge_conf "$slot"
+  if edge_running; then
+    reload_edge
   else
-    stop_edge
+    start_edge "$slot"
   fi
+}
+
+# 3000 仍被旧 blue 应用占着（不是 edge）时，必须先停旧槽再起 edge
+classic_held_by_app() {
+  if edge_running; then
+    return 1
+  fi
+  url_ok "http://127.0.0.1:3000"
 }
 
 stop_slot() {
@@ -278,6 +385,14 @@ wait_slot() {
 if [[ "$MODE" == "edge" ]]; then
   live="$(detect_live_slot)"
   echo "[deploy] live=$live, syncing edge"
+  if [[ "$live" == "none" ]]; then
+    echo "[deploy] no live slot" >&2
+    exit 1
+  fi
+  if classic_held_by_app; then
+    echo "[deploy] :3000 is the app itself, edge not started"
+    exit 0
+  fi
   sync_edge "$live"
   exit 0
 fi
@@ -318,18 +433,19 @@ else
   echo "[deploy] live=$live -> target=$target"
 fi
 
-if [[ "$target" == "blue" ]]; then
-  stop_edge
+echo "[deploy] building $target (live slot keeps serving)"
+if ! compose "$target" build; then
+  echo "[deploy] $target build failed" >&2
+  exit 1
 fi
 
-echo "[deploy] building and starting $target"
-if ! compose "$target" up -d --build --remove-orphans; then
+echo "[deploy] starting $target"
+if ! compose "$target" up -d --no-build --remove-orphans; then
   echo "[deploy] $target up failed" >&2
   compose "$target" logs --tail 80 || true
   if [[ "$live" != "none" ]]; then
     echo "[deploy] keeping live slot $live"
     compose "$target" down --remove-orphans || true
-    sync_edge "$live" || true
   fi
   exit 1
 fi
@@ -338,7 +454,6 @@ if ! wait_slot "$target"; then
   if [[ "$live" != "none" ]]; then
     echo "[deploy] new slot unhealthy, keeping $live" >&2
     compose "$target" down --remove-orphans || true
-    sync_edge "$live" || true
   fi
   exit 1
 fi
@@ -347,6 +462,11 @@ write_upstreams "$target" || true
 reload_openresty || true
 
 if [[ "$live" == "none" ]]; then
+  if classic_held_by_app; then
+    echo "[deploy] first slot $target is on classic ports"
+  else
+    sync_edge "$target" || true
+  fi
   printf '%s\n' "$target" > "$SLOT_FILE"
   compose "$target" ps
   echo "[deploy] first slot $target is live"
@@ -355,8 +475,18 @@ fi
 
 echo "[deploy] draining ${DRAIN_SECONDS}s"
 sleep "$DRAIN_SECONDS"
-stop_slot "$live"
-sync_edge "$target"
+
+if edge_running; then
+  sync_edge "$target"
+  stop_slot "$live"
+elif classic_held_by_app; then
+  stop_slot "$live"
+  sync_edge "$target"
+else
+  sync_edge "$target"
+  stop_slot "$live"
+fi
+
 printf '%s\n' "$target" > "$SLOT_FILE"
 compose "$target" ps
 echo "[deploy] switched $live -> $target"

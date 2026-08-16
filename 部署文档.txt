@@ -464,8 +464,9 @@ next build 没有执行，或者构建中途失败。
     docker-compose.prod.yml              # api / web / tg / admin（端口由槽位决定）
     deploy/Dockerfile                    # 多阶段构建
     deploy/nginx-admin.conf              # 后台 SPA + /admin/v1 反代到同槽 api
-    deploy/slots/blue.env                # 3000 / 3001 / 3002 / 8000
+    deploy/slots/blue.env                # 3020 / 3021 / 3022 / 8020
     deploy/slots/green.env               # 3010 / 3011 / 3012 / 8010
+    docker-compose.edge.yml              # 固定 3000/3001/3002/8000 → 当前槽
     deploy/openresty/habibi-upstreams.conf
     deploy/openresty/site-proxy.example.conf
     scripts/deploy-prod.sh               # 有新提交才蓝绿切换
@@ -542,8 +543,8 @@ next build 没有执行，或者构建中途失败。
     Telegram Mini App →  http://127.0.0.1:3002
     管理后台          →  http://127.0.0.1:8000
 
-当前槽是 green 时，脚本会再起一个 edge 容器，把 3000/3001/3002/8000
-转到 3010/3011/3012/8010。1Panel 不用改端口。
+1Panel 始终反代 3000/3001/3002/8000。两个应用槽都不再占用这些端口，
+由 edge 转到当前槽。发布时先构建再切 edge，构建期间网站继续服务。
 
 可选：把 proxy_pass 改成 habibi_web / habibi_tg / habibi_admin，
 脚本仍会更新 00-habibi-upstreams.conf。不改也不影响。
