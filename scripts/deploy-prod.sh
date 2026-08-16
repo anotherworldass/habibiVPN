@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# 1Panel 计划任务 / crontab：有新提交才构建空闲槽，OpenResty reload 后停旧槽。
+# 1Panel 计划任务 / crontab：有新提交才构建空闲槽，切流量后停旧槽。
 # 强制重建：FORCE=1 bash scripts/deploy-prod.sh
+# 只补 3000→当前槽转发（现网 502 时）：bash scripts/deploy-prod.sh edge
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,35 +21,10 @@ fi
 
 SLOT_FILE="$ROOT/.deploy-slot"
 UPSTREAM_SRC="$ROOT/deploy/openresty/habibi-upstreams.conf"
+EDGE_COMPOSE="$ROOT/docker-compose.edge.yml"
 DRAIN_SECONDS="${DRAIN_SECONDS:-5}"
 UPSTREAM_HOST="${HABIBI_UPSTREAM_HOST:-127.0.0.1}"
-
-need_build=0
-if [[ "${FORCE:-0}" == "1" ]]; then
-  need_build=1
-elif [[ ! -d .git ]]; then
-  echo "[deploy] not a git checkout, building anyway"
-  need_build=1
-else
-  git fetch --quiet origin
-  local_rev="$(git rev-parse HEAD)"
-  if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-    remote_rev="$(git rev-parse '@{u}')"
-  else
-    branch="$(git rev-parse --abbrev-ref HEAD)"
-    remote_rev="$(git rev-parse "origin/${branch}")"
-  fi
-  if [[ "$local_rev" != "$remote_rev" ]]; then
-    echo "[deploy] ${local_rev:0:8} -> ${remote_rev:0:8}"
-    git pull --ff-only
-    need_build=1
-  fi
-fi
-
-if [[ "$need_build" -eq 0 ]]; then
-  echo "[deploy] already up to date"
-  exit 0
-fi
+MODE="${1:-deploy}"
 
 slot_api_port() {
   case "$1" in
@@ -102,7 +78,9 @@ compose() {
 }
 
 url_ok() {
-  curl -fsS --max-time 3 "$1" >/dev/null 2>&1
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$1" || true)"
+  [[ "$code" =~ ^[23] ]]
 }
 
 api_ready() {
@@ -238,22 +216,29 @@ reload_openresty() {
   return 1
 }
 
-openresty_uses_upstreams() {
-  local c
-  c="$(find_openresty_container)"
-  if [[ -n "$c" ]]; then
-    if docker exec "$c" sh -c \
-      'grep -R --include="*.conf" "proxy_pass http://habibi_web" /usr/local/openresty/nginx/conf /www /opt/1panel 2>/dev/null | grep -v habibi-upstreams | grep -q .'; then
-      return 0
-    fi
+stop_edge() {
+  docker compose -p habibivpn-edge -f "$EDGE_COMPOSE" down --remove-orphans >/dev/null 2>&1 || true
+  docker rm -f habibivpn-edge-edge-1 habibi-edge 2>/dev/null || true
+}
+
+start_edge() {
+  echo "[deploy] starting edge 3000/3001/3002/8000 -> green"
+  docker compose -p habibivpn-edge -f "$EDGE_COMPOSE" up -d
+  if ! wait_url "http://127.0.0.1:3000" 15; then
+    echo "[deploy] edge :3000 did not become ready" >&2
+    docker compose -p habibivpn-edge -f "$EDGE_COMPOSE" logs --tail 40 || true
+    return 1
   fi
-  if grep -R --include='*.conf' 'proxy_pass http://habibi_web' \
-    /opt/1panel/www/sites /opt/1panel/apps/openresty /www/sites 2>/dev/null \
-    | grep -v habibi-upstreams \
-    | grep -q .; then
-    return 0
+  echo "[deploy] edge ready"
+}
+
+sync_edge() {
+  local slot="$1"
+  if [[ "$slot" == "green" ]]; then
+    start_edge
+  else
+    stop_edge
   fi
-  return 1
 }
 
 stop_slot() {
@@ -279,11 +264,50 @@ wait_slot() {
     compose "$slot" logs --tail 80 api
     return 1
   fi
-  curl -fsSI --max-time 5 "http://127.0.0.1:${web}" >/dev/null || true
-  curl -fsSI --max-time 5 "http://127.0.0.1:${tg}" >/dev/null || true
-  curl -fsSI --max-time 5 "http://127.0.0.1:${admin}" >/dev/null || true
+  echo "[deploy] waiting for $slot web on :$web"
+  if ! wait_url "http://127.0.0.1:${web}" 30; then
+    echo "[deploy] $slot web did not become ready" >&2
+    compose "$slot" logs --tail 40 web
+    return 1
+  fi
+  wait_url "http://127.0.0.1:${tg}" 15 || true
+  wait_url "http://127.0.0.1:${admin}" 15 || true
   echo "[deploy] $slot ready (web :$web api :$api tg :$tg admin :$admin)"
 }
+
+if [[ "$MODE" == "edge" ]]; then
+  live="$(detect_live_slot)"
+  echo "[deploy] live=$live, syncing edge"
+  sync_edge "$live"
+  exit 0
+fi
+
+need_build=0
+if [[ "${FORCE:-0}" == "1" ]]; then
+  need_build=1
+elif [[ ! -d .git ]]; then
+  echo "[deploy] not a git checkout, building anyway"
+  need_build=1
+else
+  git fetch --quiet origin
+  local_rev="$(git rev-parse HEAD)"
+  if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+    remote_rev="$(git rev-parse '@{u}')"
+  else
+    branch="$(git rev-parse --abbrev-ref HEAD)"
+    remote_rev="$(git rev-parse "origin/${branch}")"
+  fi
+  if [[ "$local_rev" != "$remote_rev" ]]; then
+    echo "[deploy] ${local_rev:0:8} -> ${remote_rev:0:8}"
+    git pull --ff-only
+    need_build=1
+  fi
+fi
+
+if [[ "$need_build" -eq 0 ]]; then
+  echo "[deploy] already up to date"
+  exit 0
+fi
 
 live="$(detect_live_slot)"
 if [[ "$live" == "none" ]]; then
@@ -294,6 +318,10 @@ else
   echo "[deploy] live=$live -> target=$target"
 fi
 
+if [[ "$target" == "blue" ]]; then
+  stop_edge
+fi
+
 echo "[deploy] building and starting $target"
 if ! compose "$target" up -d --build --remove-orphans; then
   echo "[deploy] $target up failed" >&2
@@ -301,6 +329,7 @@ if ! compose "$target" up -d --build --remove-orphans; then
   if [[ "$live" != "none" ]]; then
     echo "[deploy] keeping live slot $live"
     compose "$target" down --remove-orphans || true
+    sync_edge "$live" || true
   fi
   exit 1
 fi
@@ -309,40 +338,25 @@ if ! wait_slot "$target"; then
   if [[ "$live" != "none" ]]; then
     echo "[deploy] new slot unhealthy, keeping $live" >&2
     compose "$target" down --remove-orphans || true
+    sync_edge "$live" || true
   fi
   exit 1
 fi
 
+write_upstreams "$target" || true
+reload_openresty || true
+
 if [[ "$live" == "none" ]]; then
-  write_upstreams "$target" || true
-  reload_openresty || true
   printf '%s\n' "$target" > "$SLOT_FILE"
   compose "$target" ps
-  echo "[deploy] first slot $target is live. Point 1Panel proxy_pass to habibi_web / habibi_tg / habibi_admin before the next deploy."
+  echo "[deploy] first slot $target is live"
   exit 0
-fi
-
-if ! openresty_uses_upstreams; then
-  echo "[deploy] 1Panel sites still use fixed ports, not switching traffic" >&2
-  echo "[deploy] $target is up on $(slot_web_port "$target")/$(slot_api_port "$target")/$(slot_tg_port "$target")/$(slot_admin_port "$target")" >&2
-  echo "[deploy] change proxy_pass to http://habibi_web (and tg/admin), include deploy/openresty/habibi-upstreams.conf, then FORCE=1" >&2
-  exit 1
-fi
-
-if ! write_upstreams "$target"; then
-  echo "[deploy] failed to write upstreams, keeping $live" >&2
-  exit 1
-fi
-if ! reload_openresty; then
-  echo "[deploy] OpenResty reload failed, keeping $live" >&2
-  write_upstreams "$live" || true
-  reload_openresty || true
-  exit 1
 fi
 
 echo "[deploy] draining ${DRAIN_SECONDS}s"
 sleep "$DRAIN_SECONDS"
 stop_slot "$live"
+sync_edge "$target"
 printf '%s\n' "$target" > "$SLOT_FILE"
 compose "$target" ps
 echo "[deploy] switched $live -> $target"

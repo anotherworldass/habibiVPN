@@ -533,36 +533,20 @@ next build 没有执行，或者构建中途失败。
 容器只绑 127.0.0.1。当前槽写在 `.deploy-slot`。
 
 
-16.4 1Panel 网站（OpenResty）怎么改
+16.4 1Panel 网站（OpenResty）
 
-这一步必须做，否则第二次发布不会切流量，旧站点会在停旧槽后 502。
+站点继续反代固定端口即可，不必先改 OpenResty：
 
-1. 确认脚本已把 upstream 写进 OpenResty 的 conf.d（一般是）：
+    用户站            →  http://127.0.0.1:3000
+    可选 API 域名     →  http://127.0.0.1:3001
+    Telegram Mini App →  http://127.0.0.1:3002
+    管理后台          →  http://127.0.0.1:8000
 
-    /opt/1panel/apps/openresty/openresty/conf/conf.d/00-habibi-upstreams.conf
+当前槽是 green 时，脚本会再起一个 edge 容器，把 3000/3001/3002/8000
+转到 3010/3011/3012/8010。1Panel 不用改端口。
 
-   若路径不同，部署时带上：
-
-    OPENRESTY_CONF_DIR=/实际/conf.d FORCE=1 bash scripts/deploy-prod.sh
-
-   OpenResty 若在容器里且 127.0.0.1 指不到宿主机，改成网关地址：
-
-    HABIBI_UPSTREAM_HOST=172.17.0.1 FORCE=1 bash scripts/deploy-prod.sh
-
-2. 各站点「反向代理」不要写死端口，改成 upstream 名（只改 proxy_pass，其余头保持面板原样）。
-   1Panel 反代文件一般在：
-
-    /opt/1panel/www/sites/<站点别名>/proxy/*.conf
-
-   代码仓库在 habibiVPN 这一份；www / tg / admin 若是另建的站点，各自改自己的 proxy：
-
-    用户站 www.tizi.work          →  proxy_pass http://habibi_web;
-    可选 API 域名                 →  proxy_pass http://habibi_api;
-    Telegram Mini App             →  proxy_pass http://habibi_tg;
-    管理后台                      →  proxy_pass http://habibi_admin;
-
-   示例见 deploy/openresty/site-proxy.example.conf。
-   改完后在 1Panel 里 Reload OpenResty，不要用 Restart。
+可选：把 proxy_pass 改成 habibi_web / habibi_tg / habibi_admin，
+脚本仍会更新 00-habibi-upstreams.conf。不改也不影响。
 
 3. 申请 SSL 并强制 HTTPS。BotFather 的 Mini App URL、后台「Telegram Bot」里的 Mini App URL
    都填这个 HTTPS 地址。CORS_ORIGINS 也要加上该域名，例如：
@@ -650,10 +634,13 @@ next build 没有执行，或者构建中途失败。
 
    后台网站必须反代 habibi_admin，不能再当纯静态站。
 
-6. 第二次发布提示 still use fixed ports
+6. 切到 green 后网站 502
 
-   1Panel 站点还在写死 127.0.0.1:3000。按 16.4 改成 habibi_web / habibi_tg / habibi_admin，
-   Reload OpenResty 后再 FORCE=1。新槽会先起来，未改反代前旧槽不会停。
+   1Panel 还在打 3000，而 blue 已停。先补转发，不必重建：
+
+    bash /opt/1panel/www/sites/habibiVPN/scripts/deploy-prod.sh edge
+
+   然后 curl -I http://127.0.0.1:3000 应能通。
 
 7. OpenResty reload 失败 / 找不到 conf.d
 

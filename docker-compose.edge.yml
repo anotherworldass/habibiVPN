@@ -1,0 +1,9 @@
+# 1Panel 站点继续反代 127.0.0.1:3000/3001/3002/8000。
+# 当前槽是 green 时，把这些端口转到 3010/3011/3012/8010。
+services:
+  edge:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./deploy/nginx-edge.conf:/etc/nginx/conf.d/default.conf:ro
