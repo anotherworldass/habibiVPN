@@ -2,7 +2,8 @@ import type { ProxyNode } from "./parse.js";
 import type { SubRenderKind } from "./formats.js";
 
 function yamlQuote(s: string): string {
-  if (/^[\w.+\-/:@]+$/.test(s) && !/^(true|false|null|yes|no)$/i.test(s)) {
+  // Do not allow ":" unquoted — IPv6 / host:port become nested mappings in libyaml.
+  if (/^[\w.+\-/@]+$/.test(s) && !/^(true|false|null|yes|no|on|off)$/i.test(s)) {
     return s;
   }
   return JSON.stringify(s);
@@ -109,19 +110,17 @@ export function renderClashYaml(nodes: ProxyNode[], profileName: string): string
     `proxy-groups:`,
     `- name: ${yamlQuote(profileName)}`,
     `  type: select`,
-    names.length
-      ? yamlList("  ", names)
-      : `  - DIRECT`,
+    `  proxies:`,
+    names.length ? yamlList("    ", names) : `    - DIRECT`,
     `- name: ${yamlQuote(`${profileName}-Auto`)}`,
     `  type: url-test`,
     `  url: http://www.gstatic.com/generate_204`,
     `  interval: 300`,
-    names.length
-      ? yamlList("  ", names)
-      : `  - DIRECT`,
+    `  proxies:`,
+    names.length ? yamlList("    ", names) : `    - DIRECT`,
     ``,
     `rules:`,
-    `- MATCH,${profileName}`,
+    `- ${yamlQuote(`MATCH,${profileName}`)}`,
     ``,
   ].join("\n");
 }
