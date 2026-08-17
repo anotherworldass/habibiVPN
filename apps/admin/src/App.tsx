@@ -40,6 +40,7 @@ import {
   CloudUploadOutlined,
   SafetyCertificateOutlined,
   FileTextOutlined,
+  HistoryOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Select, Space } from "antd";
 import DashboardPage from "./pages/Dashboard";
@@ -76,6 +77,7 @@ import TelegramAutoReplyPage from "./pages/TelegramAutoReply";
 import SupportInboxPage from "./pages/SupportInbox";
 import SupportSettingsPage from "./pages/SupportSettings";
 import MailSettingsPage from "./pages/MailSettings";
+import AuditLogsPage from "./pages/AuditLogs";
 import AuthEmailSettingsPage from "./pages/AuthEmailSettings";
 import StorageSettingsPage from "./pages/StorageSettings";
 import SubscriptionNoticeSettingsPage from "./pages/SubscriptionNoticeSettings";
@@ -116,6 +118,18 @@ function ProtectedLayout() {
       title="TiTiVPN"
       layout="mix"
       location={{ pathname: location.pathname }}
+      footerRender={() => (
+        <div
+          style={{
+            textAlign: "center",
+            color: "rgba(0,0,0,0.35)",
+            fontSize: 12,
+            padding: "8px 0",
+          }}
+        >
+          {__APP_VERSION__}
+        </div>
+      )}
       route={{
         path: "/",
         routes: [
@@ -155,6 +169,11 @@ function ProtectedLayout() {
                 path: "/settings/subscription-notice",
                 name: "订阅转换",
                 icon: <FileTextOutlined />,
+              },
+              {
+                path: "/settings/audit-logs",
+                name: "操作日志",
+                icon: <HistoryOutlined />,
               },
             ],
           },
@@ -322,6 +341,7 @@ function ProtectedLayout() {
           path="/settings/subscription-notice"
           element={<SubscriptionNoticeSettingsPage />}
         />
+        <Route path="/settings/audit-logs" element={<AuditLogsPage />} />
         <Route path="/sell-plans" element={<SellPlansPage />} />
         <Route path="/sell-plans/groups" element={<PlanGroupsPage />} />
         <Route path="/sell-plans/preview" element={<CatalogPreviewPage />} />

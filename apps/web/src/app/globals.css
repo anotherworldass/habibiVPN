@@ -1880,18 +1880,32 @@ input {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
+.footer-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  padding-bottom: 8px;
+}
+
 .footer-mini-links {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px 14px;
-  margin-top: 28px;
-  padding-bottom: 8px;
   font-size: 12px;
 }
 
-.habibi-main--narrow .footer-mini-links,
-.habibi-main--no-nav .footer-mini-links {
+.footer-mini-version {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+.habibi-main--narrow .footer-mini,
+.habibi-main--no-nav .footer-mini {
   margin-top: 32px;
 }
 
@@ -3920,12 +3934,16 @@ input {
     padding-top: 36px;
   }
 
-  .footer-mini-links {
+  .footer-mini {
     max-width: var(--content-max);
     margin-left: auto;
     margin-right: auto;
-    justify-content: flex-start;
+    align-items: flex-start;
     padding: 8px 0 28px;
+  }
+
+  .footer-mini-links {
+    justify-content: flex-start;
   }
 
   .download-page {

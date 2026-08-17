@@ -97,14 +97,20 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
     .filter(Boolean)
     .join(" ");
 
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "";
   const footer = (
-    <nav className="footer-mini-links" aria-label="页脚链接">
-      {legalFooterLinks.map((item) => (
-        <Link key={item.href} href={item.href}>
-          {item.label}
-        </Link>
-      ))}
-    </nav>
+    <div className="footer-mini">
+      <nav className="footer-mini-links" aria-label="页脚链接">
+        {legalFooterLinks.map((item) => (
+          <Link key={item.href} href={item.href}>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+      {appVersion ? (
+        <span className="footer-mini-version">{appVersion}</span>
+      ) : null}
+    </div>
   );
 
   return (

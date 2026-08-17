@@ -1,7 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { formatAppVersion } from "../../packages/shared/build-stamp.mjs";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  define: {
+    __APP_VERSION__: JSON.stringify(formatAppVersion(new Date(), command !== "build")),
+  },
   plugins: [react()],
   server: {
     host: "0.0.0.0",
@@ -22,4 +26,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

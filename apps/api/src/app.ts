@@ -19,6 +19,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { adminPaymentRoutes } from "./routes/admin-payments.js";
 import { adminOrderRoutes } from "./routes/admin-orders.js";
 import { adminEntitlementLedgerRoutes } from "./routes/admin-entitlement-ledger.js";
+import { adminAuditRoutes } from "./routes/admin-audit.js";
 import { adminOpsRoutes } from "./routes/admin-ops.js";
 import { iapRoutes } from "./routes/iap.js";
 import { adminCampaignRoutes } from "./routes/admin-campaigns.js";
@@ -82,6 +83,7 @@ export async function buildApp() {
   await app.register(adminSettingsRoutes);
   await app.register(adminOrderRoutes);
   await app.register(adminEntitlementLedgerRoutes);
+  await app.register(adminAuditRoutes);
   await app.register(adminOpsRoutes);
   await app.register(adminCampaignRoutes);
   await app.register(adminRedeemRoutes);
