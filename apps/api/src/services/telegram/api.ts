@@ -89,3 +89,26 @@ export async function setWebhook(
 export async function deleteWebhook(botToken: string) {
   return callBotApi(botToken, "deleteWebhook", { drop_pending_updates: false });
 }
+
+export async function getFile(botToken: string, fileId: string) {
+  return callBotApi<{ file_id: string; file_path?: string; file_size?: number }>(
+    botToken,
+    "getFile",
+    { file_id: fileId },
+  );
+}
+
+export async function downloadTelegramFile(
+  botToken: string,
+  filePath: string,
+): Promise<Buffer> {
+  const res = await fetch(
+    `https://api.telegram.org/file/bot${botToken}/${filePath}`,
+  );
+  if (!res.ok) {
+    throw Object.assign(new Error("telegram.file_download_failed"), {
+      statusCode: 502,
+    });
+  }
+  return Buffer.from(await res.arrayBuffer());
+}

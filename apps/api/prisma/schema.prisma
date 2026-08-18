@@ -235,8 +235,9 @@ model Project {
   telegramBot           ProjectTelegramBot?
   systemSettings        SystemSetting[]
   entitlementLedgers    EntitlementLedger[]
-  supportGuests         SupportGuest[]
-  supportConversations  SupportConversation[]
+  supportGuests              SupportGuest[]
+  supportConversations       SupportConversation[]
+  supportTelegramForwardMaps SupportTelegramForwardMap[]
 
   @@map("projects")
 }
@@ -501,8 +502,9 @@ model SupportConversation {
   project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   guest              SupportGuest?       @relation(fields: [guestId], references: [id], onDelete: SetNull)
   user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  telegramSubscriber TelegramSubscriber? @relation(fields: [telegramSubscriberId], references: [id], onDelete: SetNull)
-  messages           SupportMessage[]
+  telegramSubscriber    TelegramSubscriber?          @relation(fields: [telegramSubscriberId], references: [id], onDelete: SetNull)
+  messages              SupportMessage[]
+  telegramForwardMaps   SupportTelegramForwardMap[]
 
   @@unique([projectId, guestId])
   @@unique([projectId, telegramSubscriberId])
@@ -535,6 +537,25 @@ model SupportMessage {
   @@index([conversationId, createdAt])
   @@index([projectId, createdAt])
   @@map("support_messages")
+}
+
+/// Maps staff-bot Telegram message_id → support conversation (reply-to).
+model SupportTelegramForwardMap {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  conversationId    String   @map("conversation_id")
+  supportMessageId  String?  @map("support_message_id")
+  telegramChatId    String   @map("telegram_chat_id")
+  telegramMessageId String   @map("telegram_message_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, telegramChatId, telegramMessageId], map: "stf_maps_project_chat_msgid_key")
+  @@index([conversationId])
+  @@index([projectId, createdAt])
+  @@map("support_telegram_forward_maps")
 }
 
 /// H5 site under a project (domain → project attribution)

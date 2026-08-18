@@ -35,6 +35,7 @@ import { telegramRoutes } from "./routes/telegram.js";
 import { adminTelegramRoutes } from "./routes/admin-telegram.js";
 import { adminSettingsRoutes } from "./routes/admin-settings.js";
 import { supportWebRoutes } from "./routes/support-web.js";
+import { supportTelegramForwardRoutes } from "./routes/support-telegram-forward.js";
 import { adminSupportRoutes } from "./routes/admin-support.js";
 
 export async function buildApp() {
@@ -102,6 +103,7 @@ export async function buildApp() {
   await app.register(telegramRoutes);
   await app.register(adminTelegramRoutes);
   await app.register(supportWebRoutes);
+  await app.register(supportTelegramForwardRoutes);
   await app.register(adminSupportRoutes);
 
   return app;

@@ -14,6 +14,8 @@ export const SETTING_KEYS = {
   TELEGRAM_WEBHOOK_ORIGIN: "telegram.webhook_origin",
   /** User-facing support chat: latest N messages window. */
   SUPPORT_CLIENT_MESSAGE_WINDOW: "support.client_message_window",
+  /** Staff Telegram bot that forwards support desk messages. */
+  SUPPORT_TELEGRAM_FORWARD: "support.telegram_forward",
   /** Extra notice nodes prepended to converted subscriptions. */
   SUBSCRIPTION_NOTICE: "subscription.notice",
   /** How converted subscription node names are rewritten. */

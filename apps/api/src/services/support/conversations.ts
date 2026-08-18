@@ -8,6 +8,7 @@ import {
   guestProfileView,
   type SupportClientMeta,
 } from "./meta.js";
+import { notifyStaffTelegramForward } from "./telegram-forward.js";
 import { assertOwnSupportMediaUrl } from "./upload.js";
 
 /** TG private-chat event sources that map into support_messages. */
@@ -271,6 +272,8 @@ export async function appendSupportMessage(input: {
   adminUsername?: string | null;
   clientMeta?: SupportClientMeta | null;
   bumpUnread?: boolean;
+  /** Skip staff Telegram forward (staff-bot echo). */
+  skipStaffForward?: boolean;
 }) {
   const now = new Date();
   const contentType =
@@ -315,6 +318,28 @@ export async function appendSupportMessage(input: {
       },
     }),
   ]);
+  const shouldForward =
+    !input.skipStaffForward &&
+    ((input.direction === "inbound" && input.source === "user") ||
+      (input.direction === "outbound" && input.source === "admin"));
+  if (shouldForward) {
+    void notifyStaffTelegramForward({
+      projectId: input.projectId,
+      conversationId: input.conversationId,
+      supportMessageId: msg.id,
+      direction: input.direction,
+      source: input.source,
+      text,
+      mediaUrl,
+      contentType,
+      adminUsername: input.adminUsername,
+    }).catch((err) => {
+      console.warn(
+        "[support.telegram_forward]",
+        err instanceof Error ? err.message : err,
+      );
+    });
+  }
   return msg;
 }
 
@@ -672,6 +697,8 @@ export async function adminReplySupport(input: {
   text?: string | null;
   mediaUrl?: string | null;
   adminUsername?: string | null;
+  /** Reply originated from the staff Telegram forward bot. */
+  viaStaffTelegram?: boolean;
 }) {
   const text = (input.text || "").trim();
   const mediaUrl = input.mediaUrl
@@ -731,6 +758,7 @@ export async function adminReplySupport(input: {
     mediaUrl,
     externalMessageId: externalId,
     adminUsername: input.adminUsername,
+    skipStaffForward: Boolean(input.viaStaffTelegram),
   });
   return messageView({ ...msg, conversation: { channel: conv.channel } });
 }

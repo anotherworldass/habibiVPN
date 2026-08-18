@@ -49,6 +49,12 @@ import {
   upsertProjectSetting,
   type StorageS3BindingsPatch,
 } from "../services/system-settings.js";
+import {
+  clearSupportTelegramForwardBind,
+  getSupportTelegramForwardPublic,
+  sendSupportTelegramForwardTest,
+  upsertSupportTelegramForward,
+} from "../services/support/telegram-forward.js";
 
 const mailSesPatch = z.object({
   enabled: z.boolean(),
@@ -90,6 +96,14 @@ const supportClientMessageWindowPatch = z.object({
     .int()
     .min(SUPPORT_CLIENT_MESSAGE_WINDOW_MIN)
     .max(SUPPORT_CLIENT_MESSAGE_WINDOW_MAX),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const supportTelegramForwardPatch = z.object({
+  enabled: z.boolean(),
+  bot_token: z.string().max(256).optional(),
+  clear_bind: z.boolean().optional(),
+  register_webhook: z.boolean().optional(),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -448,6 +462,100 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
           DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE.messageWindowSize,
         ...cfg.value,
       };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/support/telegram-forward`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      return await getSupportTelegramForwardPublic(projectId);
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/support/telegram-forward`, async (req, reply) => {
+    const parsed = supportTelegramForwardPatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const view = await upsertSupportTelegramForward({
+        projectId,
+        enabled: parsed.data.enabled,
+        botToken: parsed.data.bot_token,
+        clearBind: parsed.data.clear_bind,
+        registerWebhook: parsed.data.register_webhook,
+        remark: parsed.data.remark,
+      });
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.support_telegram_forward.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: {
+          enabled: view.enabled,
+          bot_username: view.bot_username,
+          bound: view.bound,
+          clear_bind: Boolean(parsed.data.clear_bind),
+        },
+      });
+
+      return view;
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.post(`${prefix}/support/telegram-forward/test`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const result = await sendSupportTelegramForwardTest(projectId);
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.support_telegram_forward.test",
+        targetType: "project",
+        targetId: projectId,
+        meta: { chat_id: result.chat_id },
+      });
+      return result;
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.post(`${prefix}/support/telegram-forward/clear-bind`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      await clearSupportTelegramForwardBind(projectId);
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.support_telegram_forward.clear_bind",
+        targetType: "project",
+        targetId: projectId,
+      });
+      return await getSupportTelegramForwardPublic(projectId);
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode || 500;
       return reply.code(status).send({
