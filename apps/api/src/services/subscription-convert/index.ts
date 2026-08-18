@@ -18,6 +18,7 @@ import {
   applySubCopyVars,
   buildShadowrocketStatus,
   buildSubCopyVars,
+  buildSubscriptionUserinfo,
   bytesToNumber,
   resolveProfileTitle,
 } from "./copy-vars.js";
@@ -33,6 +34,8 @@ import {
   cloneNodeWithName,
   extractShareUris,
   parseShareUri,
+  placeholderNode,
+  type ProxyNode,
   uniqueNames,
 } from "./parse.js";
 import { renderSubscription } from "./render.js";
@@ -129,12 +132,6 @@ export async function convertSubscriptionByToken(input: {
     (err as { statusCode?: number }).statusCode = 404;
     throw err;
   }
-  if (slot.status === "disabled" || slot.user.status !== "active") {
-    const err = new Error("sub.disabled");
-    (err as { statusCode?: number }).statusCode = 403;
-    throw err;
-  }
-
   const project = slot.user.project;
   const siteName = (project.name || project.code || "VPN").trim();
   const planName = resolveSlotPlanName(slot);
@@ -147,19 +144,64 @@ export async function convertSubscriptionByToken(input: {
     expiresAt: slot.expiresAt,
   });
   const profileName = resolveProfileTitle(clientCopy.profileTitle, copyVars);
+  const announce = sanitizeHeaderValue(project.remark);
+  const usedBytes = bytesToNumber(slot.usedTrafficBytes);
+  const limitBytes = bytesToNumber(slot.dataLimitBytes);
 
-  if (slot.expiresAt && slot.expiresAt.getTime() < Date.now()) {
-    const err = new Error("sub.expired");
-    (err as { statusCode?: number }).statusCode = 410;
-    throw err;
+  if (slot.status === "disabled" || slot.user.status !== "active") {
+    return buildUnavailableSubscription({
+      kind,
+      format,
+      profileName,
+      message: "订阅已停用",
+      expiresAt: slot.expiresAt,
+      usedBytes,
+      limitBytes,
+      announce,
+    });
   }
 
-  const upstreamBody = await getUpstreamSubscriptionBody({
-    cacheKey: slot.id,
-    upstreamId: slot.upstreamId,
-    subscriptionUrl: slot.subscriptionUrl,
-    userAgent: input.userAgent,
-  });
+  if (slot.expiresAt && slot.expiresAt.getTime() < Date.now()) {
+    return buildUnavailableSubscription({
+      kind,
+      format,
+      profileName,
+      message: copyVars.expire_date
+        ? `订阅已过期 ${copyVars.expire_date}`
+        : "订阅已过期",
+      expiresAt: slot.expiresAt,
+      usedBytes,
+      limitBytes,
+      announce,
+    });
+  }
+
+  let upstreamBody: string;
+  try {
+    upstreamBody = await getUpstreamSubscriptionBody({
+      cacheKey: slot.id,
+      upstreamId: slot.upstreamId,
+      subscriptionUrl: slot.subscriptionUrl,
+      userAgent: input.userAgent,
+    });
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    const message = err instanceof Error ? err.message : "";
+    if (status === 410 || message === "sub.expired" || message === "sub.revoked") {
+      return buildUnavailableSubscription({
+        kind,
+        format,
+        profileName,
+        message:
+          message === "sub.revoked" ? "订阅已失效，请重新获取" : "订阅已过期",
+        expiresAt: slot.expiresAt,
+        usedBytes,
+        limitBytes,
+        announce,
+      });
+    }
+    throw err;
+  }
   const uris = extractShareUris(upstreamBody);
   // Node remarks keep upstream names — do not prefix site/project name.
   let nodes = uris
@@ -189,57 +231,96 @@ export async function convertSubscriptionByToken(input: {
     ];
   }
 
-  const expireSec = slot.expiresAt
-    ? Math.floor(slot.expiresAt.getTime() / 1000)
+  return finishSubscription({
+    kind,
+    format,
+    profileName,
+    nodes,
+    expiresAt: slot.expiresAt,
+    usedBytes,
+    limitBytes,
+    announce,
+  });
+}
+
+function buildUnavailableSubscription(input: {
+  kind: ReturnType<typeof renderKindFor>;
+  format: SubClientFormat;
+  profileName: string;
+  message: string;
+  expiresAt: Date | null;
+  usedBytes: number;
+  limitBytes: number;
+  announce: string | null;
+}): SubConvertResult {
+  return finishSubscription({
+    kind: input.kind,
+    format: input.format,
+    profileName: input.profileName,
+    nodes: [placeholderNode(input.message)],
+    expiresAt: input.expiresAt ?? new Date(Date.now() - 1000),
+    usedBytes: input.usedBytes,
+    limitBytes: input.limitBytes,
+    announce: input.announce,
+  });
+}
+
+function finishSubscription(input: {
+  kind: ReturnType<typeof renderKindFor>;
+  format: SubClientFormat;
+  profileName: string;
+  nodes: ProxyNode[];
+  expiresAt: Date | null;
+  usedBytes: number;
+  limitBytes: number;
+  announce: string | null;
+}): SubConvertResult {
+  const expireSec = input.expiresAt
+    ? Math.floor(input.expiresAt.getTime() / 1000)
     : 0;
-  const usedBytes = bytesToNumber(slot.usedTrafficBytes);
-  const limitBytes = bytesToNumber(slot.dataLimitBytes);
-  const userinfo = [
-    `upload=0`,
-    `download=${Math.round(usedBytes)}`,
-    `total=${Math.round(limitBytes)}`,
-    `expire=${expireSec}`,
-  ].join("; ");
-  const announce = sanitizeHeaderValue(project.remark);
+  const userinfo = buildSubscriptionUserinfo({
+    uploadBytes: 0,
+    downloadBytes: input.usedBytes,
+    limitBytes: input.limitBytes,
+    expireSec,
+  });
   const statusLine =
-    format === "shadowrocket"
+    input.format === "shadowrocket"
       ? buildShadowrocketStatus({
           uploadBytes: 0,
-          downloadBytes: usedBytes,
-          limitBytes,
-          expiresAt: slot.expiresAt,
+          downloadBytes: input.usedBytes,
+          limitBytes: input.limitBytes,
+          expiresAt: input.expiresAt,
         })
       : undefined;
-  const rendered = renderSubscription(kind, nodes, profileName, {
+  const rendered = renderSubscription(input.kind, input.nodes, input.profileName, {
     userinfo,
-    announce,
+    announce: input.announce,
     statusLine,
   });
-
-  const profileTitleB64 = Buffer.from(profileName, "utf8").toString("base64");
+  const profileTitleB64 = Buffer.from(input.profileName, "utf8").toString("base64");
   const headers: Record<string, string> = {
     "profile-title": `base64:${profileTitleB64}`,
     "profile-update-interval": "24",
-    "content-disposition": buildContentDisposition(profileName, fileExtFor(kind)),
+    "content-disposition": buildContentDisposition(
+      input.profileName,
+      fileExtFor(input.kind),
+    ),
   };
-  // Shadowrocket prefers STATUS=/REMARKS= body fields. subscription-userinfo
-  // makes it show English Upload/Download/Expire labels instead.
-  if (format !== "shadowrocket") {
+  if (input.format !== "shadowrocket") {
     headers["subscription-userinfo"] = userinfo;
   }
-  if (announce) {
-    // Non-ASCII / newlines are illegal in Node HTTP headers; use base64 form.
-    headers["announce"] = `base64:${Buffer.from(announce, "utf8").toString("base64")}`;
+  if (input.announce) {
+    headers["announce"] = `base64:${Buffer.from(input.announce, "utf8").toString("base64")}`;
   }
-
   return {
     body: rendered.body,
     contentType: rendered.contentType,
     filename: rendered.filename,
     headers,
-    profileName,
-    format,
-    nodeCount: nodes.length,
+    profileName: input.profileName,
+    format: input.format,
+    nodeCount: input.nodes.length,
   };
 }
 
@@ -332,6 +413,16 @@ async function fetchUpstreamSubscription(input: {
   }
 }
 
+function resolveUpstreamUserAgent(userAgent?: string | null): string {
+  const ua = userAgent?.trim() || "";
+  // Hiddify / browsers: some edges reject these UAs or return Clash YAML
+  // instead of share links, which we then mis-classify as expired/empty.
+  if (!ua || /mozilla|chrome|safari|curl|hiddify/i.test(ua)) {
+    return "v2rayN/6.45";
+  }
+  return ua;
+}
+
 function classifyUpstreamError(
   err: unknown,
 ): "expired" | "revoked" | "rate_limited" | "other" {
@@ -344,8 +435,12 @@ function classifyUpstreamError(
       ? (err.body as { code: string }).code
       : err.code) || "",
   );
-  if (code.includes("user_expired") || code.includes(".expired")) return "expired";
-  if (code.includes("revoked") || code.includes("not_found")) return "revoked";
+  if (code.includes("user_expired") || code.includes("subscription.expired")) {
+    return "expired";
+  }
+  if (code.includes("revoked") || code.includes("subscription.not_found")) {
+    return "revoked";
+  }
   if (code.includes("rate_limited") || err.status === 429) return "rate_limited";
   return "other";
 }
@@ -359,10 +454,7 @@ async function fetchPublicSubscriptionUrl(
     headers: {
       Accept: "*/*",
       // Prefer a known client UA — some sub edges reject unknown agents.
-      "User-Agent":
-        userAgent?.trim() && !/mozilla|chrome|safari|curl/i.test(userAgent)
-          ? userAgent.trim()
-          : "ClashMeta/1.19.0",
+      "User-Agent": resolveUpstreamUserAgent(userAgent),
     },
     ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
   });
@@ -439,8 +531,9 @@ function sanitizeFilenameHeader(name: string): string {
 function fileExtFor(kind: ReturnType<typeof renderKindFor>): string {
   switch (kind) {
     case "clash":
-    case "hiddify":
       return ".yaml";
+    case "hiddify":
+      return ".txt";
     case "surge":
       return ".conf";
     default:

@@ -366,6 +366,23 @@ export function renameNode(node: ProxyNode, projectName: string): ProxyNode {
   return cloneNodeWithName(node, name);
 }
 
+/** Dummy node so Clash / Hiddify can still import an expired or revoked profile. */
+export function placeholderNode(name: string): ProxyNode {
+  const trimmed = name.trim() || "不可用";
+  const userInfo = Buffer.from("aes-128-gcm:expired", "utf8").toString("base64");
+  return {
+    name: trimmed,
+    type: "ss",
+    server: "127.0.0.1",
+    port: 1,
+    password: "expired",
+    cipher: "aes-128-gcm",
+    udp: false,
+    raw: `ss://${userInfo}@127.0.0.1:1#${encodeURIComponent(trimmed)}`,
+    extras: {},
+  };
+}
+
 /** Clone a working node and rewrite its display name (share URI remark). */
 export function cloneNodeWithName(node: ProxyNode, name: string): ProxyNode {
   const trimmed = name.trim();

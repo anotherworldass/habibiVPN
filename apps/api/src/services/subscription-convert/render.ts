@@ -285,7 +285,7 @@ export function renderShadowrocket(
 export type SubRenderMeta = {
   userinfo?: string | null;
   announce?: string | null;
-  /** Shadowrocket: first decoded line, e.g. STATUS=⬆️:0B,⏬:1GB,剩余:10GB,过期:2026-09-04 */
+  /** Shadowrocket: first decoded line, e.g. STATUS=已用:1GB,剩余:10GB,过期:2026-09-04 */
   statusLine?: string | null;
 };
 
@@ -315,7 +315,15 @@ export function renderHiddifyYaml(
   profileName: string,
   meta?: SubRenderMeta,
 ): string {
-  return renderHiddifyPreamble(profileName, meta) + renderClashYaml(nodes, profileName);
+  // Hiddify-core tries JSON → share-link (V2Ray) → Clash YAML.
+  // Several app versions trim every remote line, which destroys Clash
+  // indentation and then reports "unable to determine config format".
+  // Share URIs survive trim and are what Hiddify imports most reliably.
+  return (
+    renderHiddifyPreamble(profileName, meta) +
+    nodes.map((n) => n.raw).join("\n") +
+    "\n"
+  );
 }
 
 export function renderSubscription(
@@ -334,8 +342,8 @@ export function renderSubscription(
     case "hiddify":
       return {
         body: renderHiddifyYaml(nodes, profileName, meta),
-        contentType: "text/yaml; charset=utf-8",
-        filename: `${sanitizeFilename(profileName)}.yaml`,
+        contentType: "text/plain; charset=utf-8",
+        filename: `${sanitizeFilename(profileName)}.txt`,
       };
     case "surge":
       return {

@@ -57,6 +57,31 @@ export function resolveProfileTitle(
   return out || vars.site_name || "VPN";
 }
 
+/**
+ * Clash Verge / Mihomo store `total` as u64 and render 0 as "0 B".
+ * There is no official unlimited token; 1 PiB is a common stand-in.
+ */
+export const UNLIMITED_TRAFFIC_PLACEHOLDER_BYTES = 1024 ** 5;
+
+/** `subscription-userinfo` for Clash / Hiddify / Mihomo. */
+export function buildSubscriptionUserinfo(input: {
+  uploadBytes?: number;
+  downloadBytes: number;
+  limitBytes: number;
+  expireSec: number;
+}): string {
+  const total =
+    input.limitBytes > 0
+      ? Math.round(input.limitBytes)
+      : UNLIMITED_TRAFFIC_PLACEHOLDER_BYTES;
+  return [
+    `upload=${Math.round(input.uploadBytes ?? 0)}`,
+    `download=${Math.round(input.downloadBytes)}`,
+    `total=${total}`,
+    `expire=${Math.max(0, Math.round(input.expireSec))}`,
+  ].join("; ");
+}
+
 export function bytesToNumber(v: bigint | number | null | undefined): number {
   if (v == null) return 0;
   if (typeof v === "bigint") {
@@ -87,20 +112,20 @@ export function formatExpireDate(expiresAt?: Date | string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** First line of Shadowrocket base64 body — shown as upload/download/remain/expire. */
+/** First line of Shadowrocket base64 body — shown as used/remain/expire. */
 export function buildShadowrocketStatus(input: {
   uploadBytes: number;
   downloadBytes: number;
   limitBytes: number;
   expiresAt?: Date | string | null;
 }): string {
+  const used = Math.max(0, (input.uploadBytes || 0) + (input.downloadBytes || 0));
   const remain =
     input.limitBytes > 0
-      ? formatTrafficBytes(Math.max(0, input.limitBytes - input.downloadBytes))
+      ? formatTrafficBytes(Math.max(0, input.limitBytes - used))
       : "不限";
   return [
-    `STATUS=⬆️:${formatTrafficBytes(input.uploadBytes)}`,
-    `⏬:${formatTrafficBytes(input.downloadBytes)}`,
+    `STATUS=已用:${formatTrafficBytes(used)}`,
     `剩余:${remain}`,
     `过期:${formatExpireDate(input.expiresAt)}`,
   ].join(",");
