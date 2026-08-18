@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "../../components/LocaleLink";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { FormEvent, useEffect, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
@@ -12,7 +12,7 @@ import { bindSupportSession } from "../../lib/support";
 type LoginMode = "password" | "code";
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [mode, setMode] = useState<LoginMode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

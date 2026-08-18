@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useLocaleRouter } from "../../../components/useLocaleRouter";
 import PromoNav from "../../../components/PromoNav";
 import Shell from "../../../components/Shell";
 import { apiFetch } from "../../../lib/api";
@@ -44,7 +44,7 @@ function badgeClass(status: string) {
 }
 
 export default function PromoWithdrawPage() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [items, setItems] = useState<Withdrawal[]>([]);
   const [amountYuan, setAmountYuan] = useState("");

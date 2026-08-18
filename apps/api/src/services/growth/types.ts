@@ -23,6 +23,21 @@ export type CampaignAudienceRules = {
   planIds?: string[];
 };
 
+export type InviteGrantMode = "auto" | "claim";
+
+export type InviteeRequirements = {
+  paid: boolean;
+  hasSubscription: boolean;
+  hasTraffic: boolean;
+  minTrafficBytes: number | null;
+};
+
+export type InviteMilestoneRules = {
+  requiredCount: number;
+  grantMode: InviteGrantMode;
+  inviteeRequirements: InviteeRequirements;
+};
+
 export type CampaignRules = {
   limitPerUserPerDay?: number;
   limitPerUserTotal?: number | null;
@@ -33,7 +48,62 @@ export type CampaignRules = {
     maxWinsPerDayGlobal?: number | null;
   };
   audience?: CampaignAudienceRules;
+  invite?: {
+    requiredCount?: number;
+    grantMode?: InviteGrantMode;
+    inviteeRequirements?: {
+      paid?: boolean;
+      hasSubscription?: boolean;
+      hasTraffic?: boolean;
+      minTrafficBytes?: number | null;
+    };
+  };
 };
+
+export const MILESTONE_PERIOD_KEY = "milestone";
+
+export function emptyInviteeRequirements(): InviteeRequirements {
+  return {
+    paid: false,
+    hasSubscription: false,
+    hasTraffic: false,
+    minTrafficBytes: null,
+  };
+}
+
+export function normalizeInviteRules(raw: unknown): InviteMilestoneRules | null {
+  return normalizeInviteFromRules(asRules(raw));
+}
+
+export function normalizeInviteFromRules(
+  rules: CampaignRules,
+): InviteMilestoneRules | null {
+  const invite = rules.invite;
+  if (!invite || typeof invite !== "object") return null;
+  const requiredCount = Math.floor(Number(invite.requiredCount));
+  if (!Number.isFinite(requiredCount) || requiredCount < 1) return null;
+  const grantMode: InviteGrantMode =
+    invite.grantMode === "claim" ? "claim" : "auto";
+  const rawReqs =
+    invite.inviteeRequirements && typeof invite.inviteeRequirements === "object"
+      ? invite.inviteeRequirements
+      : {};
+  let minTrafficBytes: number | null = null;
+  if (rawReqs.minTrafficBytes != null) {
+    const n = Math.floor(Number(rawReqs.minTrafficBytes));
+    if (Number.isFinite(n) && n >= 1) minTrafficBytes = n;
+  }
+  return {
+    requiredCount,
+    grantMode,
+    inviteeRequirements: {
+      paid: Boolean(rawReqs.paid),
+      hasSubscription: Boolean(rawReqs.hasSubscription),
+      hasTraffic: Boolean(rawReqs.hasTraffic) || minTrafficBytes != null,
+      minTrafficBytes,
+    },
+  };
+}
 
 export type CampaignUi = {
   /** Resolved display strings (legacy + zh convenience) */

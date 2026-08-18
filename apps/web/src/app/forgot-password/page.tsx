@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "../../components/LocaleLink";
 import { FormEvent, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";

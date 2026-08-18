@@ -24,6 +24,17 @@ function asDisplayNameI18n(raw: unknown): Record<string, string> {
   return normalizeAppCopyI18n(raw, 120);
 }
 
+/** After slot create/sync, re-check invite-milestone auto-grant for the invitee's inviter. */
+function scheduleInviteMilestoneForInvitee(userId: string) {
+  setImmediate(() => {
+    void import("./growth/invite-milestone.js")
+      .then((m) => m.maybeAutoGrantForInvitee(userId))
+      .catch((err) => {
+        console.error("[invite-milestone] auto-grant failed", err);
+      });
+  });
+}
+
 type SourceIpHistoryItem = {
   ip: string;
   observed_at?: string | null;
@@ -875,7 +886,7 @@ export async function createUpstreamSlot(input: {
     });
     if (existing) {
       if (input.allowRenew) {
-        return updateUpstreamSlot({
+        const renewed = await updateUpstreamSlot({
           userId: input.userId,
           slotId: existing.id,
           planId: plan.id,
@@ -886,6 +897,8 @@ export async function createUpstreamSlot(input: {
           note: input.note,
           ledger: input.ledger,
         });
+        scheduleInviteMilestoneForInvitee(input.userId);
+        return renewed;
       }
       throw Object.assign(new Error("subscription.plan_already_owned"), {
         statusCode: 409,
@@ -952,7 +965,7 @@ export async function createUpstreamSlot(input: {
     });
   }
 
-  return {
+  const createdView = {
     user,
     slot,
     subscription: await toSubscriptionViewAsync(
@@ -962,6 +975,8 @@ export async function createUpstreamSlot(input: {
       user.projectId,
     ),
   };
+  scheduleInviteMilestoneForInvitee(input.userId);
+  return createdView;
 }
 
 /**
@@ -1656,6 +1671,7 @@ export async function syncUpstreamSlot(
     include: slotProjectInclude,
   });
 
+  scheduleInviteMilestoneForInvitee(userId);
   return toSubscriptionViewAsync(saved, view, locale);
 }
 

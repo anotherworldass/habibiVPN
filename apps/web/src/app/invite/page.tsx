@@ -1,13 +1,17 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
+import { useLocale } from "../../components/LocaleProvider";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
 import Shell from "../../components/Shell";
+import { t } from "../../lib/copy";
 import { normalizeInviteCode, saveInviteCode } from "../../lib/invite";
 
 function InviteRedirect() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const searchParams = useSearchParams();
+  const copy = t(useLocale()).invite;
 
   useEffect(() => {
     const ref = normalizeInviteCode(searchParams.get("ref"));
@@ -22,8 +26,8 @@ function InviteRedirect() {
   return (
     <Shell narrow hideNavigation>
       <div className="page-head">
-        <h1>邀请页</h1>
-        <p>正在跳转…</p>
+        <h1>{copy.redirectTitle}</h1>
+        <p>{copy.redirectLead}</p>
       </div>
     </Shell>
   );
@@ -31,13 +35,14 @@ function InviteRedirect() {
 
 /** Supports `invite_links` configured as `https://…/invite?ref=` */
 export default function InviteIndexPage() {
+  const copy = t(useLocale()).invite;
   return (
     <Suspense
       fallback={
         <Shell narrow hideNavigation>
           <div className="page-head">
-            <h1>邀请页</h1>
-            <p>正在跳转…</p>
+            <h1>{copy.redirectTitle}</h1>
+            <p>{copy.redirectLead}</p>
           </div>
         </Shell>
       }

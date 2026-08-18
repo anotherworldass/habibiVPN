@@ -1,10 +1,14 @@
 "use client";
 
-import Link from "next/link";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { t } from "../lib/copy";
 import { getToken } from "../lib/auth";
-import { legalFooterLinks, site } from "../lib/site";
+import { isInvitePath, stripLocale } from "../lib/locale";
+import { site } from "../lib/site";
+import LanguageSwitch from "./LanguageSwitch";
+import Link from "./LocaleLink";
+import { useLocale } from "./LocaleProvider";
 
 type ShellProps = {
   children: React.ReactNode;
@@ -43,19 +47,6 @@ const accountIcon = (
   </svg>
 );
 
-const guestTabs = [
-  { href: "/", label: "首页", icon: homeIcon },
-  { href: "/plans", label: "套餐", icon: plansIcon },
-  { href: "/account", label: "我的", icon: accountIcon },
-];
-
-const appTabs = [
-  { href: "/", label: "首页", icon: homeIcon },
-  { href: "/subscription", label: "连接", icon: connectIcon },
-  { href: "/plans", label: "套餐", icon: plansIcon },
-  { href: "/account", label: "我的", icon: accountIcon },
-];
-
 function resolveHref(href: string, loggedIn: boolean) {
   if ((href === "/subscription" || href === "/account") && !loggedIn) {
     return "/login";
@@ -64,21 +55,36 @@ function resolveHref(href: string, loggedIn: boolean) {
 }
 
 function isTabActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const path = stripLocale(pathname);
+  if (href === "/") return path === "/";
+  return path === href || path.startsWith(`${href}/`);
 }
 
 export default function Shell({ children, flush, narrow, hideNavigation }: ShellProps) {
   const pathname = usePathname();
+  const locale = useLocale();
+  const copy = t(locale);
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
     setLoggedIn(!!getToken());
   }, [pathname]);
 
+  const guestTabs = [
+    { href: "/", label: copy.nav.home, icon: homeIcon },
+    { href: "/plans", label: copy.nav.plans, icon: plansIcon },
+    { href: "/account", label: copy.nav.account, icon: accountIcon },
+  ];
+
+  const appTabs = [
+    { href: "/", label: copy.nav.home, icon: homeIcon },
+    { href: "/subscription", label: copy.nav.connect, icon: connectIcon },
+    { href: "/plans", label: copy.nav.plans, icon: plansIcon },
+    { href: "/account", label: copy.nav.account, icon: accountIcon },
+  ];
+
   const tabs = loggedIn ? appTabs : guestTabs;
-  // Invite landing already has its own brand block; flush hero does too.
-  const showBrandBar = !flush && !pathname.startsWith("/invite");
+  const showBrandBar = !flush && !isInvitePath(pathname);
 
   const shellClass = [
     "habibi-shell",
@@ -98,14 +104,23 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
     .join(" ");
 
   const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "";
+  const footerLinks = [
+    { href: "/nodes", label: copy.footer.nodes },
+    { href: "/about", label: copy.footer.about },
+    { href: "/privacy", label: copy.footer.privacy },
+    { href: "/terms", label: copy.footer.terms },
+  ];
   const footer = (
     <div className="footer-mini">
-      <nav className="footer-mini-links" aria-label="页脚链接">
-        {legalFooterLinks.map((item) => (
+      <nav className="footer-mini-links" aria-label={copy.nav.footerAria}>
+        {footerLinks.map((item) => (
           <Link key={item.href} href={item.href}>
             {item.label}
           </Link>
         ))}
+        <Suspense fallback={null}>
+          <LanguageSwitch variant="footer" />
+        </Suspense>
       </nav>
       {appVersion ? (
         <span className="footer-mini-version">{appVersion}</span>
@@ -121,23 +136,28 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
             <Link href="/" className="habibi-topbar-brand">
               {site.brand}
             </Link>
-            <nav className="habibi-topbar-nav" aria-label="主导航">
-              {tabs.map((tab) => {
-                const active = isTabActive(pathname, tab.href);
-                const href = resolveHref(tab.href, loggedIn);
-                return (
-                  <Link
-                    key={tab.href}
-                    href={href}
-                    className="habibi-topbar-link"
-                    data-active={active}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </nav>
+            <div className="habibi-topbar-tools">
+              <nav className="habibi-topbar-nav" aria-label="主导航">
+                {tabs.map((tab) => {
+                  const active = isTabActive(pathname, tab.href);
+                  const href = resolveHref(tab.href, loggedIn);
+                  return (
+                    <Link
+                      key={tab.href}
+                      href={href}
+                      className="habibi-topbar-link"
+                      data-active={active}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      {tab.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+              <Suspense fallback={null}>
+                <LanguageSwitch variant="topbar" />
+              </Suspense>
+            </div>
           </div>
         </header>
       )}
@@ -149,7 +169,9 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
               {site.brand}
             </Link>
             {site.slogan ? (
-              <p className="habibi-brandbar-slogan">{site.slogan}</p>
+              <p className="habibi-brandbar-slogan">
+                {locale === "en" ? copy.home.slogan : site.slogan}
+              </p>
             ) : null}
           </div>
         </header>

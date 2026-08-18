@@ -95,11 +95,15 @@ export function parseSupportTelegramForwardValue(
       : newWebhookSecret();
   const str = (v: unknown) =>
     typeof v === "string" && v.trim() ? v.trim() : null;
+  const chatId =
+    typeof o.chatId === "number" && Number.isFinite(o.chatId)
+      ? String(o.chatId)
+      : str(o.chatId);
   return {
     botTokenEnc: str(o.botTokenEnc),
     botUsername: str(o.botUsername)?.replace(/^@/, "") || null,
     webhookSecret: secret,
-    chatId: str(o.chatId),
+    chatId,
     chatType: str(o.chatType),
     chatTitle: str(o.chatTitle),
   };
@@ -339,18 +343,26 @@ export async function clearSupportTelegramForwardBind(projectId: string) {
 }
 
 export async function sendSupportTelegramForwardTest(projectId: string) {
-  const runtime = await getSupportTelegramForwardRuntime(projectId);
-  if (!runtime) {
+  const cfg = await getSupportTelegramForwardConfig(projectId);
+  const token = cfg.value.botTokenEnc
+    ? decryptSecret(cfg.value.botTokenEnc)
+    : null;
+  if (!token) {
     throw Object.assign(new Error("support.telegram_forward_not_ready"), {
       statusCode: 400,
     });
   }
-  await sendMessage(runtime.token, {
-    chat_id: runtime.chatId,
+  if (!cfg.value.chatId) {
+    throw Object.assign(new Error("support.telegram_forward_not_bound"), {
+      statusCode: 400,
+    });
+  }
+  await sendMessage(token, {
+    chat_id: cfg.value.chatId,
     text: "Habibi 客服转发测试：绑定正常。客户消息会发到这里，回复该消息即可回给客户。",
     disable_web_page_preview: true,
   });
-  return { ok: true, chat_id: runtime.chatId };
+  return { ok: true, chat_id: cfg.value.chatId };
 }
 
 function channelLabel(

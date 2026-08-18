@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "../../components/LocaleLink";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
@@ -44,7 +44,7 @@ function formatTime(iso: string | null | undefined) {
 const PAGE_SIZE = 20;
 
 export default function OrdersPage() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [items, setItems] = useState<OrderItem[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");

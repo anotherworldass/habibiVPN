@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import Link from "../../../components/LocaleLink";
+import { useLocaleRouter } from "../../../components/useLocaleRouter";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import Shell from "../../../components/Shell";
@@ -31,7 +32,7 @@ function statusText(status: string) {
 
 export default function PaymentOrderPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);

@@ -1,6 +1,13 @@
 export type SiteLocale = "zh" | "en";
 
-const STORAGE_KEY = "habibi_site_locale";
+export const SITE_LOCALES = ["zh", "en"] as const;
+export const DEFAULT_LOCALE: SiteLocale = "zh";
+export const LOCALE_COOKIE = "habibi_site_locale";
+const STORAGE_KEY = LOCALE_COOKIE;
+
+export function htmlLang(locale: SiteLocale): string {
+  return locale === "zh" ? "zh-CN" : "en";
+}
 
 export function normalizeLocale(raw: string | null | undefined): SiteLocale | null {
   if (!raw) return null;
@@ -12,12 +19,74 @@ export function normalizeLocale(raw: string | null | undefined): SiteLocale | nu
   return null;
 }
 
+export function localeFromAcceptLanguage(header: string | null | undefined): SiteLocale | null {
+  if (!header) return null;
+  for (const part of header.split(",")) {
+    const tag = part.split(";")[0]?.trim();
+    const found = normalizeLocale(tag);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function isLocalePrefix(segment: string): segment is SiteLocale {
+  return segment === "zh" || segment === "en";
+}
+
+/** `/zh/about` → `/about`；`/en` → `/` */
+export function stripLocale(pathname: string): string {
+  const path = pathname.split("?")[0] || "/";
+  const match = path.match(/^\/(zh|en)(?=\/|$)/);
+  if (!match) return path || "/";
+  const rest = path.slice(match[0].length);
+  return rest || "/";
+}
+
+export function localeFromPathname(pathname: string): SiteLocale | null {
+  const first = (pathname.split("?")[0] || "/").split("/").filter(Boolean)[0];
+  return first && isLocalePrefix(first) ? first : null;
+}
+
+export function isInvitePath(pathname: string): boolean {
+  const path = stripLocale(pathname);
+  return path === "/invite" || path.startsWith("/invite/");
+}
+
+function shouldSkipPrefix(path: string): boolean {
+  return (
+    path.startsWith("/invite") ||
+    path.startsWith("/api") ||
+    path.startsWith("/_next") ||
+    path.startsWith("/favicon")
+  );
+}
+
+/** `/about` + `en` → `/en/about`；邀请页不加前缀 */
+export function localePath(href: string, locale: SiteLocale): string {
+  if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return href;
+  if (/^https?:\/\//i.test(href) || href.startsWith("//")) return href;
+
+  const [pathPart, hash = ""] = href.split("#");
+  const [rawPath, query = ""] = pathPart.split("?");
+  if (!rawPath.startsWith("/")) return href;
+  if (shouldSkipPrefix(rawPath)) {
+    return `${rawPath}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+  }
+
+  const stripped = stripLocale(rawPath);
+  const prefixed = stripped === "/" ? `/${locale}` : `/${locale}${stripped}`;
+  return `${prefixed}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+}
+
 /** Prefer ?lang= → localStorage → navigator.language → zh */
 export function resolveSiteLocale(search?: string): SiteLocale {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(search ?? window.location.search);
     const fromQuery = normalizeLocale(params.get("lang"));
     if (fromQuery) return fromQuery;
+
+    const fromPath = localeFromPathname(window.location.pathname);
+    if (fromPath) return fromPath;
 
     try {
       const fromStore = normalizeLocale(localStorage.getItem(STORAGE_KEY));
@@ -29,7 +98,7 @@ export function resolveSiteLocale(search?: string): SiteLocale {
     const fromNav = normalizeLocale(navigator.language);
     if (fromNav) return fromNav;
   }
-  return "zh";
+  return DEFAULT_LOCALE;
 }
 
 export function persistSiteLocale(locale: SiteLocale) {
@@ -39,12 +108,11 @@ export function persistSiteLocale(locale: SiteLocale) {
   } catch {
     /* ignore */
   }
-  document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=31536000; samesite=lax`;
+  document.documentElement.lang = htmlLang(locale);
 }
 
+/** @deprecated use localePath */
 export function withLang(href: string, locale: SiteLocale): string {
-  const [path, hash = ""] = href.split("#");
-  const url = new URL(path, "https://local.invalid");
-  url.searchParams.set("lang", locale);
-  return `${url.pathname}${url.search}${hash ? `#${hash}` : ""}`;
+  return localePath(href, locale);
 }

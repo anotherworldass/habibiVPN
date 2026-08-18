@@ -1,10 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import Link from "../../../components/LocaleLink";
+import { useLocale } from "../../../components/LocaleProvider";
 import Shell from "../../../components/Shell";
+import { t } from "../../../lib/copy";
 import {
   INVITE_CODE_RE,
   normalizeInviteCode,
@@ -13,6 +15,8 @@ import {
 import { isPlaceholderUrl, site } from "../../../lib/site";
 
 export default function InviteLandingPage() {
+  const messages = t(useLocale());
+  const copy = messages.invite;
   const params = useParams<{ code: string }>();
   const code = normalizeInviteCode(
     typeof params.code === "string" ? params.code : Array.isArray(params.code) ? params.code[0] : "",
@@ -28,7 +32,7 @@ export default function InviteLandingPage() {
   }, [code, valid]);
 
   function onVirtualDownload(label: string) {
-    setToast(`${label}即将上线，请先网页注册使用`);
+    setToast(copy.toast(label));
     window.setTimeout(() => setToast(""), 2200);
   }
 
@@ -37,31 +41,29 @@ export default function InviteLandingPage() {
       <div className="invite-plain">
         <div className="invite-plain-main">
           <p className="invite-plain-brand font-display">{site.brand}</p>
-          <h1 className="invite-plain-slogan font-display">{site.slogan}</h1>
-          <p className="invite-plain-lead">
-            {valid
-              ? "好友邀请你加入。下载 App 或网页注册，即可领取套餐。"
-              : "邀请链接无效，你仍可直接注册开始使用。"}
+          <h1 className="invite-plain-slogan font-display">{messages.home.slogan}</h1>
+            <p className="invite-plain-lead">
+            {valid ? copy.validLead : copy.invalidLead}
           </p>
 
           {valid && (
-            <div className="invite-plain-code" aria-label="邀请码">
-              <span>邀请码</span>
+            <div className="invite-plain-code" aria-label={copy.codeLabel}>
+              <span>{copy.codeLabel}</span>
               <strong className="font-display">{code}</strong>
             </div>
           )}
 
           <div className="invite-plain-actions">
             <Link href={registerHref} className="btn btn-primary btn-block">
-              {valid ? `加入 ${site.brand}` : "去注册"}
+              {valid ? copy.join : copy.register}
             </Link>
             <Link href="/login" className="btn btn-secondary btn-block">
-              已有账号
+              {copy.login}
             </Link>
           </div>
 
           <div className="invite-download">
-            <p className="invite-download-label">下载 App</p>
+            <p className="invite-download-label">{copy.downloadLabel}</p>
             <div className="invite-download-row">
               {isPlaceholderUrl(site.appStoreUrl) ? (
                 <button
@@ -139,18 +141,18 @@ export default function InviteLandingPage() {
             </div>
             {toast ? <p className="invite-download-toast">{toast}</p> : null}
             <p className="invite-download-more">
-              <Link href="/download">Windows / macOS 等全部平台</Link>
+              <Link href="/download">{copy.morePlatforms}</Link>
             </p>
           </div>
         </div>
 
         {pageUrl ? (
-          <aside className="invite-desktop-qr" aria-label="手机扫码打开">
+          <aside className="invite-desktop-qr" aria-label={copy.qrAria}>
             <div className="invite-desktop-qr-card">
               <QRCodeSVG value={pageUrl} size={168} level="M" />
             </div>
-            <p className="invite-desktop-qr-title">手机扫码打开</p>
-            <p className="invite-desktop-qr-hint">用手机浏览器扫码</p>
+            <p className="invite-desktop-qr-title">{copy.qrTitle}</p>
+            <p className="invite-desktop-qr-hint">{copy.qrHint}</p>
           </aside>
         ) : null}
       </div>

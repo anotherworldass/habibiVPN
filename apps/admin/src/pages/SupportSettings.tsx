@@ -57,7 +57,10 @@ function errorText(e: unknown, fallback: string): string {
     if (typeof body?.error === "string" && body.error.trim()) {
       const code = body.error.trim();
       if (code === "support.telegram_forward_not_ready") {
-        return "请先启用、填写 Token，并在群/私聊里发送 /bind";
+        return "请先保存 Bot Token";
+      }
+      if (code === "support.telegram_forward_not_bound") {
+        return "还没绑定会话：把 Bot 拉进群或私聊它，发送 /bind";
       }
       if (code === "telegram.api_error") return "Telegram API 调用失败，请检查 Token";
       return code;
@@ -130,6 +133,23 @@ export default function SupportSettingsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!botCfg || botCfg.bound) return;
+    const t = window.setInterval(() => {
+      void (async () => {
+        try {
+          const forward = await adminFetch<SupportTelegramForwardConfig>(
+            "/admin/v1/settings/support/telegram-forward",
+          );
+          setBotCfg(forward);
+        } catch {
+          /* ignore poll errors */
+        }
+      })();
+    }, 3000);
+    return () => window.clearInterval(t);
+  }, [botCfg?.bound]);
 
   const onSave = async () => {
     const values = await form.validateFields();
@@ -394,7 +414,7 @@ export default function SupportSettingsPage() {
             </Button>
             <Button
               loading={testing}
-              disabled={!botCfg?.bound}
+              disabled={!botCfg?.has_token}
               onClick={() => void onTest()}
             >
               发送测试消息

@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import Link from "../../../components/LocaleLink";
+import { useLocaleRouter } from "../../../components/useLocaleRouter";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Shell from "../../../components/Shell";
 import { apiFetch } from "../../../lib/api";
@@ -56,7 +57,7 @@ function formatTraffic(bytes?: number | null) {
 
 export default function CheckoutPage() {
   const params = useParams<{ planId: string }>();
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [channels, setChannels] = useState<PaymentChannel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState("");

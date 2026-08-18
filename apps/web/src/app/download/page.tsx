@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import Link from "../../components/LocaleLink";
+import { useLocale } from "../../components/LocaleProvider";
 import Shell from "../../components/Shell";
+import { t } from "../../lib/copy";
 import {
   downloadPlatforms,
   isPlaceholderUrl,
@@ -34,6 +36,7 @@ const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
 };
 
 export default function DownloadPage() {
+  const copy = t(useLocale()).download;
   const [toast, setToast] = useState("");
   const [pageUrl, setPageUrl] = useState("");
 
@@ -42,7 +45,7 @@ export default function DownloadPage() {
   }, []);
 
   function onFakeDownload(label: string) {
-    setToast(`${label} 客户端即将上线，可先使用网页版`);
+    setToast(copy.toast(label));
     window.setTimeout(() => setToast(""), 2400);
   }
 
@@ -51,8 +54,8 @@ export default function DownloadPage() {
       <div className="download-page">
         <div className="download-main">
           <div className="page-head">
-            <h1>下载 {site.brand}</h1>
-            <p>选择你的设备平台。正式包上线前，可先用网页注册与管理套餐。</p>
+            <h1>{copy.title}</h1>
+            <p>{copy.lead}</p>
           </div>
 
           <div className="download-grid">
@@ -95,21 +98,32 @@ export default function DownloadPage() {
             </p>
           ) : null}
 
+          <div className="doc-block" style={{ marginTop: 22 }}>
+            <h2 className="section-title" style={{ fontSize: "1.1rem" }}>
+              {copy.noteTitle}
+            </h2>
+            <ul className="doc-list">
+              <li>{copy.noteIos}</li>
+              <li>{copy.noteAndroid}</li>
+              <li>{copy.noteDesktop}</li>
+            </ul>
+          </div>
+
           <p className="download-web-hint">
-            也可以先{" "}
-            <Link href="/register">网页注册</Link>
+            {copy.webBefore}{" "}
+            <Link href="/register">{copy.register}</Link>
             {" · "}
-            <Link href="/guide">查看使用教程</Link>
+            <Link href="/guide">{copy.guide}</Link>
           </p>
         </div>
 
         {pageUrl ? (
-          <aside className="invite-desktop-qr" aria-label="手机扫码打开">
+          <aside className="invite-desktop-qr" aria-label={copy.qrAria}>
             <div className="invite-desktop-qr-card">
               <QRCodeSVG value={pageUrl} size={168} level="M" />
             </div>
-            <p className="invite-desktop-qr-title">手机扫码打开</p>
-            <p className="invite-desktop-qr-hint">用手机浏览器扫码下载</p>
+            <p className="invite-desktop-qr-title">{copy.qrTitle}</p>
+            <p className="invite-desktop-qr-hint">{copy.qrHint}</p>
           </aside>
         ) : null}
       </div>

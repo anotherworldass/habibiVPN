@@ -8,12 +8,26 @@ import type {
   UserUpstream,
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { asRules, periodKeyFor, type CampaignRules } from "./types.js";
+import { countQualifiedInvites } from "./invite-milestone.js";
+import {
+  asRules,
+  emptyInviteeRequirements,
+  normalizeInviteFromRules,
+  periodKeyFor,
+  type CampaignRules,
+  type InviteGrantMode,
+  type InviteeRequirements,
+  MILESTONE_PERIOD_KEY,
+} from "./types.js";
+
+export type CampaignRewardWithPlan = CampaignReward & {
+  plan?: { id: string; name: string; code: string } | null;
+};
 
 export type CampaignWithRelations = Campaign & {
   clients: CampaignClient[];
   packages: CampaignPackage[];
-  rewards: CampaignReward[];
+  rewards: CampaignRewardWithPlan[];
 };
 
 export type EligibilityContext = {
@@ -22,6 +36,13 @@ export type EligibilityContext = {
   client: ClientChannel;
   packageId?: string | null;
   now?: Date;
+};
+
+export type InviteProgress = {
+  requiredCount: number;
+  currentCount: number;
+  grantMode: InviteGrantMode;
+  requirements: InviteeRequirements;
 };
 
 export type EligibilityResult = {
@@ -33,6 +54,7 @@ export type EligibilityResult = {
   limitPerUserPerDay: number;
   limitPerUserTotal: number | null;
   nextAttemptIndex: number;
+  inviteProgress?: InviteProgress;
 };
 
 function push(reasons: string[], code: string) {
@@ -161,10 +183,18 @@ export async function evaluateEligibility(
   const { campaign, user, client } = ctx;
   const packageId = ctx.packageId ?? user.sourcePackageId;
   const rules = asRules(campaign.rulesJson);
-  const periodKey = periodKeyFor(now, campaign.timezone);
-  const limitPerUserPerDay = Math.max(1, rules.limitPerUserPerDay ?? 1);
-  const limitPerUserTotal =
-    rules.limitPerUserTotal == null ? null : Math.max(0, rules.limitPerUserTotal);
+  const isMilestone = campaign.type === "invite_milestone";
+  const periodKey = isMilestone
+    ? MILESTONE_PERIOD_KEY
+    : periodKeyFor(now, campaign.timezone);
+  const limitPerUserPerDay = isMilestone
+    ? 1
+    : Math.max(1, rules.limitPerUserPerDay ?? 1);
+  const limitPerUserTotal = isMilestone
+    ? 1
+    : rules.limitPerUserTotal == null
+      ? null
+      : Math.max(0, rules.limitPerUserTotal);
 
   const reasons: string[] = [];
 
@@ -190,7 +220,7 @@ export async function evaluateEligibility(
       periodKey,
     },
   });
-  if (todayCount >= limitPerUserPerDay) {
+  if (!isMilestone && todayCount >= limitPerUserPerDay) {
     push(reasons, "campaign.daily_limit");
   }
 
@@ -205,6 +235,24 @@ export async function evaluateEligibility(
     push(reasons, "campaign.total_limit");
   }
 
+  let inviteProgress: InviteProgress | undefined;
+  if (isMilestone) {
+    const invite = normalizeInviteFromRules(rules);
+    const currentCount = await countQualifiedInvites(user.id, campaign);
+    inviteProgress = {
+      requiredCount: invite?.requiredCount ?? 0,
+      currentCount,
+      grantMode: invite?.grantMode ?? "claim",
+      requirements: invite?.inviteeRequirements ?? emptyInviteeRequirements(),
+    };
+    if (totalWinCount < 1) {
+      if (!invite) push(reasons, "campaign.invite_misconfigured");
+      else if (currentCount < invite.requiredCount) {
+        push(reasons, "campaign.invite_progress");
+      }
+    }
+  }
+
   return {
     ok: reasons.length === 0,
     reasons,
@@ -213,7 +261,8 @@ export async function evaluateEligibility(
     totalWinCount,
     limitPerUserPerDay,
     limitPerUserTotal,
-    nextAttemptIndex: todayCount + 1,
+    nextAttemptIndex: isMilestone ? 1 : todayCount + 1,
+    inviteProgress,
   };
 }
 

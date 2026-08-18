@@ -1,7 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import Link from "../../components/LocaleLink";
+import { useLocale } from "../../components/LocaleProvider";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
+import { t } from "../../lib/copy";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
@@ -93,12 +96,13 @@ function FreePlanCards({
   claiming: string | null;
   onClaim: (id: string) => void;
 }) {
+  const plansCopy = t(useLocale()).plans;
   if (!plans.length) return null;
   return (
     <section className="plans-section">
       <div className="plans-section-head">
-        <h2>限时免费</h2>
-        <p>适合先试用，一键开通。</p>
+        <h2>{plansCopy.freeTitle}</h2>
+        <p>{plansCopy.freeLead}</p>
       </div>
       <div className="plans-grid">
         {plans.map((p) => {
@@ -106,7 +110,7 @@ function FreePlanCards({
           const days = formatDays(p.validity_seconds);
           return (
             <article key={p.id} className="plan-card plan-card--free">
-              <span className="plan-badge plan-badge--free">免费领取</span>
+              <span className="plan-badge plan-badge--free">{plansCopy.freeBadge}</span>
               <div className="plan-card-main">
                 <h3 className="plan-card-title">{p.name}</h3>
                 <div className="plan-price plan-price--free">¥0</div>
@@ -118,11 +122,11 @@ function FreePlanCards({
               <div className="plan-card-cta">
                 {!loggedIn ? (
                   <Link href="/register" className="btn btn-primary">
-                    注册领取
+                    {plansCopy.registerClaim}
                   </Link>
                 ) : p.already_claimed ? (
                   <Link href="/subscription" className="btn btn-secondary">
-                    去连接
+                    {plansCopy.goConnect}
                   </Link>
                 ) : (
                   <button
@@ -215,7 +219,7 @@ function PaidPlanCards({
 }
 
 function PlansContent() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const search = useSearchParams();
   const welcome = search.get("welcome") === "1";
   const [plans, setPlans] = useState<Plan[]>([]);

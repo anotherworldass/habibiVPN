@@ -465,7 +465,7 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/campaigns` | 是 | 当前可参与活动 |
-| POST | `/campaigns/:id/participate` | 是 | 领取 / 抽奖 |
+| POST | `/campaigns/:id/participate` | 是 | 领取 / 抽奖 / 邀请达标补领 |
 | POST | `/redeem` | 是 | 兑换码 |
 | POST | `/coupons/preview` | 是 | 下单前试算优惠 |
 
@@ -498,9 +498,35 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 }
 ```
 
+`type` 可为 `daily_claim` / `lottery` / `invite_milestone`。邀请达标活动额外返回：
+
+```json
+{
+  "type": "invite_milestone",
+  "reward": { "kind": "vpn_plan", "plan_id": "..." },
+  "already_participated": false,
+  "can_participate": false,
+  "ineligible_reasons": ["campaign.invite_progress"],
+  "invite_progress": {
+    "required_count": 5,
+    "current_count": 2,
+    "grant_mode": "auto",
+    "plan_id": "...",
+    "requirements": {
+      "paid": false,
+      "has_subscription": true,
+      "has_traffic": true,
+      "min_traffic_bytes": null
+    }
+  }
+}
+```
+
+只统计活动开始后新注册的直邀。`grant_mode=auto` 时达标后后台自动开通套餐；`claim` 时需 `POST /campaigns/:id/participate`。流量条件看订阅同步缓存（`usedTrafficBytes`），不是秒级实时。未达标 reason 为 `campaign.invite_progress`。
+
 客户端应展示 `ui.*`，勿用后台 `name`。
 
-领取成功且发放为「新建活动槽」时，订阅 `plan_name` 优先为活动多语言标题（`ui.title_i18n`），否则系统默认 `活动福利` / `Promo reward`；`plan_id` 为空。
+领取成功且发放为「新建活动槽」时，订阅 `plan_name` 优先为活动多语言标题（`ui.title_i18n`），否则系统默认 `活动福利` / `Promo reward`；`plan_id` 为空。邀请达标开通的是指定套餐，`plan_id` 有值。
 
 ### `POST /redeem`
 
@@ -763,7 +789,7 @@ Admin：项目管理 → 包 →「版本」。
 | 套餐购买 | `GET /plans` → Web:`payment-channels`+`orders` 或 IAP:`iap/*/verify` |
 | 订单记录 | `GET /orders` |
 | 兑换码 | `POST /redeem` |
-| 每日福利 | `GET /campaigns` + `participate` |
+| 每日福利 / 邀请达标 | `GET /campaigns` + `participate` |
 | 推广中心 | `overview` + `tools` + `team` + `commissions` |
 | 提现 | `withdrawals` |
 | 账号 | `GET/PATCH /me`、`PATCH /me/preferences`、`change-password` |

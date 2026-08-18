@@ -218,7 +218,7 @@ function ProtectedLayout() {
             name: "运营活动",
             icon: <GiftOutlined />,
             routes: [
-              { path: "/campaigns", name: "每日福利/抽奖", icon: <GiftOutlined /> },
+              { path: "/campaigns", name: "运营活动", icon: <GiftOutlined /> },
               { path: "/announcements", name: "公告", icon: <NotificationOutlined /> },
               { path: "/redeem", name: "兑换码", icon: <TagOutlined /> },
               { path: "/coupons", name: "优惠券", icon: <PercentageOutlined /> },

@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { stripLocale } from "../lib/locale";
+import Link from "./LocaleLink";
 
 const links = [
   { href: "/promo", label: "概览", match: (p: string) => p === "/promo" },
@@ -25,7 +26,7 @@ export default function PromoNav() {
   return (
     <nav className="promo-nav" aria-label="推广中心导航">
       {links.map((l) => {
-        const active = l.match(pathname);
+        const active = l.match(stripLocale(pathname));
         return (
           <Link
             key={l.href}

@@ -1,7 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, Syne } from "next/font/google";
+import JsonLd from "../components/JsonLd";
+import { LocaleProvider } from "../components/LocaleProvider";
 import SupportChatWidget from "../components/SupportChatWidget";
 import ThemeBoot from "../components/ThemeBoot";
+import { htmlLang } from "../lib/locale";
+import { getRequestLocale, getRequestPath } from "../lib/request-locale";
+import { buildPageMetadata, siteOrigin } from "../lib/seo";
 import { site } from "../lib/site";
 import "./globals.css";
 
@@ -17,19 +22,23 @@ const dmSans = DM_Sans({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata: Metadata = {
-  title: site.brand,
-  description: "注册领取套餐，获取订阅链接，导入客户端即可安全上网。",
-  applicationName: site.brand,
-  appleWebApp: {
-    capable: true,
-    title: site.brand,
-    statusBarStyle: "default",
-  },
-  formatDetection: {
-    telephone: false,
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const path = await getRequestPath();
+  return {
+    ...buildPageMetadata(path, locale),
+    metadataBase: new URL(siteOrigin()),
+    applicationName: site.brand,
+    appleWebApp: {
+      capable: true,
+      title: site.brand,
+      statusBarStyle: "default",
+    },
+    formatDetection: {
+      telephone: false,
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -39,17 +48,23 @@ export const viewport: Viewport = {
   themeColor: "#eef0f3",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getRequestLocale();
+  const path = await getRequestPath();
+
   return (
-    <html lang="zh-CN" data-theme="gray">
+    <html lang={htmlLang(locale)} data-theme="gray">
       <body className={`${syne.variable} ${dmSans.variable} antialiased`}>
-        <ThemeBoot />
-        {children}
-        <SupportChatWidget />
+        <LocaleProvider locale={locale}>
+          <ThemeBoot />
+          <JsonLd locale={locale} path={path} />
+          {children}
+          <SupportChatWidget />
+        </LocaleProvider>
       </body>
     </html>
   );

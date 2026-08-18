@@ -1,7 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useLocaleRouter } from "../../../components/useLocaleRouter";
 import PromoNav from "../../../components/PromoNav";
 import Shell from "../../../components/Shell";
 import { apiFetch } from "../../../lib/api";
@@ -62,7 +63,7 @@ function parseTab(raw: string | null): Tab {
 }
 
 function PromoTeamPageInner() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => parseTab(searchParams.get("tab")));
 

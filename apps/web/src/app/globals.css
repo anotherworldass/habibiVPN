@@ -1861,7 +1861,8 @@ input {
   border: 1px solid var(--line);
 }
 
-.legal-lang-switch button {
+.legal-lang-switch button,
+.legal-lang-switch a {
   appearance: none;
   border: 0;
   background: transparent;
@@ -1872,12 +1873,27 @@ input {
   border-radius: 999px;
   cursor: pointer;
   line-height: 1.2;
+  text-decoration: none;
 }
 
-.legal-lang-switch button.is-active {
+.legal-lang-switch button.is-active,
+.legal-lang-switch a.is-active {
   background: var(--panel, #fff);
   color: var(--teal-deep);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.footer-mini-links .lang-switch--footer {
+  margin-left: 2px;
+}
+
+.footer-mini-links .legal-lang-switch a {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.footer-mini-links .legal-lang-switch a.is-active {
+  color: var(--teal-deep);
 }
 
 .footer-mini {
@@ -3710,10 +3726,33 @@ input {
     color: var(--teal-deep);
   }
 
+  .habibi-topbar-tools {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
   .habibi-topbar-nav {
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .habibi-shell:has(.hero) .legal-lang-switch {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .habibi-shell:has(.hero) .legal-lang-switch a,
+  .habibi-shell:has(.hero) .legal-lang-switch button {
+    color: rgba(244, 248, 251, 0.72);
+  }
+
+  .habibi-shell:has(.hero) .legal-lang-switch a.is-active,
+  .habibi-shell:has(.hero) .legal-lang-switch button.is-active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    box-shadow: none;
   }
 
   .habibi-topbar-link {

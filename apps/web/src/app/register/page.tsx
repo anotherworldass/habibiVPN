@@ -1,7 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import Link from "../../components/LocaleLink";
+import { useLocale } from "../../components/LocaleProvider";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
+import { t } from "../../lib/copy";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
@@ -16,7 +19,8 @@ import {
 } from "../../lib/invite";
 
 function RegisterForm() {
-  const router = useRouter();
+  const router = useLocaleRouter();
+  const registerCopy = t(useLocale()).register;
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -124,8 +128,8 @@ function RegisterForm() {
   return (
     <>
       <div className="page-head">
-        <h1>创建账号</h1>
-        <p>验证邮箱后即可注册并免费领取试用套餐。</p>
+        <h1>{registerCopy.title}</h1>
+        <p>{registerCopy.lead}</p>
       </div>
 
       <form onSubmit={onSubmit} className="panel" style={{ marginTop: 16, gap: 0 }}>

@@ -1,16 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import type { LegalDoc } from "../lib/legal";
-import {
-  persistSiteLocale,
-  resolveSiteLocale,
-  type SiteLocale,
-  withLang,
-} from "../lib/locale";
+import type { SiteLocale } from "../lib/locale";
 import { site } from "../lib/site";
 import DocPage from "./DocPage";
+import Link from "./LocaleLink";
+import { useLocale } from "./LocaleProvider";
 
 type Props = {
   kind: "privacy" | "terms";
@@ -18,31 +13,10 @@ type Props = {
 };
 
 export default function LegalDocView({ kind, getDoc }: Props) {
-  const [locale, setLocale] = useState<SiteLocale>("zh");
-
-  useEffect(() => {
-    const next = resolveSiteLocale();
-    setLocale(next);
-    persistSiteLocale(next);
-  }, []);
-
-  const doc = useMemo(() => getDoc(locale), [getDoc, locale]);
-
-  function switchLocale(next: SiteLocale) {
-    setLocale(next);
-    persistSiteLocale(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("lang", next);
-    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
-  }
-
-  const otherHref =
-    kind === "privacy"
-      ? withLang("/terms", locale)
-      : withLang("/privacy", locale);
-
-  const otherLabel =
-    kind === "privacy" ? doc.relatedTerms : doc.relatedPrivacy;
+  const locale = useLocale();
+  const doc = getDoc(locale);
+  const otherHref = kind === "privacy" ? "/terms" : "/privacy";
+  const otherLabel = kind === "privacy" ? doc.relatedTerms : doc.relatedPrivacy;
 
   return (
     <DocPage
@@ -50,29 +24,11 @@ export default function LegalDocView({ kind, getDoc }: Props) {
       lead={doc.lead}
       footerAccountLabel={doc.footerAccount}
       footerHomeLabel={doc.footerHome}
-      accountHref={withLang("/account", locale)}
-      homeHref={withLang("/", locale)}
     >
       <div className="doc-block" style={{ marginBottom: 4 }}>
         <p className="doc-muted" style={{ marginBottom: 10 }}>
           {doc.updatedLabel}
         </p>
-        <div className="legal-lang-switch" role="group" aria-label="Language">
-          <button
-            type="button"
-            className={locale === "zh" ? "is-active" : undefined}
-            onClick={() => switchLocale("zh")}
-          >
-            {doc.switchToZh}
-          </button>
-          <button
-            type="button"
-            className={locale === "en" ? "is-active" : undefined}
-            onClick={() => switchLocale("en")}
-          >
-            {doc.switchToEn}
-          </button>
-        </div>
       </div>
 
       {doc.blocks.map((block) => (
@@ -102,7 +58,7 @@ export default function LegalDocView({ kind, getDoc }: Props) {
             {otherLabel}
           </Link>
           <span style={{ color: "var(--muted)", margin: "0 8px" }}>·</span>
-          <Link href={withLang("/support", locale)} className="doc-a">
+          <Link href="/support" className="doc-a">
             {doc.relatedSupport}
           </Link>
           <span style={{ color: "var(--muted)", margin: "0 8px" }}>·</span>

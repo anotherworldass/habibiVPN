@@ -6,6 +6,7 @@ import { allocateUid } from "../uid.js";
 import type { ResolvedSource } from "../project.js";
 import { DEFAULT_PROJECT_ID, userSourceCreateData } from "../project.js";
 import { scheduleInviterJoinNotify } from "../telegram/invite-notify.js";
+import { scheduleInviteMilestoneForInviter } from "../growth/invite-milestone.js";
 import { allocateInviteCode } from "./codes.js";
 import { getReferralConfig } from "./config.js";
 import { DEFAULT_PROMO_GROUP_ID, getDefaultPromoGroupId } from "./groups.js";
@@ -175,6 +176,7 @@ export async function createUserWithInvite(input: {
     return tx.user.findUniqueOrThrow({ where: { id: created.id } });
   });
   scheduleInviterJoinNotify({ inviteeId: user.id, inviterId: user.invitedById });
+  scheduleInviteMilestoneForInviter(user.invitedById, user.projectId);
   return user;
 }
 
@@ -215,6 +217,7 @@ export async function createAnonymousUser(input?: {
     return tx.user.findUniqueOrThrow({ where: { id: created.id } });
   });
   scheduleInviterJoinNotify({ inviteeId: user.id, inviterId: user.invitedById });
+  scheduleInviteMilestoneForInviter(user.invitedById, user.projectId);
   return user;
 }
 
@@ -236,6 +239,7 @@ export async function bindInviteForExistingUser(input: {
     inviteeId: input.userId,
     inviterId: result.invited_by_id,
   });
+  scheduleInviteMilestoneForInviter(result.invited_by_id);
   return result;
 }
 
@@ -355,6 +359,7 @@ export async function bindCredentialsToUser(input: {
     inviteeId: user.id,
     inviterId: newlyBoundInviterId,
   });
+  scheduleInviteMilestoneForInviter(newlyBoundInviterId, user.projectId);
   return user;
 }
 

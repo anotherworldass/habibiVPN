@@ -1,36 +1,40 @@
 "use client";
 
 import DocPage from "../../components/DocPage";
+import Link from "../../components/LocaleLink";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 import { site } from "../../lib/site";
 
 export default function SupportPage() {
-  const mail = `mailto:${site.supportEmail}?subject=${encodeURIComponent(`${site.brand} 客服咨询`)}`;
+  const copy = t(useLocale()).support;
+  const mail = `mailto:${site.supportEmail}?subject=${encodeURIComponent(copy.mailSubject)}`;
 
   return (
-    <DocPage title="联系客服" lead="账号、套餐、订阅链接等问题可在这里找到我们。">
+    <DocPage title={copy.title} lead={copy.lead}>
       <div className="doc-block">
-        <h3>在线客服</h3>
+        <h3>{copy.chatTitle}</h3>
         <p>
-          <a href="/chat" className="doc-a">
-            打开聊天窗口
-          </a>
+          <Link href="/chat" className="doc-a">
+            {copy.chatLink}
+          </Link>
         </p>
-        <p className="doc-muted">网页或 App 内可直接对话，通常几分钟内回复。</p>
+        <p className="doc-muted">{copy.chatHint}</p>
       </div>
 
       <div className="doc-block">
-        <h3>邮箱</h3>
+        <h3>{copy.mailTitle}</h3>
         <p>
           <a href={mail} className="doc-a">
             {site.supportEmail}
           </a>
         </p>
-        <p className="doc-muted">一般会在 1–2 个工作日内回复。</p>
+        <p className="doc-muted">{copy.mailHint}</p>
       </div>
 
       {site.supportTelegram ? (
         <div className="doc-block">
-          <h3>Telegram</h3>
+          <h3>{copy.tgTitle}</h3>
           <p>
             <a
               href={site.supportTelegram}
@@ -38,23 +42,23 @@ export default function SupportPage() {
               target="_blank"
               rel="noreferrer"
             >
-              打开客服频道 / 机器人
+              {copy.tgLink}
             </a>
           </p>
         </div>
       ) : null}
 
       <div className="doc-block">
-        <h3>反馈时请尽量提供</h3>
+        <h3>{copy.tipsTitle}</h3>
         <ul className="doc-list">
-          <li>注册邮箱</li>
-          <li>套餐名称或订阅状态截图</li>
-          <li>问题发生时间与客户端名称（如 Hiddify）</li>
+          <li>{copy.tip1}</li>
+          <li>{copy.tip2}</li>
+          <li>{copy.tip3}</li>
         </ul>
       </div>
 
       <a href={mail} className="btn btn-primary btn-block" style={{ marginTop: 8 }}>
-        发送邮件
+        {copy.mailCta}
       </a>
     </DocPage>
   );

@@ -161,10 +161,11 @@ enum StoreProductKind {
   non_renewing
 }
 
-/// Growth: campaign mechanic (claim / lottery). More types can be added later.
+/// Growth: campaign mechanic (claim / lottery / invite milestone).
 enum CampaignType {
   daily_claim
   lottery
+  invite_milestone
 }
 
 enum CampaignStatus {
@@ -177,6 +178,7 @@ enum CampaignStatus {
 enum RewardKind {
   vpn_duration
   vpn_traffic
+  vpn_plan
 }
 
 /// How VPN duration rewards stack onto user slots
@@ -1298,7 +1300,8 @@ model Plan {
   upstreams      UserUpstream[]
   catalogOffers  PlanCatalogOffer[]
   storeProducts  StoreProduct[]
-  redeemBatches  RedeemBatch[]
+  redeemBatches   RedeemBatch[]
+  campaignRewards CampaignReward[]
 
   @@unique([projectId, code])
   @@index([projectId, enabled])
@@ -1466,6 +1469,8 @@ model CampaignReward {
   id              String          @id @default(cuid())
   campaignId      String          @map("campaign_id")
   kind            RewardKind      @default(vpn_duration)
+  /// When kind=vpn_plan, provision this sellable Plan
+  planId          String?         @map("plan_id")
   validitySeconds Int?            @map("validity_seconds")
   dataLimitBytes  BigInt?         @map("data_limit_bytes")
   stackMode       RewardStackMode @default(extend_active) @map("stack_mode")
@@ -1474,8 +1479,10 @@ model CampaignReward {
   updatedAt       DateTime        @updatedAt @map("updated_at")
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  plan     Plan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([campaignId])
+  @@index([planId])
   @@map("campaign_rewards")
 }
 

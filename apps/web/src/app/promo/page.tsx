@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import Link from "../../components/LocaleLink";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import PromoNav from "../../components/PromoNav";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
@@ -89,7 +89,7 @@ function levelExplain(level: number): { title: string; body: string } {
 }
 
 export default function PromoPage() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tools, setTools] = useState<Tools | null>(null);
   const [rules, setRules] = useState<PromoRules | null>(null);

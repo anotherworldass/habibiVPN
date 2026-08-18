@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "../../components/LocaleLink";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { useEffect, useState } from "react";
 import HelpLinks from "../../components/HelpLinks";
 import Shell from "../../components/Shell";
@@ -18,7 +18,7 @@ type Me = {
 };
 
 export default function AccountPage() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);

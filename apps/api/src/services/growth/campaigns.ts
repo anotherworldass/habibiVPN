@@ -11,6 +11,7 @@ import {
   evaluateEligibility,
   type CampaignWithRelations,
 } from "./eligibility.js";
+import { tryGrantInviteMilestone } from "./invite-milestone.js";
 import {
   DEFAULT_GROWTH_SLOT_NAME_I18N,
   normalizeAppCopyI18n,
@@ -37,7 +38,10 @@ function primaryReward(rewards: CampaignReward[]): CampaignReward | null {
 const campaignInclude = {
   clients: { orderBy: { client: "asc" as const } },
   packages: { orderBy: { createdAt: "asc" as const } },
-  rewards: { orderBy: { sortOrder: "asc" as const } },
+  rewards: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { plan: { select: { id: true, name: true, code: true } } },
+  },
 };
 
 export function serializeCampaignAdmin(c: CampaignWithRelations) {
@@ -65,6 +69,10 @@ export function serializeCampaignAdmin(c: CampaignWithRelations) {
     rewards: c.rewards.map((r) => ({
       id: r.id,
       kind: r.kind,
+      plan_id: r.planId,
+      plan: r.plan
+        ? { id: r.plan.id, name: r.plan.name, code: r.plan.code }
+        : null,
       validity_seconds: r.validitySeconds,
       data_limit_bytes:
         r.dataLimitBytes == null ? null : Number(r.dataLimitBytes),
@@ -102,6 +110,7 @@ export function serializeCampaignPublic(
     reward: reward
       ? {
           kind: reward.kind,
+          plan_id: reward.planId,
           validity_seconds: reward.validitySeconds,
           data_limit_bytes:
             reward.dataLimitBytes == null
@@ -111,11 +120,28 @@ export function serializeCampaignPublic(
       : null,
     period_key: elig.periodKey,
     today_count: elig.todayCount,
-    already_participated: elig.todayCount >= elig.limitPerUserPerDay,
+    already_participated:
+      c.type === "invite_milestone"
+        ? elig.totalWinCount > 0
+        : elig.todayCount >= elig.limitPerUserPerDay,
     can_participate: elig.ok,
     ineligible_reasons: elig.ok ? [] : elig.reasons,
     limit_per_user_per_day: elig.limitPerUserPerDay,
     limit_per_user_total: elig.limitPerUserTotal,
+    invite_progress: elig.inviteProgress
+      ? {
+          required_count: elig.inviteProgress.requiredCount,
+          current_count: elig.inviteProgress.currentCount,
+          grant_mode: elig.inviteProgress.grantMode,
+          plan_id: reward?.planId ?? null,
+          requirements: {
+            paid: elig.inviteProgress.requirements.paid,
+            has_subscription: elig.inviteProgress.requirements.hasSubscription,
+            has_traffic: elig.inviteProgress.requirements.hasTraffic,
+            min_traffic_bytes: elig.inviteProgress.requirements.minTrafficBytes,
+          },
+        }
+      : undefined,
   };
 }
 
@@ -200,6 +226,24 @@ export async function participateCampaign(input: ParticipateInput) {
   });
   if (!elig.ok) {
     throw eligibilityHttpError(elig.reasons);
+  }
+
+  if (campaign.type === "invite_milestone") {
+    const grant = await tryGrantInviteMilestone({
+      campaign,
+      userId: input.userId,
+      client: input.client,
+    });
+    if (!grant.granted || !grant.claim) {
+      throw eligibilityHttpError([grant.reason || "campaign.not_eligible"]);
+    }
+    return {
+      already: false as const,
+      claim: grant.claim,
+      subscription: grant.subscription,
+      period_key: elig.periodKey,
+      attempt_index: 1,
+    };
   }
 
   const rules = asRules(campaign.rulesJson);
@@ -372,7 +416,8 @@ export async function replaceCampaignPackages(
 export async function replaceCampaignRewards(
   campaignId: string,
   rewards: Array<{
-    kind?: "vpn_duration" | "vpn_traffic";
+    kind?: "vpn_duration" | "vpn_traffic" | "vpn_plan";
+    planId?: string | null;
     validitySeconds?: number | null;
     dataLimitBytes?: number | null;
     stackMode?: "extend_active" | "create_campaign_slot";
@@ -386,6 +431,7 @@ export async function replaceCampaignRewards(
         data: {
           campaignId,
           kind: r.kind || "vpn_duration",
+          planId: r.planId || null,
           validitySeconds: r.validitySeconds ?? null,
           dataLimitBytes:
             r.dataLimitBytes == null ? null : BigInt(r.dataLimitBytes),

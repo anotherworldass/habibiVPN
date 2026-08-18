@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import Link from "../../components/LocaleLink";
+import { useLocaleRouter } from "../../components/useLocaleRouter";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import Shell from "../../components/Shell";
@@ -52,7 +53,7 @@ function shadowrocketImportUrl(url: string) {
 }
 
 function SubscriptionContent() {
-  const router = useRouter();
+  const router = useLocaleRouter();
   const search = useSearchParams();
   const claimed = search.get("claimed") === "1";
   const queryId = search.get("id");

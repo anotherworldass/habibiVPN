@@ -1,14 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import { t } from "../lib/copy";
+import Link from "./LocaleLink";
+import { useLocale } from "./LocaleProvider";
 import Shell from "./Shell";
 
 export default function DocPage({
   title,
   lead,
   children,
-  footerAccountLabel = "返回我的",
-  footerHomeLabel = "回首页",
+  footerAccountLabel,
+  footerHomeLabel,
   accountHref = "/account",
   homeHref = "/",
 }: {
@@ -20,6 +22,7 @@ export default function DocPage({
   accountHref?: string;
   homeHref?: string;
 }) {
+  const copy = t(useLocale());
   return (
     <Shell>
       <div className="page-head">
@@ -34,14 +37,14 @@ export default function DocPage({
           href={accountHref}
           style={{ color: "var(--teal-deep)", fontSize: 13, fontWeight: 600 }}
         >
-          {footerAccountLabel}
+          {footerAccountLabel ?? copy.doc.account}
         </Link>
         <span style={{ color: "var(--muted)", margin: "0 8px" }}>·</span>
         <Link
           href={homeHref}
           style={{ color: "var(--teal-deep)", fontSize: 13, fontWeight: 600 }}
         >
-          {footerHomeLabel}
+          {footerHomeLabel ?? copy.doc.home}
         </Link>
       </p>
     </Shell>

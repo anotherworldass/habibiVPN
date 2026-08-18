@@ -94,13 +94,23 @@ type CampaignRules = {
     requireActiveSubscription?: boolean;
     planIds?: string[];
   };
+  invite?: {
+    requiredCount?: number;
+    grantMode?: "auto" | "claim";
+    inviteeRequirements?: {
+      paid?: boolean;
+      hasSubscription?: boolean;
+      hasTraffic?: boolean;
+      minTrafficBytes?: number | null;
+    };
+  };
 };
 
 type Campaign = {
   id: string;
   code: string;
   name: string;
-  type: "daily_claim" | "lottery";
+  type: "daily_claim" | "lottery" | "invite_milestone";
   status: "draft" | "active" | "paused" | "ended";
   start_at: string | null;
   end_at: string | null;
@@ -114,6 +124,8 @@ type Campaign = {
   rewards: Array<{
     id?: string;
     kind: string;
+    plan_id?: string | null;
+    plan?: { id: string; name: string; code: string } | null;
     validity_seconds: number | null;
     stack_mode: string;
   }>;
@@ -128,6 +140,7 @@ type ClaimRow = {
   attempt_index?: number;
   result: string;
   granted_seconds: number | null;
+  slot_id?: string | null;
   created_at: string;
 };
 
@@ -203,6 +216,7 @@ export default function CampaignsPage() {
       valueEnum: {
         daily_claim: { text: "每日领取" },
         lottery: { text: "抽奖" },
+        invite_milestone: { text: "邀请达标" },
       },
     },
     {
@@ -223,6 +237,10 @@ export default function CampaignsPage() {
       title: "奖励",
       search: false,
       render: (_, r) => {
+        if (r.type === "invite_milestone") {
+          const plan = r.rewards?.[0]?.plan;
+          return plan ? `套餐 · ${plan.name}` : "指定套餐";
+        }
         const sec = r.rewards?.[0]?.validity_seconds;
         return sec != null ? `${hoursFromSeconds(sec)} 小时` : "-";
       },
@@ -255,8 +273,8 @@ export default function CampaignsPage() {
   return (
     <PageContainer
       header={{
-        title: "每日福利/抽奖",
-        subTitle: "Eligibility：项目 / 端 / 包 / 时间窗 / 频次 / 人群",
+        title: "运营活动",
+        subTitle: "每日领取 / 抽奖 / 邀请达标换套餐",
       }}
     >
       <ProTable<Campaign>
@@ -340,6 +358,13 @@ export default function CampaignsPage() {
               width: 90,
               render: (_, r) => r.granted_seconds ?? "-",
             },
+            {
+              title: "槽位",
+              dataIndex: "slot_id",
+              width: 140,
+              ellipsis: true,
+              render: (_, r) => r.slot_id ?? "-",
+            },
             { title: "时间", dataIndex: "created_at", width: 180 },
           ]}
         />
@@ -375,6 +400,8 @@ function CampaignForm(props: {
   }, [props.open]);
 
   const audience = initial?.rules?.audience || {};
+  const invite = initial?.rules?.invite || {};
+  const inviteReqs = invite.inviteeRequirements || {};
   const rewardHours = hoursFromSeconds(initial?.rewards?.[0]?.validity_seconds);
   const winRate =
     initial?.rules?.lottery?.winRateBps != null
@@ -415,6 +442,13 @@ function CampaignForm(props: {
         requireExpiredOrNone: Boolean(audience.requireExpiredOrNone),
         requireActiveSubscription: Boolean(audience.requireActiveSubscription),
         audiencePlanIds: audience.planIds || [],
+        inviteRequiredCount: invite.requiredCount ?? 3,
+        inviteGrantMode: invite.grantMode || "auto",
+        inviteReqPaid: Boolean(inviteReqs.paid),
+        inviteReqSubscription: Boolean(inviteReqs.hasSubscription),
+        inviteReqTraffic: Boolean(inviteReqs.hasTraffic),
+        inviteMinTrafficBytes: inviteReqs.minTrafficBytes ?? undefined,
+        rewardPlanId: initial?.rewards?.[0]?.plan_id || undefined,
         remark: initial?.remark ?? undefined,
         ...uiFormFieldsFromCampaign(initial?.ui),
       }}
@@ -423,7 +457,7 @@ function CampaignForm(props: {
           client,
           enabled: true,
         }));
-        const type = raw.type as "daily_claim" | "lottery";
+        const type = raw.type as "daily_claim" | "lottery" | "invite_milestone";
         const hours = Number(raw.rewardHours) || 2;
         const toIso = (v: unknown) => {
           if (v == null || v === "") return null;
@@ -467,37 +501,74 @@ function CampaignForm(props: {
             button_text_i18n: i18nFromValues(raw, "button"),
           },
           rules: {
-            limitPerUserPerDay: Math.max(1, Number(raw.limitPerUserPerDay) || 1),
-            limitPerUserTotal:
-              raw.limitPerUserTotal == null || raw.limitPerUserTotal === ""
-                ? null
-                : Number(raw.limitPerUserTotal),
             audience: audienceOut,
-            ...(type === "lottery"
+            ...(type === "invite_milestone"
               ? {
-                  lottery: {
-                    winRateBps: Math.round(Number(raw.winRatePercent || 0) * 100),
-                    maxWinsPerDayGlobal:
-                      raw.maxWinsPerDayGlobal == null ||
-                      raw.maxWinsPerDayGlobal === ""
-                        ? null
-                        : Number(raw.maxWinsPerDayGlobal),
+                  invite: {
+                    requiredCount: Math.max(
+                      1,
+                      Number(raw.inviteRequiredCount) || 1,
+                    ),
+                    grantMode:
+                      raw.inviteGrantMode === "claim" ? "claim" : "auto",
+                    inviteeRequirements: {
+                      paid: Boolean(raw.inviteReqPaid),
+                      hasSubscription: Boolean(raw.inviteReqSubscription),
+                      hasTraffic: Boolean(raw.inviteReqTraffic),
+                      minTrafficBytes:
+                        raw.inviteMinTrafficBytes == null ||
+                        raw.inviteMinTrafficBytes === ""
+                          ? null
+                          : Number(raw.inviteMinTrafficBytes),
+                    },
                   },
                 }
-              : {}),
+              : {
+                  limitPerUserPerDay: Math.max(
+                    1,
+                    Number(raw.limitPerUserPerDay) || 1,
+                  ),
+                  limitPerUserTotal:
+                    raw.limitPerUserTotal == null ||
+                    raw.limitPerUserTotal === ""
+                      ? null
+                      : Number(raw.limitPerUserTotal),
+                  ...(type === "lottery"
+                    ? {
+                        lottery: {
+                          winRateBps: Math.round(
+                            Number(raw.winRatePercent || 0) * 100,
+                          ),
+                          maxWinsPerDayGlobal:
+                            raw.maxWinsPerDayGlobal == null ||
+                            raw.maxWinsPerDayGlobal === ""
+                              ? null
+                              : Number(raw.maxWinsPerDayGlobal),
+                        },
+                      }
+                    : {}),
+                }),
           },
           clients:
             clients.length > 0
               ? clients
               : CLIENTS.map((c) => ({ client: c.value, enabled: true })),
           packageIds: (raw.packageIds as string[]) || [],
-          rewards: [
-            {
-              kind: "vpn_duration",
-              validitySeconds: Math.round(hours * 3600),
-              stackMode: raw.stackMode || "create_campaign_slot",
-            },
-          ],
+          rewards:
+            type === "invite_milestone"
+              ? [
+                  {
+                    kind: "vpn_plan",
+                    planId: raw.rewardPlanId || null,
+                  },
+                ]
+              : [
+                  {
+                    kind: "vpn_duration",
+                    validitySeconds: Math.round(hours * 3600),
+                    stackMode: raw.stackMode || "create_campaign_slot",
+                  },
+                ],
         };
         return props.onFinish(body);
       }}
@@ -591,6 +662,7 @@ function CampaignForm(props: {
           options={[
             { value: "daily_claim", label: "每日领取" },
             { value: "lottery", label: "抽奖" },
+            { value: "invite_milestone", label: "邀请达标" },
           ]}
           rules={[{ required: true }]}
         />
@@ -612,11 +684,25 @@ function CampaignForm(props: {
         时间窗
       </Divider>
       <Space style={{ display: "flex" }} size="middle" wrap>
-        <ProFormDateTimePicker
-          name="startAt"
-          label="开始时间"
-          fieldProps={{ format: "YYYY-MM-DD HH:mm:ss", style: { width: 220 } }}
-        />
+        <ProFormDependency name={["type"]}>
+          {({ type }) => (
+            <ProFormDateTimePicker
+              name="startAt"
+              label="开始时间"
+              extra={
+                type === "invite_milestone"
+                  ? "邀请达标必须填写：只统计此后新注册的直邀"
+                  : undefined
+              }
+              rules={
+                type === "invite_milestone"
+                  ? [{ required: true, message: "邀请达标活动必须设置开始时间" }]
+                  : undefined
+              }
+              fieldProps={{ format: "YYYY-MM-DD HH:mm:ss", style: { width: 220 } }}
+            />
+          )}
+        </ProFormDependency>
         <ProFormDateTimePicker
           name="endAt"
           label="结束时间"
@@ -629,69 +715,129 @@ function CampaignForm(props: {
         extra="用于每日次数重置，例如 Asia/Shanghai"
       />
 
-      <Divider orientation="left" plain>
-        奖励与频次
-      </Divider>
-      <ProFormDigit
-        name="rewardHours"
-        label="奖励时长（小时）"
-        min={0.1}
-        fieldProps={{ step: 0.5 }}
-        rules={[{ required: true }]}
-      />
       <ProFormDependency name={["type"]}>
         {({ type }) =>
-          type === "lottery" ? (
+          type === "invite_milestone" ? (
             <>
+              <Divider orientation="left" plain>
+                邀请达标
+              </Divider>
               <ProFormDigit
-                name="winRatePercent"
-                label="中奖率 %"
-                min={0}
-                max={100}
-                fieldProps={{ step: 1 }}
-                rules={[{ required: true, message: "请填写中奖率" }]}
-              />
-              <ProFormDigit
-                name="maxWinsPerDayGlobal"
-                label="全站每日中奖上限（可选）"
+                name="inviteRequiredCount"
+                label="邀请人数 N"
                 min={1}
                 fieldProps={{ precision: 0 }}
+                rules={[{ required: true, message: "请填写邀请人数" }]}
+              />
+              <ProFormSelect
+                name="inviteGrantMode"
+                label="发放方式"
+                options={[
+                  { value: "auto", label: "达标自动开通" },
+                  { value: "claim", label: "用户手动领取" },
+                ]}
+                rules={[{ required: true }]}
+              />
+              <ProFormSelect
+                name="rewardPlanId"
+                label="奖励套餐"
+                options={plans.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} (${p.code})`,
+                }))}
+                rules={[{ required: true, message: "请选择奖励套餐" }]}
+              />
+              <Divider orientation="left" plain>
+                被邀请人须同时满足
+              </Divider>
+              <ProFormSwitch
+                name="inviteReqPaid"
+                label="已付费"
+                extra="有实付订单（金额大于 0 且已支付/已开通）"
+              />
+              <ProFormSwitch
+                name="inviteReqSubscription"
+                label="已开通订阅"
+                extra="任意订阅槽位，含免费领取 / 活动赠送"
+              />
+              <ProFormSwitch
+                name="inviteReqTraffic"
+                label="已产生流量"
+                extra="用量来自订阅同步缓存，不是秒级实时"
+              />
+              <ProFormDigit
+                name="inviteMinTrafficBytes"
+                label="最低流量（字节，可选）"
+                min={1}
+                fieldProps={{ precision: 0 }}
+                extra="填写后隐含「已产生流量」，合计 usedTrafficBytes ≥ 该值"
               />
             </>
-          ) : null
+          ) : (
+            <>
+              <Divider orientation="left" plain>
+                奖励与频次
+              </Divider>
+              <ProFormDigit
+                name="rewardHours"
+                label="奖励时长（小时）"
+                min={0.1}
+                fieldProps={{ step: 0.5 }}
+                rules={[{ required: true }]}
+              />
+              {type === "lottery" ? (
+                <>
+                  <ProFormDigit
+                    name="winRatePercent"
+                    label="中奖率 %"
+                    min={0}
+                    max={100}
+                    fieldProps={{ step: 1 }}
+                    rules={[{ required: true, message: "请填写中奖率" }]}
+                  />
+                  <ProFormDigit
+                    name="maxWinsPerDayGlobal"
+                    label="全站每日中奖上限（可选）"
+                    min={1}
+                    fieldProps={{ precision: 0 }}
+                  />
+                </>
+              ) : null}
+              <Space style={{ display: "flex" }} size="middle" wrap>
+                <ProFormDigit
+                  name="limitPerUserPerDay"
+                  label="每人每日次数"
+                  min={1}
+                  max={50}
+                  fieldProps={{ precision: 0 }}
+                  rules={[{ required: true }]}
+                />
+                <ProFormDigit
+                  name="limitPerUserTotal"
+                  label="每人总次数（空=不限）"
+                  min={1}
+                  fieldProps={{ precision: 0 }}
+                />
+              </Space>
+              <ProFormSelect
+                name="stackMode"
+                label="发放方式"
+                options={[
+                  {
+                    value: "create_campaign_slot",
+                    label: "新建活动槽（推荐：新用户/已过期）",
+                  },
+                  {
+                    value: "extend_active",
+                    label: "仅叠加到当前仍有效的槽（不会复活已过期套餐）",
+                  },
+                ]}
+                extra="新用户每日福利请用「新建活动槽」，避免挂上旧套餐名"
+              />
+            </>
+          )
         }
       </ProFormDependency>
-      <Space style={{ display: "flex" }} size="middle" wrap>
-        <ProFormDigit
-          name="limitPerUserPerDay"
-          label="每人每日次数"
-          min={1}
-          max={50}
-          fieldProps={{ precision: 0 }}
-          rules={[{ required: true }]}
-        />
-        <ProFormDigit
-          name="limitPerUserTotal"
-          label="每人总次数（空=不限）"
-          min={1}
-          fieldProps={{ precision: 0 }}
-        />
-      </Space>
-      <ProFormSelect
-        name="stackMode"
-        label="发放方式"
-        options={[
-          {
-            value: "create_campaign_slot",
-            label: "新建活动槽（推荐：新用户/已过期）",
-          },
-          {
-            value: "extend_active",
-            label: "仅叠加到当前仍有效的槽（不会复活已过期套餐）",
-          },
-        ]}
-        extra="新用户每日福利请用「新建活动槽」，避免挂上旧套餐名"
-      />
 
       <Divider orientation="left" plain>
         端 / 包
