@@ -123,7 +123,7 @@ export default function PromoPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [qrOpen]);
 
-  async function copy(text: string, key: string) {
+  async function copyText(text: string, key: string) {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -201,7 +201,7 @@ export default function PromoPage() {
                           type="button"
                           className="btn btn-secondary"
                           style={{ minHeight: 36, padding: "0 12px", fontSize: 13 }}
-                          onClick={() => void copy(tools.invite_code, "code")}
+                          onClick={() => void copyText(tools.invite_code, "code")}
                         >
                           {copied === "code" ? copy.common.copied : copy.common.copy}
                         </button>
@@ -213,7 +213,7 @@ export default function PromoPage() {
                           <button
                             type="button"
                             className="promo-link-copy"
-                            onClick={() => void copy(webInviteUrl(tools), "web")}
+                            onClick={() => void copyText(webInviteUrl(tools), "web")}
                           >
                             {copied === "web" ? copy.common.copied : copy.common.copy}
                           </button>
@@ -226,7 +226,7 @@ export default function PromoPage() {
                           type="button"
                           className="btn btn-primary btn-block"
                           style={{ minHeight: 44 }}
-                          onClick={() => void copy(webInviteUrl(tools), "web")}
+                          onClick={() => void copyText(webInviteUrl(tools), "web")}
                         >
                           {copied === "web" ? copy.promo.copiedLink : copy.promo.copyLink}
                         </button>

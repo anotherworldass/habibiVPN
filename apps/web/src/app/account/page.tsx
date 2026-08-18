@@ -10,8 +10,6 @@ import { clearToken, getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { useLocale } from "../../components/LocaleProvider";
 import { t } from "../../lib/copy";
-import { useLocale } from "../../components/LocaleProvider";
-import { t } from "../../lib/copy";
 
 type Me = {
   id: string;
