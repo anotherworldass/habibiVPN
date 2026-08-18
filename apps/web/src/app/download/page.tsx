@@ -6,11 +6,7 @@ import Link from "../../components/LocaleLink";
 import { useLocale } from "../../components/LocaleProvider";
 import Shell from "../../components/Shell";
 import { t } from "../../lib/copy";
-import {
-  downloadPlatforms,
-  isPlaceholderUrl,
-  site,
-} from "../../lib/site";
+import { downloadPlatforms, isPlaceholderUrl } from "../../lib/site";
 
 const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
   ios: (
@@ -69,12 +65,13 @@ export default function DownloadPage() {
             {downloadPlatforms.map((item) => {
               const href = item.url();
               const placeholder = isPlaceholderUrl(href);
+              const extra = platformCopy[item.id];
               return (
                 <div key={item.id} className="download-card">
                   <div className="download-card-icon">{icons[item.id]}</div>
                   <div className="download-card-copy">
                     <h2>{item.label}</h2>
-                    <p>{"hint" in platformCopy[item.id] ? platformCopy[item.id].hint : item.hint}</p>
+                    <p>{"hint" in extra ? extra.hint : item.hint}</p>
                   </div>
                   {placeholder ? (
                     <button
