@@ -440,8 +440,10 @@ VPN 连接：**不要**用 `/nodes` 拨号；用订阅里的 `subscription_url` 
 { "signed_transaction": "<StoreKit JWS 或 mock:productId:txId>" }
 ```
 
-本地：`APPLE_IAP_MODE=mock`。  
-TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationData`（JWS）；调试可加 `--dart-define=APPLE_IAP_MOCK=true` 跳过商店直接走 mock 票据。
+本地：`APPLE_IAP_MODE=mock`（进程级，只放 env；不要做到马甲上）。  
+上线：`APPLE_IAP_MODE=live`。`live` 拒 `mock:` / JSON 假票，仍接受审核沙盒的真 JWS。  
+Bundle 不读 env：JWS `bundleId` 必须等于该用户项目下已启用的 iOS / `ios_appstore` 马甲 `packageName`（Admin「App 包名 / 马甲」）。未登记则 `iap.bundle_mismatch`。  
+TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationData`（JWS）；调试可加 `--dart-define=APPLE_IAP_MOCK=true`，票据格式 `mock:<productId>:<txId>[:bundleId]`。
 
 ### Google
 
@@ -449,12 +451,13 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 {
   "product_id": "sku_month",
   "purchase_token": "mock:sku_month:GPA.123",
-  "package_name": "可选，默认用服务端 GOOGLE_IAP_PACKAGE_NAME"
+  "package_name": "可选；须为该用户项目下已启用的 Android / Play 马甲包名"
 }
 ```
 
 本地：`GOOGLE_IAP_MODE=mock`。  
-上线：`live` + `GOOGLE_IAP_SERVICE_ACCOUNT_JSON`。
+上线：`live` + `GOOGLE_IAP_SERVICE_ACCOUNT_JSON`。  
+`package_name` 省略时用项目主 Android / Play 马甲；传入但不属于该项目则 `iap.package_mismatch`。不再使用 `GOOGLE_IAP_PACKAGE_NAME`。
 
 成功：`{ "order": {...}, "created": true|false }`（幂等）。
 
@@ -825,9 +828,10 @@ Admin（`/admin/v1/telegram/*`，需选项目）：
 
 | 变量 | 用途 |
 | --- | --- |
-| `APPLE_IAP_MODE` | `mock` / `live` |
-| `GOOGLE_IAP_MODE` | `mock` / `live` |
-| `GOOGLE_IAP_PACKAGE_NAME` | 默认包名 |
+| `APPLE_IAP_MODE` | 进程级 `mock` / `live`（拒假票）。本机 mock，线上 live。不下放马甲 |
+| `GOOGLE_IAP_MODE` | 同上 |
+| `APPLE_IAP_BUNDLE_ID` | 已废弃，忽略。改用 Admin 马甲 `packageName` |
+| `GOOGLE_IAP_PACKAGE_NAME` | 已废弃，忽略。改用 Admin 马甲 `packageName` |
 | `GOOGLE_IAP_SERVICE_ACCOUNT_JSON` | Play 核销服务账号 |
 | `WEB_PUBLIC_ORIGIN` | 邀请链接域名 |
 | `PASSWORD_RESET_DEV_RETURN_CODE` | 开发是否返回重置码 |

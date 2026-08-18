@@ -6,6 +6,7 @@ import {
   type JWTPayload,
 } from "jose";
 import { env } from "../../config.js";
+import { rejectForgedTicketIfLive } from "./store-package-match.js";
 
 export const APP_STORE_PROVIDER = "app_store";
 
@@ -80,7 +81,7 @@ function payloadToTxn(payload: Record<string, unknown>): AppleTransactionInfo {
   };
 }
 
-/** mock:<productId>:<transactionId> or JSON mock payload */
+/** mock:<productId>:<transactionId>[:bundleId] or JSON mock payload */
 function parseMockTransaction(raw: string): AppleTransactionInfo {
   if (raw.startsWith("mock:")) {
     const parts = raw.split(":");
@@ -91,7 +92,7 @@ function parseMockTransaction(raw: string): AppleTransactionInfo {
       transactionId,
       originalTransactionId: transactionId,
       productId,
-      bundleId: env.APPLE_IAP_BUNDLE_ID || "com.example.habibi",
+      bundleId: parts[3]?.trim() || "",
       purchaseDate: new Date(),
       expiresDate: null,
       type: "Consumable",
@@ -116,7 +117,7 @@ function parseMockTransaction(raw: string): AppleTransactionInfo {
       transactionId,
       originalTransactionId: String(json.originalTransactionId || transactionId),
       productId,
-      bundleId: String(json.bundleId || env.APPLE_IAP_BUNDLE_ID || "com.example.habibi"),
+      bundleId: String(json.bundleId || ""),
       purchaseDate: msToDate(json.purchaseDate) || new Date(),
       expiresDate: msToDate(json.expiresDate),
       type: json.type != null ? String(json.type) : "Consumable",
@@ -180,19 +181,10 @@ export async function verifySignedTransaction(
     // In mock mode, still accept real JWS if provided (decode+verify when possible)
   }
 
-  if (env.APPLE_IAP_MODE === "live" && (raw.startsWith("mock:") || raw.startsWith("{"))) {
-    throw err("iap.mock_not_allowed_in_live", 400);
-  }
+  rejectForgedTicketIfLive(env.APPLE_IAP_MODE, raw);
 
   const payload = await verifyAppleJws(raw);
-  const txn = payloadToTxn(payload);
-
-  const expectedBundle = env.APPLE_IAP_BUNDLE_ID?.trim();
-  if (expectedBundle && txn.bundleId && txn.bundleId !== expectedBundle) {
-    throw err("iap.bundle_mismatch");
-  }
-
-  return txn;
+  return payloadToTxn(payload);
 }
 
 export type AppleAsnNotification = {
@@ -222,7 +214,7 @@ export async function parseAppleNotification(body: unknown): Promise<AppleAsnNot
           transactionId: String(txId),
           originalTransactionId: String(b.originalTransactionId || txId),
           productId,
-          bundleId: String(b.bundleId || env.APPLE_IAP_BUNDLE_ID || "com.example.habibi"),
+          bundleId: String(b.bundleId || ""),
           purchaseDate: msToDate(b.purchaseDate) || new Date(),
           expiresDate: msToDate(b.expiresDate),
           type: optionalString(b.type),

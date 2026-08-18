@@ -33,15 +33,23 @@ const schema = z.object({
   API_PUBLIC_ORIGIN: z.string().url().default("http://localhost:3001"),
   /** Optional dedicated key; JWT admin secret is used when omitted. */
   PAYMENT_CONFIG_ENCRYPTION_KEY: z.string().min(16).optional(),
-  /** Apple IAP: mock skips real JWS verify (local smoke). */
+  /**
+   * Process-wide Apple ticket policy. live = reject mock:/JSON forgeries.
+   * Do not put this on a 马甲 — production API is shared.
+   * Local/CI: mock. Production: live.
+   */
   APPLE_IAP_MODE: z.enum(["live", "mock"]).default("mock"),
+  /** @deprecated Ignored. Bundle is checked against AppPackage.packageName. */
   APPLE_IAP_BUNDLE_ID: z.string().optional(),
   APPLE_IAP_ISSUER_ID: z.string().optional(),
   APPLE_IAP_KEY_ID: z.string().optional(),
   APPLE_IAP_PRIVATE_KEY: z.string().optional(),
   APPLE_IAP_ENV: z.enum(["Sandbox", "Production"]).default("Sandbox"),
-  /** Google Play Billing: mock skips Publisher API (local smoke). */
+  /**
+   * Process-wide Play ticket policy. Same rule as APPLE_IAP_MODE: env only.
+   */
   GOOGLE_IAP_MODE: z.enum(["live", "mock"]).default("mock"),
+  /** @deprecated Ignored. Package is resolved from App 包名 / 马甲. */
   GOOGLE_IAP_PACKAGE_NAME: z.string().optional(),
   /** Service account JSON string (Android Publisher scope). */
   GOOGLE_IAP_SERVICE_ACCOUNT_JSON: z.string().optional(),

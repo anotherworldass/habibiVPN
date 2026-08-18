@@ -176,12 +176,10 @@ export async function verifyGooglePurchase(input: {
   if (!productId) throw err("iap.product_id_required");
   if (!purchaseToken) throw err("iap.purchase_token_required");
 
-  const packageName =
-    input.packageName?.trim() || env.GOOGLE_IAP_PACKAGE_NAME?.trim() || "";
-  if (!packageName && env.GOOGLE_IAP_MODE === "live") {
+  const pkg = input.packageName?.trim() || "";
+  if (!pkg) {
     throw err("iap.package_name_required");
   }
-  const pkg = packageName || "com.example.habibi";
 
   if (env.GOOGLE_IAP_MODE === "mock") {
     if (

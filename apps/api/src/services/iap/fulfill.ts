@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { CommissionKind } from "@prisma/client";
+import { env } from "../../config.js";
 import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { provisionPaidOrder, publicOrder } from "../payments.js";
@@ -15,6 +16,11 @@ import {
   type GooglePurchaseInfo,
   verifyGooglePurchase,
 } from "./google.js";
+import {
+  assertAppleBundleForProject,
+  resolveAndroidPackageNameForProject,
+  resolveAppleBundleForMockProject,
+} from "./store-package.js";
 import {
   amountCentsFromAppleTxn,
   amountCentsFromGooglePurchase,
@@ -111,6 +117,12 @@ export async function fulfillAppleTransaction(input: {
     return resumeExisting(existing);
   }
 
+  let bundleId = input.txn.bundleId?.trim() || "";
+  if (!bundleId && env.APPLE_IAP_MODE === "mock") {
+    bundleId = (await resolveAppleBundleForMockProject(user.projectId)) || "";
+  }
+  await assertAppleBundleForProject(user.projectId, bundleId);
+
   const { plan } = await resolvePlanByStoreProductId(input.txn.productId);
   if (plan.projectId !== user.projectId) {
     throw Object.assign(new Error("plan.project_mismatch"), { statusCode: 403 });
@@ -168,6 +180,7 @@ export async function fulfillAppleTransaction(input: {
       transactionId: input.txn.transactionId,
       provider_ref: providerRef,
       productId: input.txn.productId,
+      bundleId,
       originalTransactionId: input.txn.originalTransactionId,
       is_trial: trial,
       amount_cents: amountCents,
@@ -221,6 +234,11 @@ export async function fulfillGooglePurchase(input: {
     }
     return { order: publicOrder(existing), created: false };
   }
+
+  await resolveAndroidPackageNameForProject(
+    user.projectId,
+    input.purchase.packageName,
+  );
 
   const { plan } = await resolvePlanByStoreProductId(
     input.purchase.productId,
@@ -283,10 +301,18 @@ export async function verifyAndFulfillGoogleIap(input: {
   purchaseToken: string;
   packageName?: string | null;
 }) {
+  const user = await prisma.user.findUnique({ where: { id: input.userId } });
+  if (!user) {
+    throw Object.assign(new Error("user.not_found"), { statusCode: 404 });
+  }
+  const packageName = await resolveAndroidPackageNameForProject(
+    user.projectId,
+    input.packageName,
+  );
   const purchase = await verifyGooglePurchase({
     productId: input.productId,
     purchaseToken: input.purchaseToken,
-    packageName: input.packageName,
+    packageName,
   });
   return fulfillGooglePurchase({ userId: input.userId, purchase });
 }

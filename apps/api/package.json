@@ -11,7 +11,8 @@
     "prisma:migrate": "pnpm exec prisma migrate dev",
     "prisma:deploy": "pnpm exec prisma migrate deploy",
     "prisma:studio": "pnpm exec prisma studio",
-    "wireraw:smoke": "tsx scripts/wireraw-smoke.ts"
+    "wireraw:smoke": "tsx scripts/wireraw-smoke.ts",
+    "test": "tsx --test src/services/iap/store-package.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1100.0",
