@@ -575,9 +575,9 @@ next build 没有执行，或者构建中途失败。
 脚本逻辑：
 
     git fetch
-    与远程一致 → 直接退出
-    有新提交 → git pull --ff-only
-    在空闲槽（blue↔green）构建并启动
+    落后远程 → git pull --ff-only
+    HEAD 已等于 .deploy-rev（上次成功切槽的提交）→ 直接退出
+    否则在空闲槽（blue↔green）构建并启动
     等新槽 /health/ready
     写入 OpenResty upstream → nginx -t → reload
     排空数秒后停旧槽

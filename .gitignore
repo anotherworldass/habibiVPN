@@ -29,6 +29,7 @@ apps/api/data/support-uploads/
 # deploy lock / active slot (scripts/deploy-prod.sh)
 .deploy.lock
 .deploy-slot
+.deploy-rev
 
 # logs / ide
 logs

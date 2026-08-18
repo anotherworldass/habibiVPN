@@ -20,6 +20,7 @@ if [[ ! -f .env ]]; then
 fi
 
 SLOT_FILE="$ROOT/.deploy-slot"
+REV_FILE="$ROOT/.deploy-rev"
 UPSTREAM_SRC="$ROOT/deploy/openresty/habibi-upstreams.conf"
 EDGE_CONF="$ROOT/deploy/nginx-edge.conf"
 EDGE_COMPOSE="$ROOT/docker-compose.edge.yml"
@@ -413,14 +414,22 @@ else
     remote_rev="$(git rev-parse "origin/${branch}")"
   fi
   if [[ "$local_rev" != "$remote_rev" ]]; then
-    echo "[deploy] ${local_rev:0:8} -> ${remote_rev:0:8}"
+    echo "[deploy] git ${local_rev:0:8} -> ${remote_rev:0:8}"
     git pull --ff-only
+    local_rev="$(git rev-parse HEAD)"
+  fi
+  deployed_rev=""
+  if [[ -f "$REV_FILE" ]]; then
+    deployed_rev="$(tr -d '[:space:]' < "$REV_FILE")"
+  fi
+  if [[ -z "$deployed_rev" || "$local_rev" != "$deployed_rev" ]]; then
+    echo "[deploy] live ${deployed_rev:0:8} -> ${local_rev:0:8}"
     need_build=1
   fi
 fi
 
 if [[ "$need_build" -eq 0 ]]; then
-  echo "[deploy] already up to date"
+  echo "[deploy] already up to date (${local_rev:0:8} live)"
   exit 0
 fi
 
@@ -468,6 +477,7 @@ if [[ "$live" == "none" ]]; then
     sync_edge "$target" || true
   fi
   printf '%s\n' "$target" > "$SLOT_FILE"
+  git rev-parse HEAD > "$REV_FILE" 2>/dev/null || true
   compose "$target" ps
   echo "[deploy] first slot $target is live"
   exit 0
@@ -488,5 +498,6 @@ else
 fi
 
 printf '%s\n' "$target" > "$SLOT_FILE"
+git rev-parse HEAD > "$REV_FILE" 2>/dev/null || true
 compose "$target" ps
 echo "[deploy] switched $live -> $target"
