@@ -27,36 +27,45 @@ export default function LanguageSwitch({
 
   return (
     <div
-      className={`legal-lang-switch lang-switch lang-switch--${variant}`}
+      className={`lang-switch lang-switch--${variant}${variant === "topbar" ? " legal-lang-switch" : ""}`}
       role="group"
       aria-label={copy.nav.langAria}
     >
-      {SITE_LOCALES.map((item) => {
+      {SITE_LOCALES.map((item, index) => {
         const active = locale === item;
         const label = item === "zh" ? copy.nav.zh : copy.nav.en;
-        if (invite) {
-          return (
-            <button
-              key={item}
-              type="button"
-              className={active ? "is-active" : undefined}
-              onClick={() => setLocale(item)}
-            >
-              {label}
-            </button>
-          );
-        }
-        return (
+        const className = active ? "is-active" : undefined;
+        const control = invite ? (
+          <button
+            key={item}
+            type="button"
+            className={className}
+            onClick={() => setLocale(item)}
+          >
+            {label}
+          </button>
+        ) : (
           <a
             key={item}
             href={hrefFor(item)}
-            className={active ? "is-active" : undefined}
+            className={className}
             hrefLang={item === "zh" ? "zh-CN" : "en"}
             aria-current={active ? "page" : undefined}
           >
             {label}
           </a>
         );
+        if (variant === "footer" && index > 0) {
+          return (
+            <span key={item} className="lang-switch-pair">
+              <span className="lang-switch-sep" aria-hidden>
+                ·
+              </span>
+              {control}
+            </span>
+          );
+        }
+        return control;
       })}
     </div>
   );

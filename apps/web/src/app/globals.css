@@ -1883,17 +1883,47 @@ input {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
-.footer-mini-links .lang-switch--footer {
-  margin-left: 2px;
+.lang-switch--footer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
 }
 
-.footer-mini-links .legal-lang-switch a {
+.lang-switch--footer a,
+.lang-switch--footer button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.lang-switch--footer a:hover,
+.lang-switch--footer button:hover {
+  color: var(--teal-deep);
+}
+
+.lang-switch--footer a.is-active,
+.lang-switch--footer button.is-active {
+  color: var(--ink);
   font-weight: 700;
 }
 
-.footer-mini-links .legal-lang-switch a.is-active {
-  color: var(--teal-deep);
+.lang-switch-pair {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lang-switch-sep {
+  margin: 0 8px;
+  color: var(--muted);
+  opacity: 0.55;
 }
 
 .footer-mini {

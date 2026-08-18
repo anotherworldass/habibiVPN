@@ -118,10 +118,10 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
             {item.label}
           </Link>
         ))}
-        <Suspense fallback={null}>
-          <LanguageSwitch variant="footer" />
-        </Suspense>
       </nav>
+      <Suspense fallback={null}>
+        <LanguageSwitch variant="footer" />
+      </Suspense>
       {appVersion ? (
         <span className="footer-mini-version">{appVersion}</span>
       ) : null}
