@@ -32,9 +32,13 @@ type PlanGroup = {
   sort_order?: number;
 };
 
-function formatBytes(n?: number | null): { value: string; unit: string } | null {
+function formatBytes(
+  n: number | null | undefined,
+  unlimited: string,
+  traffic: string,
+): { value: string; unit: string } | null {
   if (n == null) return null;
-  if (n === 0) return { value: "不限", unit: "流量" };
+  if (n === 0) return { value: unlimited, unit: traffic };
   const gb = n / 1024 ** 3;
   if (gb >= 1) {
     return {
@@ -45,26 +49,34 @@ function formatBytes(n?: number | null): { value: string; unit: string } | null 
   return { value: (n / 1024 ** 2).toFixed(0), unit: "MB" };
 }
 
-function formatDays(sec?: number | null): { value: string; unit: string } | null {
+function formatDays(
+  sec: number | null | undefined,
+  days: string,
+  hours: string,
+): { value: string; unit: string } | null {
   if (sec == null) return null;
-  if (sec % 86400 === 0) return { value: String(sec / 86400), unit: "天" };
-  if (sec % 3600 === 0) return { value: String(sec / 3600), unit: "小时" };
+  if (sec % 86400 === 0) return { value: String(sec / 86400), unit: days };
+  if (sec % 3600 === 0) return { value: String(sec / 3600), unit: hours };
   return null;
 }
 
 function PlanSpecs({
   days,
   traffic,
+  durationLabel,
+  trafficLabel,
 }: {
   days: { value: string; unit: string } | null;
   traffic: { value: string; unit: string } | null;
+  durationLabel: string;
+  trafficLabel: string;
 }) {
   if (!days && !traffic) return null;
   return (
     <p className="plan-specs">
       {days ? (
         <span>
-          时长{" "}
+          {durationLabel}{" "}
           <strong>
             {days.value}
             <small>{days.unit}</small>
@@ -74,7 +86,7 @@ function PlanSpecs({
       {days && traffic ? <span className="plan-specs-sep" aria-hidden>·</span> : null}
       {traffic ? (
         <span>
-          流量{" "}
+          {trafficLabel}{" "}
           <strong>
             {traffic.value}
             <small>{traffic.unit}</small>
@@ -96,7 +108,8 @@ function FreePlanCards({
   claiming: string | null;
   onClaim: (id: string) => void;
 }) {
-  const plansCopy = t(useLocale()).plans;
+  const messages = t(useLocale());
+  const plansCopy = messages.plans;
   if (!plans.length) return null;
   return (
     <section className="plans-section">
@@ -106,15 +119,28 @@ function FreePlanCards({
       </div>
       <div className="plans-grid">
         {plans.map((p) => {
-          const traffic = formatBytes(p.data_limit_bytes);
-          const days = formatDays(p.validity_seconds);
+          const traffic = formatBytes(
+            p.data_limit_bytes,
+            messages.common.unlimited,
+            messages.common.traffic,
+          );
+          const days = formatDays(
+            p.validity_seconds,
+            messages.common.days,
+            messages.common.hours,
+          );
           return (
             <article key={p.id} className="plan-card plan-card--free">
               <span className="plan-badge plan-badge--free">{plansCopy.freeBadge}</span>
               <div className="plan-card-main">
                 <h3 className="plan-card-title">{p.name}</h3>
                 <div className="plan-price plan-price--free">¥0</div>
-                <PlanSpecs days={days} traffic={traffic} />
+                <PlanSpecs
+                  days={days}
+                  traffic={traffic}
+                  durationLabel={plansCopy.duration}
+                  trafficLabel={plansCopy.traffic}
+                />
                 {p.description ? (
                   <p className="plan-card-desc">{p.description}</p>
                 ) : null}
@@ -135,7 +161,7 @@ function FreePlanCards({
                     disabled={claiming === p.id}
                     onClick={() => onClaim(p.id)}
                   >
-                    {claiming === p.id ? "开通中…" : "免费领取"}
+                    {claiming === p.id ? messages.common.claiming : plansCopy.freeBadge}
                   </button>
                 )}
               </div>
@@ -158,24 +184,34 @@ function PaidPlanCards({
   showEmpty: boolean;
   freeCount: number;
 }) {
+  const messages = t(useLocale());
+  const plansCopy = messages.plans;
   return (
     <section className="plans-section">
       <div className="plans-section-head">
-        <h2>套餐</h2>
-        <p>支付成功后自动开通</p>
+        <h2>{plansCopy.paidTitle}</h2>
+        <p>{plansCopy.paidLead}</p>
       </div>
 
       {showEmpty && plans.length === 0 && (
         <div className="plans-empty">
-          暂无付费套餐
-          {freeCount > 0 ? "，可先领取上方免费试用" : ""}
+          {plansCopy.paidEmpty}
+          {freeCount > 0 ? plansCopy.paidEmptyFree : ""}
         </div>
       )}
 
       <div className="plans-grid">
         {plans.map((p) => {
-          const traffic = formatBytes(p.data_limit_bytes);
-          const days = formatDays(p.validity_seconds);
+          const traffic = formatBytes(
+            p.data_limit_bytes,
+            messages.common.unlimited,
+            messages.common.traffic,
+          );
+          const days = formatDays(
+            p.validity_seconds,
+            messages.common.days,
+            messages.common.hours,
+          );
           const dailyPrice =
             p.validity_seconds && p.validity_seconds > 0
               ? p.price_cents / 100 / (p.validity_seconds / 86400)
@@ -190,10 +226,15 @@ function PaidPlanCards({
                 </div>
                 {dailyPrice != null ? (
                   <p className="plan-price-daily">
-                    约 {dailyPrice.toFixed(2)} {p.currency} / 天
+                    {plansCopy.perDay(dailyPrice.toFixed(2), p.currency)}
                   </p>
                 ) : null}
-                <PlanSpecs days={days} traffic={traffic} />
+                <PlanSpecs
+                  days={days}
+                  traffic={traffic}
+                  durationLabel={plansCopy.duration}
+                  trafficLabel={plansCopy.traffic}
+                />
                 {p.description ? (
                   <p className="plan-card-desc">{p.description}</p>
                 ) : null}
@@ -207,7 +248,7 @@ function PaidPlanCards({
                   }
                   className="btn btn-primary"
                 >
-                  立即购买
+                  {plansCopy.buyNow}
                 </Link>
               </div>
             </article>
@@ -219,6 +260,8 @@ function PaidPlanCards({
 }
 
 function PlansContent() {
+  const messages = t(useLocale());
+  const plansCopy = messages.plans;
   const router = useLocaleRouter();
   const search = useSearchParams();
   const welcome = search.get("welcome") === "1";
@@ -242,7 +285,7 @@ function PlansContent() {
         const visible = gs.filter((g) => list.some((p) => p.group_id === g.id));
         if (visible.length) setActiveGroup(visible[0]!.id);
       })
-      .catch((e) => setError(friendlyError(e, "加载失败")))
+      .catch((e) => setError(friendlyError(e, messages.common.loadFailed)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -268,7 +311,7 @@ function PlansContent() {
           : "/subscription?claimed=1",
       );
     } catch (e) {
-      setError(friendlyError(e, "领取失败"));
+      setError(friendlyError(e, messages.common.claimFailed));
     } finally {
       setClaiming(null);
     }
@@ -298,7 +341,7 @@ function PlansContent() {
     ? [
         ...visibleGroups.map((g) => ({ id: g.id, name: g.name })),
         ...(ungrouped.length
-          ? [{ id: "__ungrouped__", name: "其他" }]
+          ? [{ id: "__ungrouped__", name: plansCopy.other }]
           : []),
       ]
     : [];
@@ -308,19 +351,19 @@ function PlansContent() {
       <div className="plans-page">
         <div className="page-head plans-page-head">
           <div>
-            <h1>套餐</h1>
+            <h1>{plansCopy.title}</h1>
             <p className="plans-page-lead-mobile">
-              先看时长与流量，再决定领取或购买。
+              {plansCopy.leadMobile}
             </p>
           </div>
           <p className="plans-page-lead-desktop">
-            开通后可在「连接」复制订阅链接
+            {plansCopy.leadDesktop}
           </p>
         </div>
 
         {welcome && (
           <p className="alert-ok" style={{ marginTop: 12 }}>
-            注册成功。先领取免费试用，马上就能导入客户端。
+            {plansCopy.welcome}
           </p>
         )}
         {error && (
@@ -329,7 +372,7 @@ function PlansContent() {
           </p>
         )}
 
-        {loading && <p className="plans-loading">加载套餐中…</p>}
+        {loading && <p className="plans-loading">{plansCopy.loading}</p>}
 
         {!loading && showGroups && tabItems.length > 0 && (
           <div className="plans-group-tabs" role="tablist">
@@ -349,7 +392,7 @@ function PlansContent() {
         )}
 
         {!loading && !error && plans.length === 0 && (
-          <div className="plans-empty">暂无上架套餐</div>
+          <div className="plans-empty">{plansCopy.empty}</div>
         )}
 
         {!loading && freePlans.length > 0 && (
@@ -391,9 +434,9 @@ function PlansContent() {
               </svg>
             </span>
             <span className="plans-invite-body">
-              <span className="plans-invite-title">邀请好友得奖励</span>
+              <span className="plans-invite-title">{plansCopy.inviteTitle}</span>
               <span className="plans-invite-desc">
-                分享邀请链接，好友付费你拿佣金
+                {plansCopy.inviteDesc}
               </span>
             </span>
             <span className="plans-invite-chevron" aria-hidden>
@@ -411,7 +454,7 @@ export default function PlansPage() {
     <Suspense
       fallback={
         <Shell>
-          <p className="plans-loading">加载中…</p>
+          <p className="plans-loading">{t(useLocale()).common.loading}</p>
         </Shell>
       }
     >

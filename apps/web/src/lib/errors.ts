@@ -1,4 +1,6 @@
-const MAP: Record<string, string> = {
+import { resolveSiteLocale } from "./locale";
+
+const MAP_ZH: Record<string, string> = {
   "auth.email_taken": "该邮箱已注册，请直接登录",
   "auth.email_unverified": "邮箱尚未验证，暂不能用密码登录，请先完成邮箱验证",
   "auth.verify_code_required": "请先获取并填写邮箱验证码",
@@ -46,7 +48,66 @@ const MAP: Record<string, string> = {
   "support.empty_message": "消息不能为空",
 };
 
-export function friendlyError(err: unknown, fallback = "操作失败，请稍后重试") {
+const MAP_EN: Record<string, string> = {
+  "auth.email_taken": "This email is already registered. Please sign in.",
+  "auth.email_unverified":
+    "Email not verified. Use a verification code before signing in with a password.",
+  "auth.verify_code_required": "Get and enter the email verification code first",
+  "auth.already_registered": "This account already has an email. Please sign in.",
+  "auth.invalid_credentials": "Incorrect email or password",
+  "auth.user_disabled": "Account disabled. Contact support.",
+  "auth.verify_code_invalid": "Invalid or expired code",
+  "auth.reset_code_invalid": "Invalid or expired code",
+  "auth.code_cooldown": "Code sent too often. Try again later.",
+  "mail.ses.not_configured": "Email is not configured. Try later or contact support.",
+  "auth.anonymous_no_password": "Bind an email before changing the password",
+  "auth.password_unchanged": "New password must be different",
+  "plan.not_found": "Plan not found or unavailable",
+  "plan.not_free_claimable": "This plan cannot be claimed for free",
+  "subscription.plan_already_owned": "You already have this plan",
+  "subscription.not_found": "Subscription not found",
+  "subscription.upstream_missing": "Subscription is not bound yet and cannot be refreshed",
+  "subscription.refresh_no_url":
+    "Refresh succeeded but no new link was returned. Reload the page later.",
+  "user.not_found": "User not found",
+  "user.disabled": "Account disabled",
+  "invite.code_invalid":
+    "Invalid invite code. Leave it blank if you don't have one.",
+  "invite.code_length_invalid": "Invite codes are 3–8 characters. Leave blank if none.",
+  "invite.code_format_invalid":
+    "Invite codes are 3–8 letters or numbers. Leave blank if none.",
+  "invite.inviter_disabled": "This invite code is disabled. Leave blank or try another.",
+  "invite.self_invite": "You can't use your own invite code.",
+  "invite.already_bound": "Invite is already bound",
+  "invite.cross_project_forbidden": "This invite code is not for this site.",
+  "invite.cycle_forbidden": "Invalid invite relationship. Leave blank or try another.",
+  "referral.disabled": "Referrals are temporarily off",
+  "promo.disabled": "Referral access is disabled",
+  "withdraw.below_minimum": "Below the minimum withdrawal",
+  "withdraw.insufficient_balance": "Insufficient withdrawable balance",
+  "withdraw.method_not_allowed": "This withdrawal method is not supported",
+  "withdraw.fee_too_high": "Fee is too high. Adjust the amount.",
+  "payment.channel_unavailable": "This payment channel is unavailable",
+  "payment.currency_unsupported": "This plan currency cannot be paid online yet",
+  "payment.amount_out_of_range": "Amount is outside this channel's limits",
+  "payment.provider_not_configured": "Payments are not fully configured",
+  "payment.create_failed": "Couldn't create the payment. Try again later.",
+  "payment.remote_failed": "The payment provider marked this order as failed",
+  "order.not_found": "Order not found",
+  "support.unsafe_content":
+    "Message contains unsafe content. Remove it and send again.",
+  "support.rate_limited": "Sending too fast. Try again later.",
+  "support.empty_message": "Message cannot be empty",
+};
+
+export function friendlyError(err: unknown, fallback?: string) {
+  const locale = resolveSiteLocale();
+  const map = locale === "en" ? MAP_EN : MAP_ZH;
+  const defaultFallback =
+    fallback ??
+    (locale === "en"
+      ? "Something went wrong. Please try again."
+      : "操作失败，请稍后重试");
   const raw = err instanceof Error ? err.message : String(err || "");
-  return MAP[raw] || (raw.startsWith("http.") ? fallback : raw || fallback);
+  return map[raw] || (raw.startsWith("http.") ? defaultFallback : raw || defaultFallback);
 }

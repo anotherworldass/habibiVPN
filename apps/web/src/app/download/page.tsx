@@ -36,7 +36,14 @@ const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
 };
 
 export default function DownloadPage() {
-  const copy = t(useLocale()).download;
+  const messages = t(useLocale());
+  const copy = messages.download;
+  const platformCopy = {
+    ios: { cta: messages.downloadUi.ctaIos },
+    android: { cta: messages.downloadUi.ctaAndroid },
+    windows: { cta: messages.downloadUi.ctaWindows, hint: messages.downloadUi.hintDesktop },
+    macos: { cta: messages.downloadUi.ctaMac, hint: messages.downloadUi.hintDesktop },
+  } as const;
   const [toast, setToast] = useState("");
   const [pageUrl, setPageUrl] = useState("");
 
@@ -67,7 +74,7 @@ export default function DownloadPage() {
                   <div className="download-card-icon">{icons[item.id]}</div>
                   <div className="download-card-copy">
                     <h2>{item.label}</h2>
-                    <p>{item.hint}</p>
+                    <p>{"hint" in platformCopy[item.id] ? platformCopy[item.id].hint : item.hint}</p>
                   </div>
                   {placeholder ? (
                     <button
@@ -75,7 +82,7 @@ export default function DownloadPage() {
                       className="btn btn-secondary download-card-cta"
                       onClick={() => onFakeDownload(item.label)}
                     >
-                      {item.cta}
+                      {platformCopy[item.id].cta}
                     </button>
                   ) : (
                     <a
@@ -84,7 +91,7 @@ export default function DownloadPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {item.cta}
+                      {platformCopy[item.id].cta}
                     </a>
                   )}
                 </div>
@@ -98,16 +105,23 @@ export default function DownloadPage() {
             </p>
           ) : null}
 
-          <div className="doc-block" style={{ marginTop: 22 }}>
-            <h2 className="section-title" style={{ fontSize: "1.1rem" }}>
-              {copy.noteTitle}
-            </h2>
-            <ul className="doc-list">
-              <li>{copy.noteIos}</li>
-              <li>{copy.noteAndroid}</li>
-              <li>{copy.noteDesktop}</li>
+          <section className="download-notes" aria-labelledby="download-notes-title">
+            <h2 id="download-notes-title">{copy.noteTitle}</h2>
+            <ul>
+              <li>
+                <span>iOS</span>
+                <p>{copy.noteIos}</p>
+              </li>
+              <li>
+                <span>Android</span>
+                <p>{copy.noteAndroid}</p>
+              </li>
+              <li>
+                <span>Windows / macOS</span>
+                <p>{copy.noteDesktop}</p>
+              </li>
             </ul>
-          </div>
+          </section>
 
           <p className="download-web-hint">
             {copy.webBefore}{" "}

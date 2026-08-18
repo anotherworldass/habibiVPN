@@ -5,10 +5,16 @@ import { FormEvent, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
 import { friendlyError } from "../../lib/errors";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 
 type Step = "request" | "reset" | "done";
 
 export default function ForgotPasswordPage() {
+  const copy = t(useLocale());
+  const copy = t(useLocale());
   const [step, setStep] = useState<Step>("request");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -33,16 +39,14 @@ export default function ForgotPasswordPage() {
         method: "POST",
         body: JSON.stringify({ email }),
       });
-      setInfo(
-        "若该邮箱已注册且已验证，验证码已发送。请查收邮件（含垃圾箱）。",
-      );
+      setInfo(copy.forgot.sent);
       if (res.reset_code) {
         setDevCode(res.reset_code);
         setCode(res.reset_code);
       }
       setStep("reset");
     } catch (err) {
-      setError(friendlyError(err, "发送失败"));
+      setError(friendlyError(err, copy.forgot.sendFailed));
     } finally {
       setLoading(false);
     }
@@ -63,7 +67,7 @@ export default function ForgotPasswordPage() {
       });
       setStep("done");
     } catch (err) {
-      setError(friendlyError(err, "重置失败"));
+      setError(friendlyError(err, copy.forgot.resetFailed));
     } finally {
       setLoading(false);
     }
@@ -72,8 +76,8 @@ export default function ForgotPasswordPage() {
   return (
     <Shell narrow hideNavigation>
       <div className="page-head">
-        <h1>忘记密码</h1>
-        <p>通过邮箱验证码设置新密码。</p>
+        <h1>{copy.forgot.title}</h1>
+        <p>{copy.forgot.lead}</p>
       </div>
 
       {step === "request" && (
@@ -84,7 +88,7 @@ export default function ForgotPasswordPage() {
             </p>
           )}
           <label className="field" style={{ display: "block", marginBottom: 20 }}>
-            <span className="field-label">注册邮箱</span>
+            <span className="field-label">{copy.forgot.emailLabel}</span>
             <input
               className="field-input"
               type="email"
@@ -96,7 +100,7 @@ export default function ForgotPasswordPage() {
             />
           </label>
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? "发送中…" : "发送验证码"}
+            {loading ? copy.common.sending : copy.forgot.send}
           </button>
           <p
             style={{
@@ -107,7 +111,7 @@ export default function ForgotPasswordPage() {
             }}
           >
             <Link href="/login" style={{ color: "var(--teal-deep)", fontWeight: 600 }}>
-              返回登录
+              {copy.forgot.backLogin}
             </Link>
           </p>
         </form>
@@ -122,7 +126,7 @@ export default function ForgotPasswordPage() {
           )}
           {devCode && (
             <p style={{ marginBottom: 12, fontSize: 13, color: "var(--muted)" }}>
-              开发环境验证码：<strong>{devCode}</strong>
+              {copy.common.devCode}<strong>{devCode}</strong>
             </p>
           )}
           {error && (
@@ -131,11 +135,11 @@ export default function ForgotPasswordPage() {
             </p>
           )}
           <label className="field" style={{ display: "block", marginBottom: 14 }}>
-            <span className="field-label">邮箱</span>
+            <span className="field-label">{copy.common.email}</span>
             <input className="field-input" type="email" value={email} readOnly />
           </label>
           <label className="field" style={{ display: "block", marginBottom: 14 }}>
-            <span className="field-label">邮件验证码</span>
+            <span className="field-label">{copy.forgot.mailCode}</span>
             <input
               className="field-input"
               type="text"
@@ -145,11 +149,11 @@ export default function ForgotPasswordPage() {
               maxLength={6}
               value={code}
               onChange={(e) => setCode(e.target.value.trim())}
-              placeholder="6 位数字"
+              placeholder={copy.login.codePh}
             />
           </label>
           <label className="field" style={{ display: "block", marginBottom: 20 }}>
-            <span className="field-label">新密码（至少 6 位）</span>
+            <span className="field-label">{copy.forgot.newPassword}</span>
             <input
               className="field-input"
               type="password"
@@ -158,11 +162,11 @@ export default function ForgotPasswordPage() {
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="设置新密码"
+              placeholder={copy.forgot.newPasswordPh}
             />
           </label>
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? "提交中…" : "重置密码"}
+            {loading ? copy.forgot.submitting : copy.forgot.reset}
           </button>
           <p
             style={{
@@ -188,7 +192,7 @@ export default function ForgotPasswordPage() {
                 padding: 0,
               }}
             >
-              重新发送验证码
+              {copy.forgot.resend}
             </button>
           </p>
         </form>
@@ -197,10 +201,10 @@ export default function ForgotPasswordPage() {
       {step === "done" && (
         <div className="panel" style={{ marginTop: 16 }}>
           <p className="alert-ok" style={{ marginBottom: 16 }}>
-            密码已重置，请使用新密码登录。
+            {copy.forgot.done}
           </p>
           <Link href="/login" className="btn btn-primary btn-block">
-            去登录
+            {copy.forgot.goLogin}
           </Link>
         </div>
       )}

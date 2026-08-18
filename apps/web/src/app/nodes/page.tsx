@@ -50,7 +50,7 @@ export default function NodesPage() {
       const res = await apiFetch<NodesResponse>("/api/v1/nodes");
       setData(res);
     } catch (e) {
-      setError(friendlyError(e, "加载节点失败"));
+      setError(friendlyError(e, copy.loadFailed));
     } finally {
       setLoading(false);
     }

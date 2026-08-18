@@ -8,6 +8,8 @@ import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { formatCents } from "../../lib/money";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 
 type OrderItem = {
   id: string;
@@ -35,7 +37,7 @@ function providerLabel(provider: string | null) {
 function formatTime(iso: string | null | undefined) {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("zh-CN");
+    return new Date(iso).toLocaleString();
   } catch {
     return "—";
   }
@@ -44,6 +46,7 @@ function formatTime(iso: string | null | undefined) {
 const PAGE_SIZE = 20;
 
 export default function OrdersPage() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
   const [items, setItems] = useState<OrderItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -62,7 +65,7 @@ export default function OrdersPage() {
       setTotal(res.total);
       setItems((prev) => (append ? [...prev, ...res.items] : res.items));
     } catch (e) {
-      setError(friendlyError(e, "加载失败"));
+      setError(friendlyError(e, copy.common.loadFailed));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -82,18 +85,18 @@ export default function OrdersPage() {
       <div className="orders-page">
         <div className="page-head orders-page-head">
           <div>
-            <h1>购买记录</h1>
+            <h1>{copy.orders.title}</h1>
             <p className="orders-page-lead-mobile">
-              {loading ? "同步订单中…" : `共 ${total} 笔成功购买`}
+              {loading ? copy.orders.syncing : copy.orders.count(total)}
             </p>
           </div>
           <p className="orders-page-lead-desktop">
-            仅展示已开通成功的历史订单。
+            {copy.orders.leadDesktop}
           </p>
         </div>
 
         <p className="orders-back">
-          <Link href="/account">← 返回我的</Link>
+          <Link href="/account">{copy.orders.back}</Link>
         </p>
 
         {error && (
@@ -103,20 +106,20 @@ export default function OrdersPage() {
         )}
 
         {loading ? (
-          <p className="orders-loading">加载中…</p>
+          <p className="orders-loading">{copy.common.loading}</p>
         ) : items.length === 0 ? (
           <div className="orders-empty">
-            <p>暂无成功购买记录</p>
-            <span className="orders-empty-hint">购买并开通套餐后，会显示在这里</span>
+            <p>{copy.orders.empty}</p>
+            <span className="orders-empty-hint">{copy.orders.emptyHint}</span>
             <Link href="/plans" className="btn btn-primary">
-              去选购套餐
+              {copy.orders.shop}
             </Link>
           </div>
         ) : (
           <>
             <div className="orders-list">
               {items.map((order) => {
-                const title = order.plan?.name || order.plan?.code || "套餐订单";
+                const title = order.plan?.name || order.plan?.code || copy.orders.fallbackTitle;
                 const when = order.paid_at || order.created_at;
                 return (
                   <article key={order.id} className="orders-item">
@@ -124,8 +127,8 @@ export default function OrdersPage() {
                       <div className="orders-item-main">
                         <h2>{title}</h2>
                         <span className="promo-badge promo-badge--ok">
-                          购买成功
-                          {order.is_trial_period ? " · 试用" : ""}
+                          {copy.orders.success}
+                          {order.is_trial_period ? ` · ${copy.orders.trial}` : ""}
                         </span>
                       </div>
                       <div className="orders-item-amount">
@@ -150,7 +153,7 @@ export default function OrdersPage() {
                 disabled={loadingMore}
                 onClick={() => load(items.length, true)}
               >
-                {loadingMore ? "加载中…" : "加载更多"}
+                {loadingMore ? copy.common.loading : copy.orders.more}
               </button>
             ) : null}
           </>

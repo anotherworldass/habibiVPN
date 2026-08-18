@@ -11,6 +11,8 @@ import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { formatCents } from "../../lib/money";
 import { site, supportTelegramUrl } from "../../lib/site";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 
 type Overview = {
   invite_code: string;
@@ -53,42 +55,25 @@ function formatRate(bps: number) {
   return `${pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(1)}%`;
 }
 
-function methodLabel(m: string) {
+function methodLabel(m: string, copy: ReturnType<typeof t>["promo"]) {
   const map: Record<string, string> = {
     usdt: "USDT",
-    bank: "银行卡",
-    alipay: "支付宝",
-    wechat: "微信",
+    bank: copy.bank,
+    alipay: copy.alipay,
+    wechat: copy.wechat,
   };
   return map[m] || m.toUpperCase();
 }
 
-function levelExplain(level: number): { title: string; body: string } {
-  if (level === 1) {
-    return {
-      title: "您的直接好友",
-      body: "通过您的邀请链接或邀请码注册的用户。他们付费后，按第 1 层比例给您结算佣金。",
-    };
-  }
-  if (level === 2) {
-    return {
-      title: "您的间接好友",
-      body: "您的直接好友再邀请来的用户。他们付费后，按第 2 层比例给您结算佣金。",
-    };
-  }
-  if (level === 3) {
-    return {
-      title: "您的三层好友",
-      body: "间接好友再邀请来的用户（下下级）。他们付费后，按第 3 层比例给您结算佣金。",
-    };
-  }
-  return {
-    title: `您的 ${level} 层好友`,
-    body: `由上一层（第 ${level - 1} 层）好友邀请注册的用户。他们付费后，按第 ${level} 层比例给您结算佣金。`,
-  };
+function levelExplain(level: number, copy: ReturnType<typeof t>["promo"]): { title: string; body: string } {
+  if (level === 1) return { title: copy.lv1Title, body: copy.lv1Body };
+  if (level === 2) return { title: copy.lv2Title, body: copy.lv2Body };
+  if (level === 3) return { title: copy.lv3Title, body: copy.lv3Body };
+  return { title: copy.lvNTitle(level), body: copy.lvNBody(level) };
 }
 
 export default function PromoPage() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tools, setTools] = useState<Tools | null>(null);
@@ -119,7 +104,7 @@ export default function PromoPage() {
         if (first != null) setOpenLevel(first);
       })
       .catch((e) => {
-        if (!cancelled) setError(friendlyError(e, "加载失败"));
+        if (!cancelled) setError(friendlyError(e, copy.common.loadFailed));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -145,7 +130,7 @@ export default function PromoPage() {
       setCopied(key);
       setTimeout(() => setCopied(""), 1500);
     } catch {
-      setError("复制失败，请手动长按选择");
+      setError(copy.promo.copyFail);
     }
   }
 
@@ -162,7 +147,7 @@ export default function PromoPage() {
     <Shell>
       <div className="promo-page">
         <div className="page-head">
-          <h1>推广中心</h1>
+          <h1>{copy.promo.title}</h1>
         </div>
         <PromoNav />
 
@@ -173,27 +158,27 @@ export default function PromoPage() {
         )}
 
         {loading ? (
-          <p className="promo-loading">加载中…</p>
+          <p className="promo-loading">{copy.promo.loading}</p>
         ) : (
           <>
             {overview && !overview.promo_enabled && (
               <p className="alert-error" style={{ marginTop: 12 }}>
-                推广资格已停用，请联系客服。
+                {copy.promo.disabled}
               </p>
             )}
 
             <section className="promo-invite-stage" aria-labelledby="promo-invite-title">
               <div className="promo-invite-stage-inner">
-                <p className="promo-invite-kicker">邀请有奖</p>
+                <p className="promo-invite-kicker">{copy.promo.kicker}</p>
                 <h2 id="promo-invite-title" className="promo-invite-title">
                   {site.brand}
                 </h2>
-                <p className="promo-invite-lead">邀请好友，享永久绑定的分佣</p>
+                <p className="promo-invite-lead">{copy.promo.lead}</p>
                 {l1Rate != null && l1Rate > 0 ? (
                   <div className="promo-invite-rate">
-                    <span>邀请回馈</span>
+                    <span>{copy.promo.reward}</span>
                     <strong>{formatRate(l1Rate)}</strong>
-                    <em>永久 · 按实付金额</em>
+                    <em>{copy.promo.rewardMeta}</em>
                   </div>
                 ) : null}
               </div>
@@ -203,13 +188,13 @@ export default function PromoPage() {
               {tools && (
                 <aside className="promo-section panel promo-tools-panel">
                   <div className="promo-section-head">
-                    <h2 className="promo-section-title">推广工具</h2>
-                    <span className="promo-section-hint">分享即绑定</span>
+                    <h2 className="promo-section-title">{copy.promo.tools}</h2>
+                    <span className="promo-section-hint">{copy.promo.toolsHint}</span>
                   </div>
 
                   <div className="promo-tools-content">
                     <div className="promo-tools-copy">
-                      <div className="promo-field-label">邀请码</div>
+                      <div className="promo-field-label">{copy.promo.inviteCode}</div>
                       <div className="promo-code-box">
                         <div className="font-display">{tools.invite_code}</div>
                         <button
@@ -218,19 +203,19 @@ export default function PromoPage() {
                           style={{ minHeight: 36, padding: "0 12px", fontSize: 13 }}
                           onClick={() => void copy(tools.invite_code, "code")}
                         >
-                          {copied === "code" ? "已复制" : "复制"}
+                          {copied === "code" ? copy.common.copied : copy.common.copy}
                         </button>
                       </div>
 
                       <div className="promo-link-block">
                         <div className="promo-link-head">
-                          <span className="promo-field-label">邀请链接</span>
+                          <span className="promo-field-label">{copy.promo.inviteLink}</span>
                           <button
                             type="button"
                             className="promo-link-copy"
                             onClick={() => void copy(webInviteUrl(tools), "web")}
                           >
-                            {copied === "web" ? "已复制" : "复制"}
+                            {copied === "web" ? copy.common.copied : copy.common.copy}
                           </button>
                         </div>
                         <div className="promo-link-box">{webInviteUrl(tools)}</div>
@@ -243,7 +228,7 @@ export default function PromoPage() {
                           style={{ minHeight: 44 }}
                           onClick={() => void copy(webInviteUrl(tools), "web")}
                         >
-                          {copied === "web" ? "已复制链接" : "复制邀请链接"}
+                          {copied === "web" ? copy.promo.copiedLink : copy.promo.copyLink}
                         </button>
                         <button
                           type="button"
@@ -251,7 +236,7 @@ export default function PromoPage() {
                           style={{ minHeight: 44 }}
                           onClick={() => setQrOpen(true)}
                         >
-                          查看二维码
+                          {copy.promo.showQr}
                         </button>
                       </div>
                     </div>
@@ -261,7 +246,7 @@ export default function PromoPage() {
                         <div className="sub-qr-card">
                           <QRCodeSVG value={qrValue} size={148} level="M" />
                         </div>
-                        <p className="sub-qr-hint">扫码注册即永久绑定</p>
+                        <p className="sub-qr-hint">{copy.promo.qrHint}</p>
                       </div>
                     </div>
                   </div>
@@ -272,30 +257,30 @@ export default function PromoPage() {
                 {overview && (
                   <section className="promo-hero promo-hero--overview">
                     <div className="promo-hero-primary">
-                      <div className="promo-hero-label">可提现余额</div>
+                      <div className="promo-hero-label">{copy.promo.balance}</div>
                       <div className="promo-hero-value">
                         {formatCents(overview.available_cents)}
                       </div>
                       <span className="promo-hero-caption">
-                        昨日 {formatCents(overview.yesterday_earnings_cents)} · 待结算{" "}
+                        {copy.promo.yesterday} {formatCents(overview.yesterday_earnings_cents)} · {copy.promo.pending}{" "}
                         {formatCents(overview.pending_cents)}
                       </span>
                     </div>
                     <div className="promo-hero-meta">
                       <div className="promo-hero-meta-item">
-                        <span>今日收益</span>
+                        <span>{copy.promo.today}</span>
                         <strong>{formatCents(overview.today_earnings_cents)}</strong>
                       </div>
                       <div className="promo-hero-meta-item">
-                        <span>累计收益</span>
+                        <span>{copy.promo.total}</span>
                         <strong>{formatCents(overview.total_earnings_cents)}</strong>
                       </div>
                       <div className="promo-hero-meta-item">
-                        <span>已提现</span>
+                        <span>{copy.promo.withdrawn}</span>
                         <strong>{formatCents(overview.withdrawn_cents)}</strong>
                       </div>
                       <div className="promo-hero-meta-item">
-                        <span>邀请人数</span>
+                        <span>{copy.promo.invitees}</span>
                         <strong>{overview.team_total}</strong>
                       </div>
                     </div>
@@ -305,14 +290,14 @@ export default function PromoPage() {
                         className="btn btn-primary"
                         style={{ minHeight: 44 }}
                       >
-                        去提现
+                        {copy.promo.goWithdraw}
                       </Link>
                       <Link
                         href="/promo/team?tab=commissions"
                         className="btn btn-secondary"
                         style={{ minHeight: 44 }}
                       >
-                        佣金明细
+                        {copy.promo.commissions}
                       </Link>
                     </div>
                   </section>
@@ -325,17 +310,17 @@ export default function PromoPage() {
                   >
                     <div className="promo-rules-head">
                       <h2 id="promo-rules-title" className="promo-section-title">
-                        佣金规则
+                        {copy.promo.rules}
                       </h2>
                       <span className="promo-section-hint">
-                        最高 {rules.max_level} 层
+                        {copy.promo.maxLevel(rules.max_level)}
                       </span>
                     </div>
 
                     <div
                       className="promo-rate-strip"
                       role="list"
-                      aria-label="层级回馈比例，点击查看说明"
+                      aria-label={copy.promo.levelAria}
                     >
                       {activeLevels.map((lv) => {
                         const open = openLevel === lv.level;
@@ -355,7 +340,7 @@ export default function PromoPage() {
                               )
                             }
                           >
-                            <span>{lv.level} 层</span>
+                            <span>{copy.promo.level(lv.level)}</span>
                             <strong>{formatRate(lv.rate_bps)}</strong>
                           </button>
                         );
@@ -366,27 +351,27 @@ export default function PromoPage() {
                       (() => {
                         const lv = activeLevels.find((l) => l.level === openLevel);
                         if (!lv) return null;
-                        const explain = levelExplain(lv.level);
+                        const explain = levelExplain(lv.level, copy.promo);
                         const count = overview?.levels[lv.level] || 0;
                         return (
                           <div
                             id={`promo-level-explain-${lv.level}`}
                             className="promo-level-explain"
                             role="region"
-                            aria-label={`第 ${lv.level} 层说明`}
+                            aria-label={copy.promo.levelExplain(lv.level)}
                           >
                             <div className="promo-level-explain-top">
                               <strong>
-                                {lv.level} 层 · {explain.title}
+                                {copy.promo.level(lv.level)} · {explain.title}
                               </strong>
                               <span>{formatRate(lv.rate_bps)}</span>
                             </div>
                             <p>{explain.body}</p>
                             {overview ? (
                               <p className="promo-level-count">
-                                当前 {count} 人
+                                {copy.promo.people(count)}
                                 {lv.level === 1
-                                  ? ` · 近 7 日新增 ${overview.new_users_7d}`
+                                  ? copy.promo.new7d(overview.new_users_7d)
                                   : ""}
                               </p>
                             ) : null}
@@ -395,34 +380,35 @@ export default function PromoPage() {
                       })()}
 
                     <ul className="promo-rule-bullets">
+                      <li>{copy.promo.ruleBody}</li>
                       <li>
-                        好友用你的链接/邀请码注册并付费后，按上表比例结算（第 1
-                        层为直接好友）。
-                      </li>
-                      <li>
-                        按实付金额计算
+                        {copy.promo.paidBase}
                         {rules.first_commission_base_bps !==
                         rules.renew_commission_base_bps
-                          ? `；续费基数 ${formatRate(rules.renew_commission_base_bps)}`
+                          ? copy.promo.renewBase(
+                              formatRate(rules.renew_commission_base_bps),
+                            )
                           : ""}
                         {(rules.iap_commission_base_bps < 10000 ||
                           rules.play_commission_base_bps < 10000) &&
-                          "；应用商店渠道先扣渠道费再算佣金"}
-                        。
+                          copy.promo.storeFee}
+                        .
                       </li>
                       <li>
-                        约 {rules.settle_days} 天到可提现；最低提现{" "}
-                        {formatCents(rules.min_withdraw_cents)}
+                        {copy.promo.settle(
+                          rules.settle_days,
+                          formatCents(rules.min_withdraw_cents),
+                        )}
                         {rules.withdraw_methods?.length
-                          ? `，支持 ${rules.withdraw_methods.map(methodLabel).join("/")}`
+                          ? `, ${rules.withdraw_methods.map((m) => methodLabel(m, copy.promo)).join("/")}`
                           : ""}
-                        。
+                        .
                       </li>
                       {rules.catalog_spend_enabled ? (
-                        <li>佣金可兑话费、礼品卡或 VPN 套餐。</li>
+                        <li>{copy.promo.catalog}</li>
                       ) : null}
                       <li>
-                        KOL / 社媒达人可联系客服申请更高推广计划。
+                        {copy.promo.kol}
                         {supportUrl ? (
                           <>
                             {" "}
@@ -432,19 +418,19 @@ export default function PromoPage() {
                               target="_blank"
                               rel="noreferrer"
                             >
-                              联系TG客服
+                              {copy.promo.tgSupport}
                             </a>
                           </>
                         ) : (
                           <>
                             {" "}
                             <Link className="promo-inline-link" href="/support">
-                              联系客服
+                              {copy.promo.contact}
                             </Link>
                           </>
                         )}
                       </li>
-                      <li>禁止刷单、自买自返，违者取消资格。</li>
+                      <li>{copy.promo.ban}</li>
                     </ul>
                   </section>
                 )}
@@ -459,7 +445,7 @@ export default function PromoPage() {
             className="confirm-mask"
             role="dialog"
             aria-modal="true"
-            aria-label="邀请二维码"
+            aria-label={copy.promo.qrTitle}
             onClick={() => setQrOpen(false)}
           >
             <div
@@ -467,21 +453,21 @@ export default function PromoPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="promo-section-head" style={{ marginBottom: 16 }}>
-                <h2 className="promo-section-title">邀请二维码</h2>
+                <h2 className="promo-section-title">{copy.promo.qrTitle}</h2>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   style={{ minHeight: 32, padding: "0 12px", fontSize: 13 }}
                   onClick={() => setQrOpen(false)}
                 >
-                  关闭
+                  {copy.promo.close}
                 </button>
               </div>
               <div className="sub-qr-wrap">
                 <div className="sub-qr-card">
                   <QRCodeSVG value={qrValue} size={180} level="M" />
                 </div>
-                <p className="sub-qr-hint">扫码注册即永久绑定邀请关系</p>
+                <p className="sub-qr-hint">{copy.promo.qrHintLong}</p>
               </div>
             </div>
           </div>

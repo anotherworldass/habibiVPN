@@ -1,30 +1,33 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { t } from "../lib/copy";
 import { stripLocale } from "../lib/locale";
 import Link from "./LocaleLink";
-
-const links = [
-  { href: "/promo", label: "概览", match: (p: string) => p === "/promo" },
-  {
-    href: "/promo/team",
-    label: "邀请",
-    match: (p: string) =>
-      p === "/promo/team" ||
-      p.startsWith("/promo/commissions") ||
-      p.startsWith("/promo/orders"),
-  },
-  {
-    href: "/promo/withdraw",
-    label: "提现",
-    match: (p: string) => p === "/promo/withdraw",
-  },
-] as const;
+import { useLocale } from "./LocaleProvider";
 
 export default function PromoNav() {
   const pathname = usePathname();
+  const copy = t(useLocale()).promoNav;
+  const links = [
+    { href: "/promo", label: copy.overview, match: (p: string) => p === "/promo" },
+    {
+      href: "/promo/team",
+      label: copy.invite,
+      match: (p: string) =>
+        p === "/promo/team" ||
+        p.startsWith("/promo/commissions") ||
+        p.startsWith("/promo/orders"),
+    },
+    {
+      href: "/promo/withdraw",
+      label: copy.withdraw,
+      match: (p: string) => p === "/promo/withdraw",
+    },
+  ] as const;
+
   return (
-    <nav className="promo-nav" aria-label="推广中心导航">
+    <nav className="promo-nav" aria-label={copy.aria}>
       {links.map((l) => {
         const active = l.match(stripLocale(pathname));
         return (

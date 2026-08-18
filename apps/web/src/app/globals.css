@@ -722,6 +722,49 @@ input {
   text-align: center;
 }
 
+.download-notes {
+  margin-top: 22px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.download-notes h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.download-notes ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.download-notes li {
+  display: grid;
+  gap: 4px;
+}
+
+.download-notes li span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--teal-deep);
+}
+
+.download-notes li p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
 .download-web-hint,
 .download-footnote {
   margin: 22px 0 0;
@@ -785,6 +828,11 @@ input {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 14px;
+}
+
+.step-num svg {
+  width: 18px;
+  height: 18px;
 }
 
 .step h3 {
@@ -4034,6 +4082,7 @@ input {
 
   .download-page .download-grid,
   .download-page .download-toast,
+  .download-page .download-notes,
   .download-page .download-web-hint,
   .download-page .download-footnote {
     grid-column: 1;

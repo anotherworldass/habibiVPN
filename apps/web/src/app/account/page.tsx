@@ -8,6 +8,10 @@ import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
 import { clearToken, getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 
 type Me = {
   id: string;
@@ -18,6 +22,7 @@ type Me = {
 };
 
 export default function AccountPage() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
@@ -30,12 +35,12 @@ export default function AccountPage() {
     }
     apiFetch<{ user: Me }>("/api/v1/me")
       .then((res) => setMe(res.user))
-      .catch((e) => setError(friendlyError(e, "加载失败")))
+      .catch((e) => setError(friendlyError(e, copy.common.loadFailed)))
       .finally(() => setReady(true));
   }, [router]);
 
   const uidText = ready ? (me?.uid != null ? String(me.uid) : "—") : "…";
-  const emailText = ready ? me?.email || "—" : "加载中…";
+  const emailText = ready ? me?.email || "—" : copy.account.loadingEmail;
   const planCount = ready ? me?.subscription_count ?? 0 : null;
 
   return (
@@ -43,11 +48,11 @@ export default function AccountPage() {
       <div className="account-page">
         <div className="page-head account-page-head">
           <div>
-            <h1>我的</h1>
-            <p className="account-page-lead-mobile">账号、推广与帮助。</p>
+            <h1>{copy.account.title}</h1>
+            <p className="account-page-lead-mobile">{copy.account.leadMobile}</p>
           </div>
           <p className="account-page-lead-desktop">
-            账号信息与常用入口，推广与帮助随时可进。
+            {copy.account.leadDesktop}
           </p>
         </div>
 
@@ -58,24 +63,24 @@ export default function AccountPage() {
         )}
 
         <div className="account-desktop">
-          <section className="account-identity" aria-label="账号信息">
+          <section className="account-identity" aria-label={copy.account.identityAria}>
             <div className="account-identity-copy">
-              <span className="account-eyebrow">用户 UID</span>
+              <span className="account-eyebrow">{copy.account.uid}</span>
               <div className="account-uid-value">{uidText}</div>
               <div className="account-email">{emailText}</div>
             </div>
 
             <Link href="/subscription" className="account-plan-chip">
               <strong>{planCount == null ? "…" : planCount}</strong>
-              <span>套餐</span>
+              <span>{copy.account.plans}</span>
             </Link>
 
             <div className="account-identity-actions">
               <Link href="/subscription" className="btn btn-primary">
-                打开连接
+                {copy.account.openConnect}
               </Link>
               <Link href="/plans" className="btn btn-secondary">
-                套餐中心
+                {copy.account.planCenter}
               </Link>
             </div>
           </section>
@@ -91,10 +96,10 @@ export default function AccountPage() {
                     </svg>
                   </span>
                   <div className="promo-entry-body">
-                    <div className="promo-entry-kicker">推荐</div>
-                    <div className="promo-entry-title">推广中心</div>
+                    <div className="promo-entry-kicker">{copy.account.featured}</div>
+                    <div className="promo-entry-title">{copy.account.promoTitle}</div>
                     <div className="promo-entry-desc">
-                      邀请好友充值，可持续获得佣金，多达 5 层分成
+                      {copy.account.promoDesc}
                     </div>
                   </div>
                   <span className="account-chevron" aria-hidden>
@@ -110,8 +115,8 @@ export default function AccountPage() {
                     </svg>
                   </span>
                   <div className="promo-entry-body">
-                    <div className="promo-entry-title">购买记录</div>
-                    <div className="promo-entry-desc">查看已成功开通的历史订单</div>
+                    <div className="promo-entry-title">{copy.account.ordersTitle}</div>
+                    <div className="promo-entry-desc">{copy.account.ordersDesc}</div>
                   </div>
                   <span className="account-chevron" aria-hidden>
                     ›
@@ -133,12 +138,12 @@ export default function AccountPage() {
                     <path d="m15 8 4 4-4 4M9 12h10" />
                   </svg>
                 </span>
-                <span>退出登录</span>
+                <span>{copy.account.logout}</span>
               </button>
             </div>
 
             <aside className="account-desktop-aside">
-              <HelpLinks title="帮助与支持" />
+              <HelpLinks />
             </aside>
           </div>
         </div>

@@ -137,7 +137,7 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
               {site.brand}
             </Link>
             <div className="habibi-topbar-tools">
-              <nav className="habibi-topbar-nav" aria-label="主导航">
+              <nav className="habibi-topbar-nav" aria-label={copy.common.navAria}>
                 {tabs.map((tab) => {
                   const active = isTabActive(pathname, tab.href);
                   const href = resolveHref(tab.href, loggedIn);
@@ -183,7 +183,7 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
       </main>
 
       {!hideNavigation && (
-        <nav className="habibi-tabbar" aria-label="主导航">
+        <nav className="habibi-tabbar" aria-label={copy.common.navAria}>
           <div
             className={`habibi-tabbar-inner habibi-tabbar-inner--${tabs.length}`}
           >

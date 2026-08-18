@@ -10,9 +10,12 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
+import { useLocale } from "./LocaleProvider";
 import { getToken, setToken } from "../lib/auth";
+import { t } from "../lib/copy";
 import { playDingDong, unlockDingDong } from "../lib/dingdong";
 import { friendlyError } from "../lib/errors";
+import { stripLocale } from "../lib/locale";
 import { site } from "../lib/site";
 import {
   bindSupportSession,
@@ -57,11 +60,14 @@ function imageFileFromClipboard(e: {
   return null;
 }
 
-function messageText(m: SupportMessage) {
-  if (m.recalled_at) return "已撤回";
+function messageText(
+  m: SupportMessage,
+  chat: { recalled: string; placeholderMsg: string },
+) {
+  if (m.recalled_at) return chat.recalled;
   if (m.text?.trim()) return m.text;
   if (m.media_url || m.content_type === "image") return "";
-  return "[消息]";
+  return chat.placeholderMsg;
 }
 
 /** Long dumps / diagnostic reports → monospace + copy. */
@@ -163,13 +169,14 @@ function linkifyNodes(text: string): ReactNode[] {
 }
 
 function CopyLinkButton({ href }: { href: string }) {
+  const chat = t(useLocale()).chat;
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
       className="support-msg-copy-link"
-      title={copied ? "已复制" : "复制链接"}
-      aria-label={copied ? "已复制" : "复制链接"}
+      title={copied ? chat.copied : chat.copyLink}
+      aria-label={copied ? chat.copied : chat.copyLink}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -186,6 +193,7 @@ function CopyLinkButton({ href }: { href: string }) {
 }
 
 function SupportMessageBody({ text }: { text: string }) {
+  const chat = t(useLocale()).chat;
   const [copied, setCopied] = useState(false);
   const structured = looksLikeStructuredOrLongText(text);
   if (!structured) {
@@ -206,7 +214,7 @@ function SupportMessageBody({ text }: { text: string }) {
           }}
         >
           <CopyIcon size={13} />
-          {copied ? "已复制" : "复制全文"}
+          {copied ? chat.copied : chat.copyAll}
         </button>
       </div>
       <pre className="support-msg-pre">{linkifyNodes(text)}</pre>
@@ -297,9 +305,10 @@ export default function SupportChatWidget({
   authToken?: string | null;
   entry?: SupportEntry | null;
 }) {
+  const chat = t(useLocale()).chat;
   const pathname = usePathname();
   const hideWidgetOnChat =
-    mode === "widget" && Boolean(pathname?.startsWith("/chat"));
+    mode === "widget" && Boolean(stripLocale(pathname || "").startsWith("/chat"));
   const isPage = mode === "page";
   const [open, setOpen] = useState(isPage);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -515,11 +524,11 @@ export default function SupportChatWidget({
         }
       } catch (e) {
         if (!opts?.silent) {
-          setError(e instanceof Error ? e.message : "加载失败");
+          setError(e instanceof Error ? e.message : chat.loadFailed);
         }
       }
     },
-    [scrollBottom],
+    [scrollBottom, chat.loadFailed],
   );
 
   useEffect(() => {
@@ -628,7 +637,7 @@ export default function SupportChatWidget({
       );
     } catch (err) {
       setMessages((list) => list.map((m) => (m.id === msg.id ? prev : m)));
-      setError(friendlyError(err, "撤回失败"));
+      setError(friendlyError(err, chat.recallFailed));
     }
   }
 
@@ -673,7 +682,7 @@ export default function SupportChatWidget({
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       if (body) setText((cur) => (cur.trim() ? cur : body));
-      setError(friendlyError(err, "发送失败"));
+      setError(friendlyError(err, chat.sendFailed));
     }
   }
 
@@ -695,11 +704,11 @@ export default function SupportChatWidget({
   async function onPickImage(file: File | null) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("仅支持图片文件");
+      setError(chat.imageOnly);
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      setError("图片不能超过 4MB");
+      setError(chat.imageTooBig);
       return;
     }
     setError("");
@@ -748,7 +757,7 @@ export default function SupportChatWidget({
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       URL.revokeObjectURL(localPreview);
-      setError(friendlyError(err, "图片发送失败"));
+      setError(friendlyError(err, chat.imageSendFailed));
     }
   }
 
@@ -766,7 +775,7 @@ export default function SupportChatWidget({
           className="support-widget-panel"
           role={isPage ? "main" : "dialog"}
           aria-modal={isPage ? undefined : true}
-          aria-label="在线客服"
+          aria-label={chat.aria}
         >
           <header className="support-widget-head">
             <div className="support-widget-agent">
@@ -775,9 +784,9 @@ export default function SupportChatWidget({
                 <span className="support-widget-online" />
               </div>
               <div className="support-widget-agent-meta">
-                <strong>{site.brand} 客服</strong>
+                <strong>{chat.agent(site.brand)}</strong>
                 <span>
-                  {loggedIn ? "在线 · 对话已关联账号" : "在线 · 通常几分钟内回复"}
+                  {loggedIn ? chat.onlineLinked : chat.onlineHint}
                 </span>
               </div>
             </div>
@@ -785,7 +794,7 @@ export default function SupportChatWidget({
               <button
                 type="button"
                 className="support-widget-close"
-                aria-label="关闭"
+                aria-label={chat.close}
                 onClick={onClose}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -802,7 +811,7 @@ export default function SupportChatWidget({
 
           <div className="support-widget-body" ref={scrollRef}>
             {!ready && !error ? (
-              <div className="support-widget-status">正在连接客服…</div>
+              <div className="support-widget-status">{chat.connecting}</div>
             ) : null}
             {error ? (
               <div className="support-widget-status is-error">{error}</div>
@@ -814,10 +823,8 @@ export default function SupportChatWidget({
                   <div className="support-widget-avatar lg" aria-hidden>
                     <ChatIcon size={22} />
                   </div>
-                  <h3>你好，需要帮忙吗？</h3>
-                  <p>
-                    套餐、连接、支付问题都可以问。也可直接发送截图，我们会尽快回复。
-                  </p>
+                  <h3>{chat.welcomeTitle}</h3>
+                  <p>{chat.welcomeBody}</p>
                 </div>
               </div>
             ) : null}
@@ -827,7 +834,7 @@ export default function SupportChatWidget({
               const img = m.media_url?.startsWith("blob:")
                 ? m.media_url
                 : supportMediaSrc(m.media_url);
-              const caption = messageText(m);
+              const caption = messageText(m, chat);
               const rowKey = m.local_key || m.id;
               const isCode =
                 !!caption &&
@@ -848,7 +855,7 @@ export default function SupportChatWidget({
                       className={`support-widget-bubble ${mine ? "mine" : "theirs"}${img ? " has-media" : ""}${m.recalled_at ? " is-recalled" : ""}${isCode ? " is-code" : ""}`}
                     >
                       {m.recalled_at ? (
-                        "消息已撤回"
+                        chat.recalledMsg
                       ) : (
                         <>
                           {img ? (
@@ -859,7 +866,7 @@ export default function SupportChatWidget({
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={img}
-                                  alt="上传中"
+                                  alt={chat.uploadingAlt}
                                   onLoad={() => scrollBottom(false)}
                                 />
                               ) : (
@@ -872,7 +879,7 @@ export default function SupportChatWidget({
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
                                     src={img}
-                                    alt="图片消息"
+                                    alt={chat.imageAlt}
                                     onLoad={() => {
                                       const el = scrollRef.current;
                                       if (!el) return;
@@ -888,19 +895,19 @@ export default function SupportChatWidget({
                               )}
                               {m.uploading ? (
                                 <div className="support-widget-upload-mask">
-                                  上传中
+                                  {chat.uploading}
                                 </div>
                               ) : null}
                             </div>
                           ) : null}
                           {caption ? <SupportMessageBody text={caption} /> : null}
-                          {!img && !caption ? "[消息]" : null}
+                          {!img && !caption ? chat.placeholderMsg : null}
                         </>
                       )}
                     </div>
                     <div className="support-widget-meta">
                       <time dateTime={m.created_at}>
-                        {m.uploading ? "上传中…" : formatMessageTime(m.created_at)}
+                        {m.uploading ? chat.uploadingDot : formatMessageTime(m.created_at)}
                       </time>
                       {mine && !m.uploading && isUserRecallable(m) ? (
                         <button
@@ -908,7 +915,7 @@ export default function SupportChatWidget({
                           className="support-widget-recall"
                           onClick={() => void onRecall(m)}
                         >
-                          撤回
+                          {chat.recall}
                         </button>
                       ) : null}
                     </div>
@@ -930,8 +937,8 @@ export default function SupportChatWidget({
             <button
               type="button"
               className="support-widget-icon-btn"
-              aria-label="发送图片"
-              title="发送图片"
+              aria-label={chat.sendImage}
+              title={chat.sendImage}
               onClick={() => fileInputRef.current?.click()}
             >
               <ImageIcon />
@@ -948,7 +955,7 @@ export default function SupportChatWidget({
                   if (canSend) void sendPayload({ text: text.trim() });
                 }
               }}
-              placeholder="输入消息，Enter 发送…"
+              placeholder={chat.placeholder}
               maxLength={4000}
               autoComplete="off"
             />
@@ -956,7 +963,7 @@ export default function SupportChatWidget({
               type="submit"
               className="support-widget-send"
               disabled={!canSend}
-              aria-label="发送"
+              aria-label={chat.send}
             >
               <SendIcon />
             </button>
@@ -972,10 +979,10 @@ export default function SupportChatWidget({
             unlockDingDong();
             void onOpen();
           }}
-          aria-label="打开客服"
+          aria-label={chat.open}
         >
           <ChatIcon size={22} />
-          <span>客服</span>
+          <span>{chat.fab}</span>
           {unread > 0 ? (
             <span className="support-widget-badge">
               {unread > 9 ? "9+" : unread}
@@ -988,9 +995,9 @@ export default function SupportChatWidget({
           type="button"
           className="support-widget-fab is-desktop-only"
           onClick={onClose}
-          aria-label="关闭客服"
+          aria-label={chat.closeFab}
         >
-          收起
+          {chat.collapse}
         </button>
       ) : null}
     </div>

@@ -2,7 +2,9 @@
 
 import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLocale } from "../../components/LocaleProvider";
 import SupportChatWidget from "../../components/SupportChatWidget";
+import { t } from "../../lib/copy";
 import {
   setSupportEntry,
   setSupportQueryClientMeta,
@@ -44,11 +46,12 @@ function ChatPageInner() {
 }
 
 export default function ChatPage() {
+  const copy = t(useLocale());
   return (
     <Suspense
       fallback={
         <div className="support-chat-page-loading" aria-busy="true">
-          正在打开客服…
+          {copy.chat.opening}
         </div>
       }
     >

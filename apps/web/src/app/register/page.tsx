@@ -20,7 +20,8 @@ import {
 
 function RegisterForm() {
   const router = useLocaleRouter();
-  const registerCopy = t(useLocale()).register;
+  const messages = t(useLocale());
+  const registerCopy = messages.register;
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,7 +61,7 @@ function RegisterForm() {
     setInfo("");
     setDevCode("");
     if (!email.trim() || password.length < 6) {
-      setError("请先填写邮箱和至少 6 位密码，再获取验证码");
+      setError(registerCopy.needEmailPassword);
       return;
     }
     setSendingCode(true);
@@ -80,14 +81,14 @@ function RegisterForm() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setInfo("验证码已发送，请查收邮件（含垃圾箱）。");
+      setInfo(registerCopy.codeSent);
       setCooldown(60);
       if (res.verify_code) {
         setDevCode(res.verify_code);
         setCode(res.verify_code);
       }
     } catch (err) {
-      setError(friendlyError(err, "发送验证码失败"));
+      setError(friendlyError(err, messages.common.sendFailed));
     } finally {
       setSendingCode(false);
     }
@@ -119,7 +120,7 @@ function RegisterForm() {
       clearInviteCode();
       router.push("/plans?welcome=1");
     } catch (err) {
-      setError(friendlyError(err, "注册失败"));
+      setError(friendlyError(err, registerCopy.failed));
     } finally {
       setLoading(false);
     }
@@ -145,12 +146,12 @@ function RegisterForm() {
         )}
         {devCode && (
           <p style={{ marginBottom: 12, fontSize: 13, color: "var(--muted)" }}>
-            开发环境验证码：<strong>{devCode}</strong>
+            {messages.common.devCode}<strong>{devCode}</strong>
           </p>
         )}
 
         <label className="field" style={{ display: "block", marginBottom: 14 }}>
-          <span className="field-label">邮箱</span>
+          <span className="field-label">{messages.common.email}</span>
           <input
             className="field-input"
             type="email"
@@ -164,7 +165,7 @@ function RegisterForm() {
         </label>
 
         <label className="field" style={{ display: "block", marginBottom: 14 }}>
-          <span className="field-label">密码（至少 6 位）</span>
+          <span className="field-label">{registerCopy.passwordLabel}</span>
           <input
             className="field-input"
             type="password"
@@ -173,12 +174,12 @@ function RegisterForm() {
             minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="设置登录密码"
+            placeholder={registerCopy.passwordPh}
           />
         </label>
 
         <label className="field" style={{ display: "block", marginBottom: 14 }}>
-          <span className="field-label">邮箱验证码</span>
+          <span className="field-label">{messages.common.code}</span>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               className="field-input"
@@ -189,7 +190,7 @@ function RegisterForm() {
               maxLength={6}
               value={code}
               onChange={(e) => setCode(e.target.value.trim())}
-              placeholder="6 位数字"
+              placeholder={registerCopy.codePh}
               style={{ flex: 1 }}
             />
             <button
@@ -200,17 +201,17 @@ function RegisterForm() {
               style={{ whiteSpace: "nowrap", flex: "0 0 auto" }}
             >
               {sendingCode
-                ? "发送中…"
+                ? messages.common.sending
                 : cooldown > 0
                   ? `${cooldown}s`
-                  : "获取验证码"}
+                  : messages.common.sendCode}
             </button>
           </div>
         </label>
 
         <label className="field" style={{ display: "block", marginBottom: 20 }}>
           <span className="field-label">
-            {inviteLocked ? "邀请码（来自邀请链接）" : "邀请码（可选）"}
+            {inviteLocked ? registerCopy.inviteLocked : registerCopy.inviteOptional}
           </span>
           <input
             className="field-input"
@@ -221,7 +222,7 @@ function RegisterForm() {
             onChange={(e) => {
               if (!inviteLocked) setInviteCode(e.target.value.toUpperCase());
             }}
-            placeholder="好友邀请码"
+            placeholder={registerCopy.invitePh}
             style={
               inviteLocked
                 ? {
@@ -237,13 +238,13 @@ function RegisterForm() {
         </label>
 
         <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-          {loading ? "创建中…" : "注册并领取套餐"}
+          {loading ? registerCopy.submitting : registerCopy.submit}
         </button>
 
         <p style={{ margin: "16px 0 0", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>
-          已有账号？{" "}
+          {registerCopy.hasAccount}{" "}
           <Link href="/login" style={{ color: "var(--teal-deep)", fontWeight: 600 }}>
-            去登录
+            {registerCopy.goLogin}
           </Link>
         </p>
       </form>
@@ -254,7 +255,7 @@ function RegisterForm() {
 export default function RegisterPage() {
   return (
     <Shell narrow hideNavigation>
-      <Suspense fallback={<div className="page-head"><h1>创建账号</h1></div>}>
+      <Suspense fallback={<div className="page-head"><h1>{t(useLocale()).register.createTitle}</h1></div>}>
         <RegisterForm />
       </Suspense>
     </Shell>

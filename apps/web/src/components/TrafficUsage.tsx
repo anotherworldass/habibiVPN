@@ -1,5 +1,8 @@
 "use client";
 
+import { useLocale } from "./LocaleProvider";
+import { t } from "../lib/copy";
+
 function formatBytes(n?: number | null) {
   if (n == null || !Number.isFinite(n) || n < 0) return "-";
   if (n === 0) return "0 B";
@@ -25,6 +28,7 @@ export function TrafficUsage({
   usedBytes?: number | null;
   limitBytes?: number | null;
 }) {
+  const copy = t(useLocale()).traffic;
   const unlimited = isUnlimited(limitBytes);
   const used = usedBytes != null && Number.isFinite(usedBytes) ? Math.max(0, usedBytes) : null;
   const limit = !unlimited && limitBytes != null ? limitBytes : null;
@@ -41,13 +45,13 @@ export function TrafficUsage({
     <div className="traffic-usage">
       <div className="traffic-usage-head">
         <div>
-          <div className="traffic-usage-label">流量使用</div>
+          <div className="traffic-usage-label">{copy.label}</div>
           <div className="traffic-usage-value">
             {unlimited ? (
               <>
-                已用 {formatBytes(used)}
+                {copy.used(formatBytes(used))}
                 <span className="traffic-usage-sep">·</span>
-                <span className="traffic-usage-unlimited-tag">不限流量</span>
+                <span className="traffic-usage-unlimited-tag">{copy.unlimited}</span>
               </>
             ) : (
               <>
@@ -62,7 +66,7 @@ export function TrafficUsage({
           </div>
         </div>
         {unlimited ? (
-          <span className="traffic-usage-badge traffic-usage-badge--unlimited">不限</span>
+          <span className="traffic-usage-badge traffic-usage-badge--unlimited">{copy.unlimitedBadge}</span>
         ) : pct != null ? (
           <span className={`traffic-usage-badge traffic-usage-badge--${tone}`}>{pct}%</span>
         ) : null}
@@ -74,7 +78,7 @@ export function TrafficUsage({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={unlimited ? undefined : pct ?? 0}
-        aria-label={unlimited ? "不限流量" : `流量已用 ${pct ?? 0}%`}
+        aria-label={unlimited ? copy.unlimited : copy.usedPct(pct ?? 0)}
       >
         {unlimited ? (
           <div className="traffic-bar-fill traffic-bar-fill--unlimited" />

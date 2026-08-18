@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useLocale } from "./LocaleProvider";
+import { t } from "../lib/copy";
 import {
   REGION_COORDS,
   REGION_DISPLAY_OFFSET,
@@ -32,10 +34,10 @@ type MapPoint = RegionPool & {
   spread: boolean;
 };
 
-function statusText(s: RegionPool["status"]) {
-  if (s === "active") return "正常";
-  if (s === "partial") return "部分可用";
-  return "离线";
+function statusText(s: RegionPool["status"], copy: ReturnType<typeof t>["nodes"]) {
+  if (s === "active") return copy.statusActive;
+  if (s === "partial") return copy.statusPartial;
+  return copy.statusOffline;
 }
 
 /** Equirectangular 2:1 — matches /world-map.svg viewBox */
@@ -43,6 +45,7 @@ const W = 720;
 const H = 360;
 
 export default function NodeMap({ regions, maxTotal }: Props) {
+  const copy = t(useLocale()).nodes;
   const [selected, setSelected] = useState<string | null>(null);
 
   const points = useMemo(() => {
@@ -82,7 +85,7 @@ export default function NodeMap({ regions, maxTotal }: Props) {
 
   return (
     <div className="node-map-wrap">
-      <div className="node-map-canvas" role="img" aria-label="节点地区分布地图">
+      <div className="node-map-canvas" role="img" aria-label={copy.mapAria}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="node-map-svg"
@@ -206,15 +209,15 @@ export default function NodeMap({ regions, maxTotal }: Props) {
 
       <div className="node-map-legend">
         <span>
-          <i className="node-dot node-dot--active" /> 正常
+          <i className="node-dot node-dot--active" /> {copy.statusActive}
         </span>
         <span>
-          <i className="node-dot node-dot--partial" /> 部分可用
+          <i className="node-dot node-dot--partial" /> {copy.statusPartial}
         </span>
         <span>
-          <i className="node-dot node-dot--offline" /> 离线
+          <i className="node-dot node-dot--offline" /> {copy.statusOffline}
         </span>
-        <span className="node-map-hint">虚线连回真实位置 · 点击查看</span>
+        <span className="node-map-hint">{copy.mapHint}</span>
       </div>
 
       {active ? (
@@ -224,21 +227,21 @@ export default function NodeMap({ regions, maxTotal }: Props) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="node-region-name">{active.region_name}</div>
               <div className="node-region-sub">
-                {active.active} 在线
-                {active.inactive > 0 ? ` · ${active.inactive} 离线` : ""}
+                {active.active} {copy.online}
+                {active.inactive > 0 ? ` · ${active.inactive} ${copy.offline}` : ""}
               </div>
             </div>
             <div className="node-region-right">
               <div className="node-region-count">{active.total}</div>
               <span className={`node-status node-status--${active.status}`}>
-                {statusText(active.status)}
+                {statusText(active.status, copy)}
               </span>
             </div>
           </div>
         </div>
       ) : (
         <p style={{ marginTop: 12, fontSize: 12, color: "var(--muted)", textAlign: "center" }}>
-          点选地图上的地区查看详情
+          {copy.mapPick}
         </p>
       )}
     </div>

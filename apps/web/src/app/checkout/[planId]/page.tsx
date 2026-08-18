@@ -8,6 +8,8 @@ import Shell from "../../../components/Shell";
 import { apiFetch } from "../../../lib/api";
 import { getToken } from "../../../lib/auth";
 import { friendlyError } from "../../../lib/errors";
+import { useLocale } from "../../../components/LocaleProvider";
+import { t } from "../../../lib/copy";
 
 type Plan = {
   id: string;
@@ -38,24 +40,25 @@ function methodIcon(method: string) {
   return "付";
 }
 
-function methodLabel(method: string) {
-  if (method === "wechat_qr") return "微信扫码";
-  if (method === "alipay_native") return "支付宝";
-  return "在线支付";
+function methodLabel(method: string, labels: { wechat: string; alipay: string; online: string }) {
+  if (method === "wechat_qr") return labels.wechat;
+  if (method === "alipay_native") return labels.alipay;
+  return labels.online;
 }
 
-function formatDays(seconds?: number | null) {
+function formatDays(seconds: number | null | undefined, days: (n: number) => string) {
   if (!seconds) return null;
-  return seconds % 86400 === 0 ? `${seconds / 86400} 天` : null;
+  return seconds % 86400 === 0 ? days(seconds / 86400) : null;
 }
 
-function formatTraffic(bytes?: number | null) {
+function formatTraffic(bytes: number | null | undefined, unlimited: string) {
   if (bytes == null) return null;
-  if (bytes === 0) return "不限流量";
+  if (bytes === 0) return unlimited;
   return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
 }
 
 export default function CheckoutPage() {
+  const copy = t(useLocale());
   const params = useParams<{ planId: string }>();
   const router = useLocaleRouter();
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -86,7 +89,7 @@ export default function CheckoutPage() {
         setChannels(available);
         setSelectedChannelId(available[0]?.id || "");
       })
-      .catch((reason) => setError(friendlyError(reason, "加载订单信息失败")))
+      .catch((reason) => setError(friendlyError(reason, copy.checkout.loadFailed)))
       .finally(() => setLoading(false));
   }, [params.planId, router]);
 
@@ -104,7 +107,7 @@ export default function CheckoutPage() {
       });
       router.push(`/payment/${encodeURIComponent(result.order.id)}`);
     } catch (reason) {
-      setError(friendlyError(reason, "创建支付订单失败"));
+      setError(friendlyError(reason, copy.checkout.createFailed));
       setSubmitting(false);
     }
   }
@@ -116,51 +119,54 @@ export default function CheckoutPage() {
           <div className="checkout-header-top">
             <Link href="/plans" className="checkout-back">
               <span aria-hidden>←</span>
-              返回套餐
+              {copy.checkout.back}
             </Link>
             <span className="checkout-secure">
               <span aria-hidden>✓</span>
-              安全支付
+              {copy.checkout.secure}
             </span>
           </div>
           <div className="checkout-header-main">
             <div>
               <p className="checkout-eyebrow">CHECKOUT</p>
-              <h1>确认订单</h1>
-              <p>核对套餐内容，选择支付方式后提交订单。</p>
+              <h1>{copy.checkout.title}</h1>
+              <p>{copy.checkout.lead}</p>
             </div>
-            <ol className="checkout-steps" aria-label="购买进度">
-              <li data-active="true"><span>1</span>确认订单</li>
-              <li><span>2</span>完成支付</li>
-              <li><span>3</span>自动开通</li>
+            <ol className="checkout-steps" aria-label={copy.checkout.progressAria}>
+              <li data-active="true"><span>1</span>{copy.checkout.step1}</li>
+              <li><span>2</span>{copy.checkout.step2}</li>
+              <li><span>3</span>{copy.checkout.step3}</li>
             </ol>
           </div>
         </header>
 
         {error ? <p className="alert-error checkout-alert">{error}</p> : null}
-        {loading ? <p className="checkout-loading">加载订单信息中…</p> : null}
+        {loading ? <p className="checkout-loading">{copy.checkout.loading}</p> : null}
 
         {plan ? (
           <div className="checkout-layout">
             <aside className="panel checkout-summary">
-              <div className="checkout-section-label">订单概要</div>
+              <div className="checkout-section-label">{copy.checkout.summary}</div>
               <h2>{plan.name}</h2>
               {(() => {
-                const meta = [formatDays(plan.validity_seconds), formatTraffic(plan.data_limit_bytes)]
+                const meta = [
+                  formatDays(plan.validity_seconds, copy.checkout.days),
+                  formatTraffic(plan.data_limit_bytes, copy.checkout.unlimited),
+                ]
                   .filter(Boolean)
                   .join(" · ");
                 return meta ? <p className="checkout-plan-meta">{meta}</p> : null;
               })()}
               {plan.description ? <p className="checkout-description">{plan.description}</p> : null}
               <div className="checkout-price-row">
-                <span>订单金额</span>
+                <span>{copy.checkout.amount}</span>
                 <strong>
                   <small>¥</small>
                   {(plan.price_cents / 100).toFixed(2)}
                 </strong>
               </div>
               <div className="checkout-summary-foot">
-                <span>币种</span>
+                <span>{copy.checkout.currency}</span>
                 <b>{plan.currency}</b>
               </div>
             </aside>
@@ -168,10 +174,10 @@ export default function CheckoutPage() {
             <section className="panel checkout-payment">
               <div className="checkout-payment-head">
                 <div>
-                  <div className="checkout-section-label">支付方式</div>
-                  <h2>选择支付通道</h2>
+                  <div className="checkout-section-label">{copy.checkout.method}</div>
+                  <h2>{copy.checkout.pickChannel}</h2>
                 </div>
-                <span>共 {channels.length} 个可用通道</span>
+                <span>{copy.checkout.channels(channels.length)}</span>
               </div>
 
               {channels.length ? (
@@ -195,7 +201,7 @@ export default function CheckoutPage() {
                         </span>
                         <span className="checkout-channel-copy">
                           <strong>{channel.name}</strong>
-                          <small>{methodLabel(channel.method)} · 即时到账</small>
+                          <small>{methodLabel(channel.method, copy.checkout)} · {copy.checkout.instant}</small>
                         </span>
                         <span className="checkout-radio" aria-hidden />
                       </button>
@@ -203,12 +209,12 @@ export default function CheckoutPage() {
                   })}
                 </div>
               ) : (
-                <p className="checkout-empty">暂无适用于该套餐金额和币种的支付通道。</p>
+                <p className="checkout-empty">{copy.checkout.empty}</p>
               )}
 
               <div className="checkout-actions">
                 <div className="checkout-pay-total">
-                  <span>应付金额</span>
+                  <span>{copy.checkout.payAmount}</span>
                   <strong>{(plan.price_cents / 100).toFixed(2)} {plan.currency}</strong>
                 </div>
                 <button
@@ -217,10 +223,10 @@ export default function CheckoutPage() {
                   disabled={!selectedChannelId || submitting}
                   onClick={() => void submitOrder()}
                 >
-                  {submitting ? "正在创建订单…" : "提交订单并支付"}
+                  {submitting ? copy.checkout.submitting : copy.checkout.submit}
                   {!submitting ? <span aria-hidden>→</span> : null}
                 </button>
-                <p>提交即表示你已确认套餐及支付信息，支付成功后系统将自动开通。</p>
+                <p>{copy.checkout.agree}</p>
               </div>
             </section>
           </div>

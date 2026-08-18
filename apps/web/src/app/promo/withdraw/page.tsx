@@ -4,8 +4,10 @@ import { FormEvent, useEffect, useState } from "react";
 import { useLocaleRouter } from "../../../components/useLocaleRouter";
 import PromoNav from "../../../components/PromoNav";
 import Shell from "../../../components/Shell";
+import { useLocale } from "../../../components/LocaleProvider";
 import { apiFetch } from "../../../lib/api";
 import { getToken } from "../../../lib/auth";
+import { t } from "../../../lib/copy";
 import { friendlyError } from "../../../lib/errors";
 import { formatBps, formatCents } from "../../../lib/money";
 
@@ -29,13 +31,6 @@ type Withdrawal = {
   createdAt: string;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: "待审核",
-  approved: "已通过",
-  paid: "已打款",
-  rejected: "已拒绝",
-};
-
 function badgeClass(status: string) {
   if (status === "pending" || status === "approved") return "promo-badge promo-badge--pending";
   if (status === "paid") return "promo-badge promo-badge--ok";
@@ -44,7 +39,14 @@ function badgeClass(status: string) {
 }
 
 export default function PromoWithdrawPage() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
+  const statusLabel: Record<string, string> = {
+    pending: copy.promoWithdraw.stPending,
+    approved: copy.promoWithdraw.stApproved,
+    paid: copy.promoWithdraw.stPaid,
+    rejected: copy.promoWithdraw.stRejected,
+  };
   const [overview, setOverview] = useState<Overview | null>(null);
   const [items, setItems] = useState<Withdrawal[]>([]);
   const [amountYuan, setAmountYuan] = useState("");
@@ -74,7 +76,7 @@ export default function PromoWithdrawPage() {
       router.replace("/login");
       return;
     }
-    reload().catch((e) => setError(friendlyError(e, "加载失败")));
+    reload().catch((e) => setError(friendlyError(e, copy.common.loadFailed)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -84,7 +86,7 @@ export default function PromoWithdrawPage() {
     setOk("");
     const yuan = Number(amountYuan);
     if (!Number.isFinite(yuan) || yuan <= 0) {
-      setError("请输入有效金额");
+      setError(copy.promoWithdraw.invalidAmount);
       return;
     }
     const amountCents = Math.round(yuan * 100);
@@ -98,11 +100,11 @@ export default function PromoWithdrawPage() {
           };
 
     if (method === "usdt" && !usdtAddress.trim()) {
-      setError("请填写 USDT 地址");
+      setError(copy.promoWithdraw.needUsdt);
       return;
     }
     if (method === "bank" && (!bankName.trim() || !bankAccount.trim() || !bankHolder.trim())) {
-      setError("请完整填写银行卡信息");
+      setError(copy.promoWithdraw.needBank);
       return;
     }
 
@@ -116,11 +118,11 @@ export default function PromoWithdrawPage() {
           account,
         }),
       });
-      setOk("提现申请已提交，预计 T+1 工作日审核");
+      setOk(copy.promoWithdraw.ok);
       setAmountYuan("");
       await reload();
     } catch (err) {
-      setError(friendlyError(err, "提现失败"));
+      setError(friendlyError(err, copy.promoWithdraw.fail));
     } finally {
       setLoading(false);
     }
@@ -135,24 +137,24 @@ export default function PromoWithdrawPage() {
     <Shell>
       <div className="promo-page">
         <div className="page-head">
-          <h1>提现</h1>
+          <h1>{copy.promoWithdraw.title}</h1>
         </div>
         <PromoNav />
 
       {overview && (
         <section className="promo-hero promo-hero--withdraw">
           <div className="promo-hero-primary">
-            <div className="promo-hero-label">可提现余额</div>
+            <div className="promo-hero-label">{copy.promoWithdraw.balance}</div>
             <div className="promo-hero-value">{formatCents(overview.available_cents)}</div>
-            <span className="promo-hero-caption">申请后预计 T+1 工作日完成审核</span>
+            <span className="promo-hero-caption">{copy.promoWithdraw.reviewHint}</span>
           </div>
           <div className="promo-hero-meta">
             <div className="promo-hero-meta-item">
-              <span>待结算</span>
+              <span>{copy.promoWithdraw.pending}</span>
               <strong>{formatCents(overview.pending_cents)}</strong>
             </div>
             <div className="promo-hero-meta-item">
-              <span>已提现</span>
+              <span>{copy.promoWithdraw.withdrawn}</span>
               <strong>{formatCents(overview.withdrawn_cents)}</strong>
             </div>
           </div>
@@ -162,33 +164,33 @@ export default function PromoWithdrawPage() {
       <section className="panel promo-section" aria-labelledby="withdraw-notes-title">
         <div className="promo-section-head">
           <h2 id="withdraw-notes-title" className="promo-section-title">
-            提现说明
+            {copy.promoWithdraw.notes}
           </h2>
         </div>
         <ul className="promo-rule-bullets" style={{ marginTop: 4 }}>
           <li>
-            最低提现{" "}
+            {copy.promoWithdraw.min}{" "}
             {overview ? formatCents(overview.min_withdraw_cents) : "100.00"}
           </li>
           <li>
-            手续费{" "}
+            {copy.promoWithdraw.fee}{" "}
             {overview ? formatBps(overview.withdraw_fee_bps) : "3.00%"}
           </li>
-          <li>人工审核打款，预计 T+1 工作日处理</li>
+          <li>{copy.promoWithdraw.reviewLi}</li>
         </ul>
       </section>
 
       <div className="promo-desktop-split">
         <form onSubmit={onSubmit} className="panel promo-section">
           <div className="promo-section-head">
-            <h2 className="promo-section-title">提交提现申请</h2>
-            <span className="promo-section-hint">请核对收款信息</span>
+            <h2 className="promo-section-title">{copy.promoWithdraw.formTitle}</h2>
+            <span className="promo-section-hint">{copy.promoWithdraw.formHint}</span>
           </div>
           {error && <p className="alert-error" style={{ marginBottom: 12 }}>{error}</p>}
           {ok && <p className="alert-ok" style={{ marginBottom: 12 }}>{ok}</p>}
 
           <label className="field" style={{ display: "block", marginBottom: 12 }}>
-            <span className="field-label">提现金额</span>
+            <span className="field-label">{copy.promoWithdraw.amount}</span>
             <input
               className="field-input"
               type="number"
@@ -196,19 +198,21 @@ export default function PromoWithdrawPage() {
               step="0.01"
               value={amountYuan}
               onChange={(e) => setAmountYuan(e.target.value)}
-              placeholder="例如 100"
+              placeholder={copy.promoWithdraw.amountPh}
               required
             />
           </label>
 
           {feePreview > 0 && (
             <p className="promo-section-hint" style={{ margin: "0 0 12px" }}>
-              预计手续费 {formatCents(feePreview)}，到账约{" "}
-              {formatCents(Math.round(Number(amountYuan) * 100) - feePreview)}
+              {copy.promoWithdraw.feePreview(
+                formatCents(feePreview),
+                formatCents(Math.round(Number(amountYuan) * 100) - feePreview),
+              )}
             </p>
           )}
 
-          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>提现方式</div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>{copy.promoWithdraw.method}</div>
           <div className="promo-chips" style={{ marginTop: 0, marginBottom: 14 }}>
             {(overview?.withdraw_methods || ["usdt", "bank"]).map((m) => (
               <button
@@ -218,14 +222,14 @@ export default function PromoWithdrawPage() {
                 data-active={method === m ? "true" : "false"}
                 onClick={() => setMethod(m)}
               >
-                {m === "usdt" ? "USDT" : m === "bank" ? "银行卡" : m}
+                {m === "usdt" ? copy.promoWithdraw.usdt : m === "bank" ? copy.promoWithdraw.bank : m}
               </button>
             ))}
           </div>
 
           {method === "usdt" ? (
             <label className="field" style={{ display: "block", marginBottom: 16 }}>
-              <span className="field-label">USDT 地址（推荐 TRC20）</span>
+              <span className="field-label">{copy.promoWithdraw.usdtLabel}</span>
               <input
                 className="field-input"
                 value={usdtAddress}
@@ -237,7 +241,7 @@ export default function PromoWithdrawPage() {
           ) : (
             <>
               <label className="field" style={{ display: "block", marginBottom: 12 }}>
-                <span className="field-label">开户行</span>
+                <span className="field-label">{copy.promoWithdraw.bankName}</span>
                 <input
                   className="field-input"
                   value={bankName}
@@ -246,7 +250,7 @@ export default function PromoWithdrawPage() {
                 />
               </label>
               <label className="field" style={{ display: "block", marginBottom: 12 }}>
-                <span className="field-label">卡号</span>
+                <span className="field-label">{copy.promoWithdraw.cardNo}</span>
                 <input
                   className="field-input"
                   value={bankAccount}
@@ -255,7 +259,7 @@ export default function PromoWithdrawPage() {
                 />
               </label>
               <label className="field" style={{ display: "block", marginBottom: 16 }}>
-                <span className="field-label">户名</span>
+                <span className="field-label">{copy.promoWithdraw.holder}</span>
                 <input
                   className="field-input"
                   value={bankHolder}
@@ -267,16 +271,16 @@ export default function PromoWithdrawPage() {
           )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? "提交中…" : "申请提现"}
+            {loading ? copy.promoWithdraw.submitting : copy.promoWithdraw.submit}
           </button>
         </form>
 
         <section className="panel promo-section">
           <div className="promo-section-head">
-            <h2 className="promo-section-title">提现记录</h2>
+            <h2 className="promo-section-title">{copy.promoWithdraw.history}</h2>
           </div>
           {items.length === 0 ? (
-            <div className="promo-empty" style={{ marginTop: 8 }}>暂无提现记录</div>
+            <div className="promo-empty" style={{ marginTop: 8 }}>{copy.promoWithdraw.empty}</div>
           ) : (
             <div className="promo-list" style={{ marginTop: 8 }}>
               {items.map((it) => (
@@ -284,12 +288,11 @@ export default function PromoWithdrawPage() {
                   <div className="promo-list-row">
                     <div className="promo-list-amount">{formatCents(it.amountCents)}</div>
                     <span className={badgeClass(it.status)}>
-                      {STATUS_LABEL[it.status] || it.status}
+                      {statusLabel[it.status] || it.status}
                     </span>
                   </div>
                   <div className="promo-list-meta">
-                    {it.method.toUpperCase()} · 手续费 {formatCents(it.feeCents)} · 实付{" "}
-                    {formatCents(it.netCents)}
+                    {it.method.toUpperCase()} · {copy.promoWithdraw.feePaid(formatCents(it.feeCents), formatCents(it.netCents))}
                     <br />
                     {new Date(it.createdAt).toLocaleString()}
                   </div>

@@ -16,6 +16,8 @@ import {
   usageModeFromPref,
 } from "../../lib/preferences";
 import { site } from "../../lib/site";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 
 type Subscription = {
   id: string;
@@ -32,16 +34,16 @@ type Subscription = {
   upstream_username?: string;
 };
 
-function statusLabel(status: string) {
-  if (status === "active") return "可用";
-  if (status === "expired") return "已到期";
-  if (status === "disabled") return "已停用";
-  if (status === "none") return "未开通";
+function statusLabel(status: string, copy: ReturnType<typeof t>["sub"]) {
+  if (status === "active") return copy.statusActive;
+  if (status === "expired") return copy.statusExpired;
+  if (status === "disabled") return copy.statusDisabled;
+  if (status === "none") return copy.statusNone;
   return status;
 }
 
-function planLabel(sub: Subscription) {
-  return sub.plan_name || sub.plan_code || sub.next_plan_ref || "套餐";
+function planLabel(sub: Subscription, fallback: string) {
+  return sub.plan_name || sub.plan_code || sub.next_plan_ref || fallback;
 }
 
 function clashImportUrl(url: string) {
@@ -53,6 +55,7 @@ function shadowrocketImportUrl(url: string) {
 }
 
 function SubscriptionContent() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
   const search = useSearchParams();
   const claimed = search.get("claimed") === "1";
@@ -101,7 +104,7 @@ function SubscriptionContent() {
           setUsageMode(usageModeFromPref(mode));
         }
       })
-      .catch((e) => setError(friendlyError(e, "加载失败")))
+      .catch((e) => setError(friendlyError(e, copy.sub.loadFailed)))
       .finally(() => setLoading(false));
   }, [router, queryId]);
 
@@ -139,7 +142,7 @@ function SubscriptionContent() {
       }
     } catch (e) {
       // Keep cached info if sync fails
-      setError(friendlyError(e, "同步该套餐失败，显示本地缓存"));
+      setError(friendlyError(e, copy.sub.syncFailed));
     } finally {
       setSyncing(false);
     }
@@ -169,7 +172,7 @@ function SubscriptionContent() {
       setCopied(false);
       setTimeout(() => setRefreshOk(false), 4000);
     } catch (e) {
-      setError(friendlyError(e, "更新订阅地址失败"));
+      setError(friendlyError(e, copy.sub.refreshFailed));
       setConfirmRefresh(false);
     } finally {
       setRefreshing(false);
@@ -200,13 +203,13 @@ function SubscriptionContent() {
   return (
     <Shell>
       <div className="page-head">
-        <h1>连接</h1>
-        <p>切换套餐查看对应订阅信息，复制链接导入客户端。</p>
+        <h1>{copy.sub.title}</h1>
+        <p>{copy.sub.lead}</p>
       </div>
 
       {claimed && (
         <p className="alert-ok" style={{ marginTop: 12 }}>
-          套餐已开通。可在上方切换套餐，复制对应订阅链接。
+          {copy.sub.claimed}
         </p>
       )}
       {error && (
@@ -216,19 +219,19 @@ function SubscriptionContent() {
       )}
 
       {loading && (
-        <p style={{ marginTop: 20, color: "var(--muted)", fontSize: 14 }}>同步订阅中…</p>
+        <p style={{ marginTop: 20, color: "var(--muted)", fontSize: 14 }}>{copy.sub.syncing}</p>
       )}
 
       {!loading && subs.length === 0 && (
         <div className="panel" style={{ marginTop: 16 }}>
           <h2 className="font-display" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-            还没有可用连接
+            {copy.sub.emptyTitle}
           </h2>
           <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--muted)", lineHeight: 1.5 }}>
-            先领取免费试用套餐，系统会自动生成订阅链接。
+            {copy.sub.emptyLead}
           </p>
           <Link href="/plans?welcome=1" className="btn btn-primary btn-block" style={{ marginTop: 16 }}>
-            去领取套餐
+            {copy.sub.claimCta}
           </Link>
         </div>
       )}
@@ -245,12 +248,12 @@ function SubscriptionContent() {
                 letterSpacing: "0.04em",
               }}
             >
-              我的套餐 {subs.length > 1 ? `（${subs.length}）` : ""}
+              {copy.sub.myPlans}{subs.length > 1 ? `（${subs.length}）` : ""}
             </div>
             <div
               className="plan-switcher"
               role="tablist"
-              aria-label="切换套餐"
+              aria-label={copy.sub.switchAria}
             >
               {subs.map((sub) => {
                 const active = sub.id === selectedId;
@@ -264,8 +267,8 @@ function SubscriptionContent() {
                     data-active={active}
                     onClick={() => selectPlan(sub.id)}
                   >
-                    <span className="plan-switch-name">{planLabel(sub)}</span>
-                    <span className="plan-switch-meta">{statusLabel(sub.status)}</span>
+                    <span className="plan-switch-name">{planLabel(sub, copy.sub.fallbackPlan)}</span>
+                    <span className="plan-switch-meta">{statusLabel(sub.status, copy.sub)}</span>
                   </button>
                 );
               })}
@@ -285,21 +288,21 @@ function SubscriptionContent() {
               >
                 <div>
                   <h2 className="font-display" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                    {planLabel(selected)}
+                    {planLabel(selected, copy.sub.fallbackPlan)}
                   </h2>
                   <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--muted)" }}>
-                    {selected.upstream_username || `${site.brand} 订阅`}
-                    {syncing ? " · 同步中…" : ""}
+                    {selected.upstream_username || copy.sub.fallbackSub}
+                    {syncing ? ` · ${copy.sub.syncingDot}` : ""}
                   </p>
                 </div>
                 {selected.status === "active" ? (
                   <span className="status-chip">
                     <span className="status-dot" />
-                    {statusLabel(selected.status)}
+                    {statusLabel(selected.status, copy.sub)}
                   </span>
                 ) : (
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
-                    {statusLabel(selected.status)}
+                    {statusLabel(selected.status, copy.sub)}
                   </span>
                 )}
               </div>
@@ -314,7 +317,7 @@ function SubscriptionContent() {
                 }}
               >
                 <div>
-                  <div style={{ color: "var(--muted)" }}>到期</div>
+                  <div style={{ color: "var(--muted)" }}>{copy.sub.expires}</div>
                   <div style={{ marginTop: 4, fontWeight: 600 }}>
                     {selected.expires_at
                       ? new Date(selected.expires_at).toLocaleDateString()
@@ -322,7 +325,7 @@ function SubscriptionContent() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ color: "var(--muted)" }}>可用设备数</div>
+                  <div style={{ color: "var(--muted)" }}>{copy.sub.devices}</div>
                   <div style={{ marginTop: 4, fontWeight: 600 }}>
                     {selected.online_ip_limit ?? "-"}
                   </div>
@@ -346,9 +349,9 @@ function SubscriptionContent() {
                     }}
                   >
                     <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                      当前套餐订阅链接
+                      {copy.sub.linkTitle}
                     </div>
-                    <div className="view-toggle" role="tablist" aria-label="链接展示方式">
+                    <div className="view-toggle" role="tablist" aria-label={copy.sub.viewAria}>
                       <button
                         type="button"
                         role="tab"
@@ -356,7 +359,7 @@ function SubscriptionContent() {
                         aria-selected={linkView === "link"}
                         onClick={() => setLinkView("link")}
                       >
-                        链接
+                        {copy.sub.linkTab}
                       </button>
                       <button
                         type="button"
@@ -365,7 +368,7 @@ function SubscriptionContent() {
                         aria-selected={linkView === "qr"}
                         onClick={() => setLinkView("qr")}
                       >
-                        二维码
+                        {copy.sub.qrTab}
                       </button>
                     </div>
                   </div>
@@ -385,14 +388,14 @@ function SubscriptionContent() {
                           ref={qrCanvasRef}
                         />
                       </div>
-                      <p className="sub-qr-hint">用客户端扫码导入订阅</p>
+                      <p className="sub-qr-hint">{copy.sub.qrHint}</p>
                       <button
                         type="button"
                         className="btn btn-secondary"
                         style={{ minWidth: 140 }}
                         onClick={saveQr}
                       >
-                        {qrSaved ? "已保存" : "保存二维码"}
+                        {qrSaved ? copy.sub.qrSaved : copy.sub.saveQr}
                       </button>
                     </div>
                   )}
@@ -403,12 +406,12 @@ function SubscriptionContent() {
                     style={{ marginTop: 12 }}
                     onClick={copyUrl}
                   >
-                    {copied ? "已复制，去客户端粘贴" : "复制订阅链接"}
+                    {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
                   </button>
                   <div className="client-import">
                     <div className="client-import-head">
-                      <strong>一键导入客户端</strong>
-                      <span>请先安装对应应用</span>
+                      <strong>{copy.sub.importTitle}</strong>
+                      <span>{copy.sub.importNeedApp}</span>
                     </div>
                     <div className="client-import-grid">
                       <a
@@ -419,8 +422,8 @@ function SubscriptionContent() {
                           C
                         </span>
                         <span>
-                          <strong>导入 Clash</strong>
-                          <small>电脑 / Android</small>
+                          <strong>{copy.sub.importClash}</strong>
+                          <small>{copy.sub.importClashHint}</small>
                         </span>
                       </a>
                       <a
@@ -431,13 +434,13 @@ function SubscriptionContent() {
                           S
                         </span>
                         <span>
-                          <strong>导入 Shadowrocket</strong>
+                          <strong>{copy.sub.importSr}</strong>
                           <small>iPhone / iPad</small>
                         </span>
                       </a>
                     </div>
                     <p className="client-import-note">
-                      点击后会唤起客户端；未安装或唤起失败时，请复制上方链接手动添加订阅。
+                      {copy.sub.importNote}
                     </p>
                   </div>
                   <button
@@ -447,18 +450,18 @@ function SubscriptionContent() {
                     onClick={() => setConfirmRefresh(true)}
                     disabled={refreshing}
                   >
-                    更新订阅地址
+                    {copy.sub.refresh}
                   </button>
                   {refreshOk && (
                     <p className="alert-ok" style={{ marginTop: 10 }}>
-                      已生成新链接，请重新复制并导入客户端。旧链接已失效。
+                      {copy.sub.refreshed}
                     </p>
                   )}
                 </div>
               ) : (
                 <div style={{ marginTop: 14 }}>
                   <p style={{ fontSize: 13, color: "var(--amber)", margin: 0 }}>
-                    暂无订阅链接，可尝试更新订阅地址，或联系管理员。
+                    {copy.sub.noLink}
                   </p>
                   <button
                     type="button"
@@ -467,7 +470,7 @@ function SubscriptionContent() {
                     onClick={() => setConfirmRefresh(true)}
                     disabled={refreshing}
                   >
-                    更新订阅地址
+                    {copy.sub.refresh}
                   </button>
                 </div>
               )}
@@ -476,10 +479,10 @@ function SubscriptionContent() {
 
           <section className="section sub-import-panel" style={{ paddingTop: 28 }}>
             <h2 className="section-title" style={{ fontSize: "1.1rem" }}>
-              如何使用
+              {copy.sub.howTitle}
             </h2>
-            <p className="section-lead">新手推荐使用本站 APP，也支持常见第三方客户端。</p>
-            <div className="usage-tabs" role="tablist" aria-label="选择使用方式">
+            <p className="section-lead">{copy.sub.howLead}</p>
+            <div className="usage-tabs" role="tablist" aria-label={copy.sub.howAria}>
               <button
                 type="button"
                 role="tab"
@@ -488,7 +491,7 @@ function SubscriptionContent() {
                 data-active={usageMode === "official"}
                 onClick={() => selectUsageMode("official")}
               >
-                本站 APP
+                {copy.sub.appTab}
               </button>
               <button
                 type="button"
@@ -498,7 +501,7 @@ function SubscriptionContent() {
                 data-active={usageMode === "third-party"}
                 onClick={() => selectUsageMode("third-party")}
               >
-                第三方工具
+                {copy.sub.thirdTab}
               </button>
             </div>
             <div className="usage-guide">
@@ -506,19 +509,19 @@ function SubscriptionContent() {
               <article className="usage-card usage-card--primary">
                 <div className="usage-card-head">
                   <div>
-                    <span className="usage-card-kicker">推荐 · 最简单</span>
-                    <h3>使用本站 APP</h3>
+                    <span className="usage-card-kicker">{copy.sub.appKicker}</span>
+                    <h3>{copy.sub.appTitle}</h3>
                   </div>
-                  <span className="usage-card-badge">无需导入</span>
+                  <span className="usage-card-badge">{copy.sub.appBadge}</span>
                 </div>
                 <p className="usage-card-desc">
-                  下载并安装本站 APP，使用当前账号登录，套餐和线路会自动同步。
+                  {copy.sub.appBody}
                 </p>
                 <div className="usage-download-row">
                   <Link href="/download" className="btn btn-primary usage-download-btn">
-                    下载本站 APP
+                    {copy.sub.appDownload}
                   </Link>
-                  <div className="usage-platform-links" aria-label="选择平台">
+                  <div className="usage-platform-links" aria-label={copy.sub.platformAria}>
                     <Link href="/download">iOS</Link>
                     <Link href="/download">Android</Link>
                     <Link href="/download">Windows</Link>
@@ -526,12 +529,12 @@ function SubscriptionContent() {
                   </div>
                 </div>
                 <ol className="usage-mini-steps">
-                  <li><span>1</span>下载并安装本站 APP</li>
-                  <li><span>2</span>登录 {site.brand} 账号</li>
-                  <li><span>3</span>选择线路，点击连接</li>
+                  <li><span>1</span>{copy.sub.appStep1}</li>
+                  <li><span>2</span>{copy.sub.appStep2}</li>
+                  <li><span>3</span>{copy.sub.appStep3}</li>
                 </ol>
                 <Link href="/guide" className="usage-card-link">
-                  查看完整使用教程
+                  {copy.sub.fullGuide}
                   <span aria-hidden>→</span>
                 </Link>
               </article>
@@ -539,22 +542,22 @@ function SubscriptionContent() {
               <article className="usage-card">
                 <div className="usage-card-head">
                   <div>
-                    <span className="usage-card-kicker">兼容更多客户端</span>
-                    <h3>使用第三方工具</h3>
+                    <span className="usage-card-kicker">{copy.sub.thirdKicker}</span>
+                    <h3>{copy.sub.thirdTitle}</h3>
                   </div>
                 </div>
                 <p className="usage-card-desc">
-                  适用于 Shadowrocket、Clash、Hiddify 等支持订阅链接的工具。
+                  {copy.sub.thirdBody}
                 </p>
                 <ol className="usage-mini-steps">
-                  <li><span>1</span>在上方选择要使用的套餐</li>
-                  <li><span>2</span>点击「复制订阅链接」</li>
-                  <li><span>3</span>打开工具，添加订阅并粘贴链接</li>
-                  <li><span>4</span>更新节点后选择线路连接</li>
+                  <li><span>1</span>{copy.sub.thirdStep1}</li>
+                  <li><span>2</span>{copy.sub.thirdStep2}</li>
+                  <li><span>3</span>{copy.sub.thirdStep3}</li>
+                  <li><span>4</span>{copy.sub.thirdStep4}</li>
                 </ol>
-                <p className="usage-card-note">订阅链接相当于密码，请勿转发给他人。</p>
+                <p className="usage-card-note">{copy.sub.thirdNote}</p>
                 <Link href="/download" className="usage-card-link">
-                  也可下载本站 APP（更简单）
+                  {copy.sub.alsoApp}
                   <span aria-hidden>→</span>
                 </Link>
               </article>
@@ -569,10 +572,10 @@ function SubscriptionContent() {
         <div className="confirm-mask" role="dialog" aria-modal="true" aria-labelledby="refresh-title">
           <div className="confirm-sheet">
             <h3 id="refresh-title" className="font-display" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-              确认更新？
+              {copy.sub.confirmTitle}
             </h3>
             <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.55, color: "var(--ink-soft)" }}>
-              更新地址会重新生成新的订阅链接，旧链接立即失效，客户端需重新导入。
+              {copy.sub.confirmBody}
             </p>
             <div style={{ display: "grid", gap: 10, marginTop: 20 }}>
               <button
@@ -581,7 +584,7 @@ function SubscriptionContent() {
                 disabled={refreshing}
                 onClick={refreshUrl}
               >
-                {refreshing ? "更新中…" : "确认更新"}
+                {refreshing ? copy.sub.refreshing : copy.sub.confirmOk}
               </button>
               <button
                 type="button"
@@ -589,7 +592,7 @@ function SubscriptionContent() {
                 disabled={refreshing}
                 onClick={() => setConfirmRefresh(false)}
               >
-                取消
+                {copy.common.cancel}
               </button>
             </div>
           </div>
@@ -605,7 +608,7 @@ export default function SubscriptionPage() {
     <Suspense
       fallback={
         <Shell>
-          <p style={{ paddingTop: 24, color: "var(--muted)", fontSize: 14 }}>加载中…</p>
+          <p style={{ paddingTop: 24, color: "var(--muted)", fontSize: 14 }}>{t(useLocale()).common.loading}</p>
         </Shell>
       }
     >

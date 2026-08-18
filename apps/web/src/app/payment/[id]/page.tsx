@@ -9,6 +9,8 @@ import Shell from "../../../components/Shell";
 import { apiFetch } from "../../../lib/api";
 import { getToken } from "../../../lib/auth";
 import { friendlyError } from "../../../lib/errors";
+import { useLocale } from "../../../components/LocaleProvider";
+import { t } from "../../../lib/copy";
 
 type PaymentOrder = {
   id: string;
@@ -20,17 +22,18 @@ type PaymentOrder = {
   provision_error: string | null;
 };
 
-function statusText(status: string) {
-  if (status === "pending") return "等待支付";
-  if (status === "paid") return "已支付，等待开通";
-  if (status === "provisioning") return "正在开通套餐";
-  if (status === "provisioned") return "支付成功，套餐已开通";
-  if (status === "failed") return "订单失败";
-  if (status === "cancelled") return "订单已取消";
+function statusText(status: string, copy: ReturnType<typeof t>["payment"]) {
+  if (status === "pending") return copy.pending;
+  if (status === "paid") return copy.paid;
+  if (status === "provisioning") return copy.provisioning;
+  if (status === "provisioned") return copy.provisioned;
+  if (status === "failed") return copy.failed;
+  if (status === "cancelled") return copy.cancelled;
   return status;
 }
 
 export default function PaymentOrderPage() {
+  const copy = t(useLocale());
   const params = useParams<{ id: string }>();
   const router = useLocaleRouter();
   const [order, setOrder] = useState<PaymentOrder | null>(null);
@@ -48,7 +51,7 @@ export default function PaymentOrderPage() {
       setOrder(result.order);
       setError("");
     } catch (e) {
-      setError(friendlyError(e, "查询订单失败"));
+      setError(friendlyError(e, copy.payment.loadFailed));
     } finally {
       polling.current = false;
       setLoading(false);
@@ -71,28 +74,28 @@ export default function PaymentOrderPage() {
     <Shell>
       <div className="payment-page-head">
         <div className="page-head">
-          <h1>支付订单</h1>
-          <p>请在支付页面完成付款，系统会自动确认并开通套餐。</p>
+          <h1>{copy.payment.title}</h1>
+          <p>{copy.payment.lead}</p>
         </div>
         <Link href="/plans" className="payment-back-button">
           <span aria-hidden>←</span>
-          返回套餐
+          {copy.payment.back}
         </Link>
       </div>
 
       {error ? <p className="alert-error" style={{ marginTop: 12 }}>{error}</p> : null}
-      {loading ? <p style={{ marginTop: 20, color: "var(--muted)" }}>加载订单中…</p> : null}
+      {loading ? <p style={{ marginTop: 20, color: "var(--muted)" }}>{copy.payment.loading}</p> : null}
 
       {order ? (
         <div className="panel payment-order-panel">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
             <div>
-              <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>应付金额</p>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>{copy.payment.payAmount}</p>
               <strong style={{ display: "block", marginTop: 4, fontSize: 28 }}>
                 {(order.amount_cents / 100).toFixed(2)} {order.currency}
               </strong>
             </div>
-            <span className="status-chip">{statusText(order.status)}</span>
+            <span className="status-chip">{statusText(order.status, copy.payment)}</span>
           </div>
 
           {order.status === "pending" && order.payment_url ? (
@@ -101,7 +104,7 @@ export default function PaymentOrderPage() {
                 <QRCodeCanvas value={order.payment_url} size={220} level="M" />
               </div>
               <p style={{ margin: "12px 0", color: "var(--muted)", fontSize: 13 }}>
-                使用微信或支付宝扫码；也可直接打开支付页面。
+                {copy.payment.scanHint}
               </p>
               <a
                 className="btn btn-primary btn-block"
@@ -109,32 +112,32 @@ export default function PaymentOrderPage() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                打开支付页面
+                {copy.payment.openPay}
               </a>
             </div>
           ) : null}
 
           {order.status === "provisioned" ? (
             <Link href="/subscription?claimed=1" className="btn btn-primary btn-block" style={{ marginTop: 20 }}>
-              查看订阅连接
+              {copy.payment.viewSub}
             </Link>
           ) : null}
 
           {order.status === "paid" || order.status === "provisioning" ? (
             <p className="alert-ok" style={{ marginTop: 20 }}>
-              已收到付款，正在自动开通，请不要重复支付。
+              {copy.payment.received}
             </p>
           ) : null}
 
           {order.provision_error ? (
             <p className="alert-error" style={{ marginTop: 16 }}>
-              付款已确认，但自动开通暂时失败。系统会在支付平台重试通知时再次处理，请联系管理员并提供订单号。
+              {copy.payment.provisionFail}
             </p>
           ) : null}
 
           {order.status === "failed" ? (
             <Link href="/plans" className="btn btn-secondary btn-block" style={{ marginTop: 20 }}>
-              返回重新下单
+              {copy.payment.reorder}
             </Link>
           ) : null}
 
@@ -145,12 +148,12 @@ export default function PaymentOrderPage() {
               style={{ marginTop: 10 }}
               onClick={() => void load(true)}
             >
-              我已支付，刷新状态
+              {copy.payment.refresh}
             </button>
           ) : null}
 
           <p style={{ margin: "16px 0 0", color: "var(--muted)", fontSize: 12 }}>
-            订单号：{order.id}
+            {copy.payment.orderId}{order.id}
           </p>
         </div>
       ) : null}

@@ -8,6 +8,27 @@ import Shell from "../components/Shell";
 import { getToken } from "../lib/auth";
 import { t } from "../lib/copy";
 
+const extraIcons = {
+  nodes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.6 3.6 5.5 3.6 8.5S14.4 17.9 12 20.5C9.6 17.9 8.4 15 8.4 12S9.6 6.1 12 3.5Z" />
+    </svg>
+  ),
+  plans: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <rect x="7" y="4.5" width="13" height="9" rx="2" />
+      <rect x="4" y="10.5" width="13" height="9" rx="2" />
+    </svg>
+  ),
+  web: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <rect x="3.5" y="5" width="17" height="14" rx="2.2" />
+      <path d="M3.5 9h17M8 17h8" />
+    </svg>
+  ),
+};
+
 export default function Home() {
   const locale = useLocale();
   const copy = t(locale).home;
@@ -86,21 +107,27 @@ export default function Home() {
           <h2 className="section-title">{copy.extraTitle}</h2>
           <div className="steps">
             <div className="step">
-              <div className="step-num">·</div>
+              <div className="step-num" aria-hidden>
+                {extraIcons.nodes}
+              </div>
               <div>
                 <h3>{copy.extra1Title}</h3>
                 <p>{copy.extra1Body}</p>
               </div>
             </div>
             <div className="step">
-              <div className="step-num">·</div>
+              <div className="step-num" aria-hidden>
+                {extraIcons.plans}
+              </div>
               <div>
                 <h3>{copy.extra2Title}</h3>
                 <p>{copy.extra2Body}</p>
               </div>
             </div>
             <div className="step">
-              <div className="step-num">·</div>
+              <div className="step-num" aria-hidden>
+                {extraIcons.web}
+              </div>
               <div>
                 <h3>{copy.extra3Title}</h3>
                 <p>{copy.extra3Body}</p>

@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { useLocaleRouter } from "../../../components/useLocaleRouter";
 import PromoNav from "../../../components/PromoNav";
 import Shell from "../../../components/Shell";
+import { useLocale } from "../../../components/LocaleProvider";
 import { apiFetch } from "../../../lib/api";
 import { getToken } from "../../../lib/auth";
+import { t } from "../../../lib/copy";
 import { friendlyError } from "../../../lib/errors";
 import { formatBps, formatCents } from "../../../lib/money";
 
@@ -45,12 +47,6 @@ type Overview = {
 
 type Tab = "invites" | "commissions";
 
-const COMMISSION_STATUS_LABEL: Record<string, string> = {
-  pending: "待结算",
-  settled: "已结算",
-  invalid: "已失效",
-};
-
 function commissionBadgeClass(status: string) {
   if (status === "pending") return "promo-badge promo-badge--pending";
   if (status === "settled") return "promo-badge promo-badge--ok";
@@ -63,8 +59,14 @@ function parseTab(raw: string | null): Tab {
 }
 
 function PromoTeamPageInner() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
   const searchParams = useSearchParams();
+  const statusLabel: Record<string, string> = {
+    pending: copy.promoTeam.pending,
+    settled: copy.promoTeam.settled,
+    invalid: copy.promoTeam.invalid,
+  };
   const [tab, setTab] = useState<Tab>(() => parseTab(searchParams.get("tab")));
 
   const [inviteItems, setInviteItems] = useState<InviteItem[]>([]);
@@ -111,12 +113,12 @@ function PromoTeamPageInner() {
         );
       })
       .catch((e) => {
-        if (!cancelled) setError(friendlyError(e, "加载失败"));
+        if (!cancelled) setError(friendlyError(e, copy.common.loadFailed));
       });
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, copy.common.loadFailed]);
 
   useEffect(() => {
     if (!getToken()) {
@@ -132,9 +134,9 @@ function PromoTeamPageInner() {
       .then((res) => {
         setInviteItems(res.items);
       })
-      .catch((e) => setError(friendlyError(e, "加载失败")))
+      .catch((e) => setError(friendlyError(e, copy.common.loadFailed)))
       .finally(() => setLoading(false));
-  }, [router, tab, level]);
+  }, [router, tab, level, copy.common.loadFailed]);
 
   useEffect(() => {
     if (!getToken()) {
@@ -152,9 +154,9 @@ function PromoTeamPageInner() {
       .then((res) => {
         setCommissionItems(res.items);
       })
-      .catch((e) => setError(friendlyError(e, "加载失败")))
+      .catch((e) => setError(friendlyError(e, copy.common.loadFailed)))
       .finally(() => setLoading(false));
-  }, [router, tab, commissionStatus]);
+  }, [router, tab, commissionStatus, copy.common.loadFailed]);
 
   const levelOptions =
     maxLevel > 0 ? Array.from({ length: maxLevel }, (_, i) => i + 1) : [];
@@ -163,41 +165,41 @@ function PromoTeamPageInner() {
     <Shell>
       <div className="promo-page">
         <div className="page-head">
-          <h1>邀请与佣金</h1>
+          <h1>{copy.promoTeam.title}</h1>
         </div>
         <PromoNav />
 
         {overview && (
           <section className="promo-section panel" style={{ marginTop: 14 }}>
             <div className="promo-section-head">
-              <h2 className="promo-section-title">邀请速览</h2>
+              <h2 className="promo-section-title">{copy.promoTeam.snapshot}</h2>
               <button
                 type="button"
                 className="promo-section-link"
                 onClick={() => switchTab("commissions")}
               >
-                查看佣金
+                {copy.promoTeam.viewCommissions}
               </button>
             </div>
             <div className="promo-stat-grid">
               <div className="promo-stat-card">
-                <span>邀请人数</span>
+                <span>{copy.promoTeam.invitees}</span>
                 <strong>{overview.team_total}</strong>
               </div>
               <div className="promo-stat-card">
-                <span>近 7 日新增</span>
+                <span>{copy.promoTeam.new7d}</span>
                 <strong>{overview.new_users_7d}</strong>
               </div>
               <div className="promo-stat-card">
-                <span>近 7 日充值人数</span>
+                <span>{copy.promoTeam.paid7d}</span>
                 <strong>{overview.new_payers_7d}</strong>
               </div>
               <div className="promo-stat-card">
-                <span>今日邀请充值</span>
+                <span>{copy.promoTeam.todayPay}</span>
                 <strong>{formatCents(overview.today_team_recharge_cents)}</strong>
               </div>
               <div className="promo-stat-card">
-                <span>邀请累计充值</span>
+                <span>{copy.promoTeam.totalPay}</span>
                 <strong>{formatCents(overview.team_total_recharge_cents)}</strong>
               </div>
             </div>
@@ -211,7 +213,7 @@ function PromoTeamPageInner() {
             data-active={tab === "invites" ? "true" : "false"}
             onClick={() => switchTab("invites")}
           >
-            邀请好友
+            {copy.promoTeam.inviteFriends}
           </button>
           <button
             type="button"
@@ -219,7 +221,7 @@ function PromoTeamPageInner() {
             data-active={tab === "commissions" ? "true" : "false"}
             onClick={() => switchTab("commissions")}
           >
-            佣金流水
+            {copy.promoTeam.flow}
           </button>
         </div>
 
@@ -231,7 +233,7 @@ function PromoTeamPageInner() {
               data-active={level === "" ? "true" : "false"}
               onClick={() => setLevel("")}
             >
-              全部
+              {copy.promoTeam.all}
             </button>
             {levelOptions.map((lv) => (
               <button
@@ -241,7 +243,7 @@ function PromoTeamPageInner() {
                 data-active={level === lv ? "true" : "false"}
                 onClick={() => setLevel(lv)}
               >
-                {lv} 层
+                {copy.promoTeam.layer(lv)}
               </button>
             ))}
           </div>
@@ -250,10 +252,10 @@ function PromoTeamPageInner() {
         {tab === "commissions" && (
           <div className="promo-chips">
             {[
-              { v: "", t: "全部" },
-              { v: "pending", t: "待结算" },
-              { v: "settled", t: "已结算" },
-              { v: "invalid", t: "已失效" },
+              { v: "", t: copy.promoTeam.all },
+              { v: "pending", t: copy.promoTeam.pending },
+              { v: "settled", t: copy.promoTeam.settled },
+              { v: "invalid", t: copy.promoTeam.invalid },
             ].map((o) => (
               <button
                 key={o.v || "all"}
@@ -275,13 +277,13 @@ function PromoTeamPageInner() {
         )}
 
         {loading ? (
-          <p className="promo-loading">加载中…</p>
+          <p className="promo-loading">{copy.promo.loading}</p>
         ) : tab === "invites" ? (
           inviteItems.length === 0 ? (
             <div className="promo-empty">
-              暂无邀请记录
+              {copy.promoTeam.emptyInvite}
               <br />
-              分享邀请链接后，好友注册会出现在这里
+              {copy.promoTeam.emptyInviteHint}
             </div>
           ) : (
             <div className="promo-list">
@@ -289,11 +291,11 @@ function PromoTeamPageInner() {
                 <div key={it.user_id} className="promo-list-item">
                   <div className="promo-list-row">
                     <div className="promo-list-title">{it.email_masked}</div>
-                    <span className="promo-badge promo-badge--ok">{it.level} 层</span>
+                    <span className="promo-badge promo-badge--ok">{copy.promoTeam.layer(it.level)}</span>
                   </div>
                   <div className="promo-list-meta">
                     {new Date(it.created_at).toLocaleString()} ·{" "}
-                    {it.status === "active" ? "正常" : it.status}
+                    {it.status === "active" ? copy.promoTeam.active : it.status}
                   </div>
                 </div>
               ))}
@@ -301,9 +303,9 @@ function PromoTeamPageInner() {
           )
         ) : commissionItems.length === 0 ? (
           <div className="promo-empty">
-            暂无佣金记录
+            {copy.promoTeam.emptyComm}
             <br />
-            邀请好友充值后会在此显示
+            {copy.promoTeam.emptyCommHint}
           </div>
         ) : (
           <div className="promo-list">
@@ -314,18 +316,18 @@ function PromoTeamPageInner() {
                     +{formatCents(it.amount_cents)}
                   </div>
                   <span className={commissionBadgeClass(it.status)}>
-                    {COMMISSION_STATUS_LABEL[it.status] || it.status}
+                    {statusLabel[it.status] || it.status}
                   </span>
                 </div>
                 <div className="promo-list-meta">
-                  {it.level} 层 · {formatBps(it.rate_bps)} · 订单{" "}
+                  {copy.promoTeam.layer(it.level)} · {formatBps(it.rate_bps)} · {copy.promoTeam.order}{" "}
                   {formatCents(it.order_amount_cents)}
                   <br />
-                  来自 {it.payer_email_masked}
+                  {copy.promoTeam.from} {it.payer_email_masked}
                   <br />
                   {new Date(it.created_at).toLocaleString()}
                   {it.status === "pending" && (
-                    <> · 预计 {new Date(it.settle_at).toLocaleDateString()} 结算</>
+                    <> · {copy.promoTeam.settleOn(new Date(it.settle_at).toLocaleDateString())}</>
                   )}
                 </div>
               </div>
@@ -338,16 +340,17 @@ function PromoTeamPageInner() {
 }
 
 export default function PromoTeamPage() {
+  const copy = t(useLocale());
   return (
     <Suspense
       fallback={
         <Shell>
           <div className="promo-page">
             <div className="page-head">
-              <h1>邀请与佣金</h1>
+              <h1>{copy.promoTeam.title}</h1>
             </div>
             <PromoNav />
-            <p className="promo-loading">加载中…</p>
+            <p className="promo-loading">{copy.promo.loading}</p>
           </div>
         </Shell>
       }

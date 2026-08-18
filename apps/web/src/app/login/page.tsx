@@ -8,10 +8,13 @@ import { apiFetch } from "../../lib/api";
 import { setToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { bindSupportSession } from "../../lib/support";
+import { useLocale } from "../../components/LocaleProvider";
+import { t } from "../../lib/copy";
 
 type LoginMode = "password" | "code";
 
 export default function LoginPage() {
+  const copy = t(useLocale());
   const router = useLocaleRouter();
   const [mode, setMode] = useState<LoginMode>("password");
   const [email, setEmail] = useState("");
@@ -42,7 +45,7 @@ export default function LoginPage() {
     setInfo("");
     setDevCode("");
     if (!email.trim()) {
-      setError("请先填写邮箱");
+      setError(copy.login.emailRequired);
       return;
     }
     setSendingCode(true);
@@ -55,14 +58,14 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email }),
       });
-      setInfo("若该邮箱已注册且已验证，验证码已发送。请查收邮件。");
+      setInfo(copy.login.codeSent);
       setCooldown(60);
       if (res.verify_code) {
         setDevCode(res.verify_code);
         setCode(res.verify_code);
       }
     } catch (err) {
-      setError(friendlyError(err, "发送验证码失败"));
+      setError(friendlyError(err, copy.common.sendFailed));
     } finally {
       setSendingCode(false);
     }
@@ -89,7 +92,7 @@ export default function LoginPage() {
       await bindSupportSession();
       goNext();
     } catch (err) {
-      setError(friendlyError(err, "登录失败"));
+      setError(friendlyError(err, copy.login.failed));
     } finally {
       setLoading(false);
     }
@@ -98,8 +101,8 @@ export default function LoginPage() {
   return (
     <Shell narrow hideNavigation>
       <div className="page-head">
-        <h1>登录</h1>
-        <p>进入后即可查看订阅链接并导入客户端。</p>
+        <h1>{copy.login.title}</h1>
+        <p>{copy.login.lead}</p>
       </div>
 
       <form onSubmit={onSubmit} className="panel" style={{ marginTop: 16 }}>
@@ -113,12 +116,12 @@ export default function LoginPage() {
             background: "color-mix(in srgb, var(--muted) 12%, transparent)",
           }}
           role="tablist"
-          aria-label="登录方式"
+          aria-label={copy.login.modeAria}
         >
           {(
             [
-              { key: "password", label: "密码登录" },
-              { key: "code", label: "验证码登录" },
+              { key: "password", label: copy.login.passwordMode },
+              { key: "code", label: copy.login.codeMode },
             ] as const
           ).map((item) => {
             const active = mode === item.key;
@@ -164,12 +167,12 @@ export default function LoginPage() {
         )}
         {mode === "code" && devCode && (
           <p style={{ marginBottom: 12, fontSize: 13, color: "var(--muted)" }}>
-            开发环境验证码：<strong>{devCode}</strong>
+            {copy.common.devCode}<strong>{devCode}</strong>
           </p>
         )}
 
         <label className="field" style={{ display: "block", marginBottom: 14 }}>
-          <span className="field-label">邮箱</span>
+          <span className="field-label">{copy.common.email}</span>
           <input
             className="field-input"
             type="email"
@@ -185,7 +188,7 @@ export default function LoginPage() {
         {mode === "password" ? (
           <>
             <label className="field" style={{ display: "block", marginBottom: 8 }}>
-              <span className="field-label">密码</span>
+              <span className="field-label">{copy.common.password}</span>
               <input
                 className="field-input"
                 type="password"
@@ -193,7 +196,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="输入密码"
+                placeholder={copy.login.passwordPh}
               />
             </label>
             <p style={{ margin: "0 0 16px", textAlign: "right", fontSize: 13 }}>
@@ -201,13 +204,13 @@ export default function LoginPage() {
                 href="/forgot-password"
                 style={{ color: "var(--teal-deep)", fontWeight: 600 }}
               >
-                忘记密码？
+                {copy.login.forgot}
               </Link>
             </p>
           </>
         ) : (
           <label className="field" style={{ display: "block", marginBottom: 20 }}>
-            <span className="field-label">邮箱验证码</span>
+            <span className="field-label">{copy.common.code}</span>
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 className="field-input"
@@ -218,7 +221,7 @@ export default function LoginPage() {
                 maxLength={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value.trim())}
-                placeholder="6 位数字"
+                placeholder={copy.login.codePh}
                 style={{ flex: 1 }}
               />
               <button
@@ -229,17 +232,17 @@ export default function LoginPage() {
                 style={{ whiteSpace: "nowrap", flex: "0 0 auto" }}
               >
                 {sendingCode
-                  ? "发送中…"
+                  ? copy.common.sending
                   : cooldown > 0
                     ? `${cooldown}s`
-                    : "获取验证码"}
+                    : copy.common.sendCode}
               </button>
             </div>
           </label>
         )}
 
         <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-          {loading ? "登录中…" : "登录"}
+          {loading ? copy.login.submitting : copy.login.submit}
         </button>
 
         <p
@@ -250,9 +253,9 @@ export default function LoginPage() {
             textAlign: "center",
           }}
         >
-          还没有账号？{" "}
+          {copy.login.noAccount}{" "}
           <Link href="/register" style={{ color: "var(--teal-deep)", fontWeight: 600 }}>
-            立即注册
+            {copy.login.goRegister}
           </Link>
         </p>
       </form>
