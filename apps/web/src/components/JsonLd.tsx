@@ -3,9 +3,10 @@ import { localePath, type SiteLocale } from "../lib/locale";
 import { absoluteUrl, siteOrigin } from "../lib/seo";
 import { site } from "../lib/site";
 
-function script(data: unknown) {
+function script(key: string, data: unknown) {
   return (
     <script
+      key={key}
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
     />
@@ -24,7 +25,7 @@ export default function JsonLd({
   const nodes = [];
 
   nodes.push(
-    script({
+    script("org", {
       "@context": "https://schema.org",
       "@type": "Organization",
       name: site.brand,
@@ -33,7 +34,7 @@ export default function JsonLd({
     }),
   );
   nodes.push(
-    script({
+    script("website", {
       "@context": "https://schema.org",
       "@type": "WebSite",
       name: site.brand,
@@ -44,7 +45,7 @@ export default function JsonLd({
 
   if (path === "/guide") {
     nodes.push(
-      script({
+      script("faq", {
         "@context": "https://schema.org",
         "@type": "FAQPage",
         mainEntity: [
@@ -64,7 +65,7 @@ export default function JsonLd({
 
   if (path === "/download") {
     nodes.push(
-      script({
+      script("app", {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         name: site.brand,
@@ -89,7 +90,7 @@ export default function JsonLd({
   const crumbTitle = crumbs[path];
   if (crumbTitle) {
     nodes.push(
-      script({
+      script("crumbs", {
         "@context": "https://schema.org",
         "@type": "BreadcrumbList",
         itemListElement: [
