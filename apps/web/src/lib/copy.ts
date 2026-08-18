@@ -59,7 +59,7 @@ const zh = {
   },
   about: {
     title: "关于我们",
-    lead: `${site.brand} —— 简洁可靠的个人 VPN 服务。`,
+    lead: `${site.brand} —— 安全快速的VPN 服务。`,
     whoTitle: "我们是谁",
     whoBody: `${site.brand} 面向需要稳定跨境访问的用户，提供注册、套餐领取、订阅管理与节点概览等一站式体验。`,
     offerTitle: "我们提供什么",
