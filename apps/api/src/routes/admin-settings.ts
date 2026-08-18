@@ -12,6 +12,7 @@ import {
   DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE,
   SETTING_KEYS,
   STORAGE_S3_ROLES,
+  SUBSCRIPTION_DOMAINS_MAX,
   SUBSCRIPTION_NOTICE_CLIENTS,
   SUBSCRIPTION_NOTICE_ITEM_MAX,
   SUBSCRIPTION_NOTICE_ITEMS_MAX,
@@ -24,17 +25,21 @@ import {
   getAuthEmailConfig,
   getMailRateLimitConfig,
   getMailSesConfig,
+  getSubscriptionDomainsConfig,
   getSubscriptionNoticeConfig,
   getSubscriptionNodeNameConfig,
   getSupportClientMessageWindowConfig,
   listStorageS3ProfilesPublic,
   mailRateLimitValueSchema,
   mergeMailSesValue,
+  normalizeSubscriptionPublicOrigin,
   primeMailRateLimitCache,
+  primeSubscriptionDomainsCache,
   primeSubscriptionNoticeCache,
   primeSubscriptionNodeNameCache,
   primeSupportClientMessageWindowCache,
   SUBSCRIPTION_NODE_NAME_MODES,
+  subscriptionDomainsValueSchema,
   subscriptionNoticeClientBlockSchema,
   subscriptionNoticeValueSchema,
   subscriptionNodeNameValueSchema,
@@ -102,6 +107,11 @@ const subscriptionNoticePatch = z.object({
 
 const subscriptionNodeNamePatch = z.object({
   mode: z.enum(SUBSCRIPTION_NODE_NAME_MODES),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const subscriptionDomainsPatch = z.object({
+  domains: z.array(z.string().trim().max(500)).max(SUBSCRIPTION_DOMAINS_MAX),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -586,6 +596,84 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         remark: cfg.remark,
         modes: SUBSCRIPTION_NODE_NAME_MODES,
         default_mode: DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE.mode,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/subscription/domains`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const cfg = await getSubscriptionDomainsConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_DOMAINS,
+        remark: cfg.remark,
+        domains_max: SUBSCRIPTION_DOMAINS_MAX,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/subscription/domains`, async (req, reply) => {
+    const parsed = subscriptionDomainsPatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const domains: string[] = [];
+      const seen = new Set<string>();
+      for (const raw of parsed.data.domains) {
+        if (!raw.trim()) continue;
+        const origin = normalizeSubscriptionPublicOrigin(raw);
+        if (!origin) {
+          return reply.code(400).send({
+            error: "subscription.domain_invalid",
+            domain: raw,
+          });
+        }
+        if (seen.has(origin)) continue;
+        seen.add(origin);
+        domains.push(origin);
+      }
+      const value = subscriptionDomainsValueSchema.parse({ domains });
+      await upsertProjectSetting({
+        projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_DOMAINS,
+        value,
+        enabled: value.domains.length > 0,
+        remark: parsed.data.remark ?? null,
+      });
+      primeSubscriptionDomainsCache(projectId, value);
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.subscription_domains.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: { count: value.domains.length },
+      });
+
+      const cfg = await getSubscriptionDomainsConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SUBSCRIPTION_DOMAINS,
+        remark: cfg.remark,
+        domains_max: SUBSCRIPTION_DOMAINS_MAX,
         ...cfg.value,
       };
     } catch (err) {

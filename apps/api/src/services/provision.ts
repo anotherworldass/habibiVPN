@@ -16,6 +16,7 @@ import { localizePlanCopy } from "./plan-i18n.js";
 import {
   buildClientSubscriptionUrls,
   buildProfileTitle,
+  resolveSubscriptionPublicOrigin,
 } from "./subscription-convert/index.js";
 import type { ClientSubscriptionUrls } from "./subscription-convert/formats.js";
 
@@ -661,10 +662,14 @@ function buildPlanBody(
 function toSubscriptionView(
   slot: UserUpstream & {
     plan?: Plan | null;
-    user?: { project?: { name: string; code: string } | null } | null;
+    user?: {
+      projectId?: string;
+      project?: { name: string; code: string } | null;
+    } | null;
   },
   live?: WireRawCustomerView | null,
   locale?: string | null,
+  origin?: string | null,
 ): SubscriptionView {
   const view = live ? normalizeCustomerView(live) : null;
   const end = view?.end_user;
@@ -765,6 +770,7 @@ function toSubscriptionView(
     client_urls: url
       ? buildClientSubscriptionUrls(slot.id, {
           profileTitle: buildProfileTitle(siteName, planName),
+          origin,
         })
       : null,
     online_ip_limit:
@@ -810,6 +816,25 @@ function toSubscriptionView(
     upstream_id: end?.id || slot.upstreamId,
     upstream_username: slot.upstreamUsername,
   };
+}
+
+async function toSubscriptionViewAsync(
+  slot: UserUpstream & {
+    plan?: Plan | null;
+    user?: {
+      projectId?: string;
+      project?: { name: string; code: string } | null;
+    } | null;
+  },
+  live?: WireRawCustomerView | null,
+  locale?: string | null,
+  projectId?: string | null,
+): Promise<SubscriptionView> {
+  const pid = projectId || slot.user?.projectId || null;
+  const origin = pid
+    ? await resolveSubscriptionPublicOrigin(pid, slot.id)
+    : undefined;
+  return toSubscriptionView(slot, live, locale, origin);
 }
 
 /**
@@ -930,7 +955,12 @@ export async function createUpstreamSlot(input: {
   return {
     user,
     slot,
-    subscription: toSubscriptionView(slot, created, input.locale),
+    subscription: await toSubscriptionViewAsync(
+      slot,
+      created,
+      input.locale,
+      user.projectId,
+    ),
   };
 }
 
@@ -1066,7 +1096,12 @@ export async function updateUpstreamSlot(input: {
 
   return {
     slot: saved,
-    subscription: toSubscriptionView(saved, updated, input.locale),
+    subscription: await toSubscriptionViewAsync(
+      saved,
+      updated,
+      input.locale,
+      slot.user.projectId,
+    ),
     previous_subscription_url: slot.subscriptionUrl,
   };
 }
@@ -1533,7 +1568,7 @@ export async function refreshUpstreamSubscriptionUrl(
 ) {
   const slot = await prisma.userUpstream.findFirst({
     where: { id: slotId, userId },
-    include: { plan: true },
+    include: { plan: true, user: { select: { projectId: true } } },
   });
   if (!slot) {
     throw Object.assign(new Error("subscription.not_found"), { statusCode: 404 });
@@ -1571,7 +1606,12 @@ export async function refreshUpstreamSubscriptionUrl(
   });
 
   return {
-    subscription: toSubscriptionView(saved, view, locale),
+    subscription: await toSubscriptionViewAsync(
+      saved,
+      view,
+      locale,
+      slot.user.projectId,
+    ),
     previous_subscription_url: previousUrl,
     subscription_url_changed: previousUrl !== subscriptionUrl,
   };
@@ -1579,7 +1619,12 @@ export async function refreshUpstreamSubscriptionUrl(
 
 const slotProjectInclude = {
   plan: true,
-  user: { select: { project: { select: { name: true, code: true } } } },
+  user: {
+    select: {
+      projectId: true,
+      project: { select: { name: true, code: true } },
+    },
+  },
 } as const;
 
 export async function syncUpstreamSlot(
@@ -1611,7 +1656,7 @@ export async function syncUpstreamSlot(
     include: slotProjectInclude,
   });
 
-  return toSubscriptionView(saved, view, locale);
+  return toSubscriptionViewAsync(saved, view, locale);
 }
 
 const DEFAULT_STALE_TTL_MS = 30_000;
@@ -1664,7 +1709,12 @@ export async function listUserSubscriptions(
     where: { userId },
     include: {
       plan: true,
-      user: { select: { project: { select: { name: true, code: true } } } },
+      user: {
+        select: {
+          projectId: true,
+          project: { select: { name: true, code: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -1674,9 +1724,9 @@ export async function listUserSubscriptions(
       slots.map(async (slot) => {
         try {
           const synced = await syncUpstreamSlot(userId, slot.id, locale);
-          return synced ?? toSubscriptionView(slot, null, locale);
+          return synced ?? (await toSubscriptionViewAsync(slot, null, locale));
         } catch {
-          return toSubscriptionView(slot, null, locale);
+          return toSubscriptionViewAsync(slot, null, locale);
         }
       }),
     );
@@ -1687,7 +1737,9 @@ export async function listUserSubscriptions(
     .map((s) => s.id);
   scheduleBackgroundRefresh(userId, staleIds);
 
-  return slots.map((s) => toSubscriptionView(s, null, locale));
+  return Promise.all(
+    slots.map((s) => toSubscriptionViewAsync(s, null, locale)),
+  );
 }
 
 /** @deprecated use createUpstreamSlot / updateUpstreamSlot */

@@ -13,6 +13,7 @@ import { getNodeRegionByHost } from "../nodes.js";
 import {
   getSubscriptionClientCopy,
   getSubscriptionNodeNameMode,
+  getSubscriptionPublicOrigins,
 } from "../system-settings.js";
 import {
   applySubCopyVars,
@@ -78,12 +79,44 @@ export function buildProfileTitle(
   );
 }
 
+export function defaultSubscriptionPublicOrigin(): string {
+  return env.API_PUBLIC_ORIGIN.replace(/\/$/, "");
+}
+
+/** Stable pick so the same slot keeps the same public host. */
+export function pickSubscriptionPublicOrigin(
+  origins: string[],
+  slotId: string,
+): string {
+  const list = origins
+    .map((s) => s.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (list.length === 0) return defaultSubscriptionPublicOrigin();
+  if (list.length === 1) return list[0]!;
+  let hash = 0;
+  for (let i = 0; i < slotId.length; i++) {
+    hash = (hash * 31 + slotId.charCodeAt(i)) >>> 0;
+  }
+  return list[hash % list.length]!;
+}
+
+export async function resolveSubscriptionPublicOrigin(
+  projectId: string,
+  slotId: string,
+): Promise<string> {
+  const origins = await getSubscriptionPublicOrigins(projectId);
+  return pickSubscriptionPublicOrigin(origins, slotId);
+}
+
 export function buildClientSubscriptionUrls(
   slotId: string,
-  opts?: { profileTitle?: string },
+  opts?: { profileTitle?: string; origin?: string | null },
 ): ClientSubscriptionUrls {
   const token = signSubToken(slotId);
-  const origin = env.API_PUBLIC_ORIGIN.replace(/\/$/, "");
+  const origin = (opts?.origin || defaultSubscriptionPublicOrigin()).replace(
+    /\/$/,
+    "",
+  );
   const base = `${origin}${USER_API_PREFIX}/sub/${encodeURIComponent(token)}`;
   const out = {} as ClientSubscriptionUrls;
   for (const item of SUB_CLIENT_URL_KEYS) {

@@ -18,6 +18,8 @@ export const SETTING_KEYS = {
   SUBSCRIPTION_NOTICE: "subscription.notice",
   /** How converted subscription node names are rewritten. */
   SUBSCRIPTION_NODE_NAME: "subscription.node_name",
+  /** Public origins used to build /api/v1/sub client URLs. */
+  SUBSCRIPTION_DOMAINS: "subscription.domains",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */
@@ -800,6 +802,111 @@ export function primeSubscriptionNodeNameCache(
   value: SubscriptionNodeNameValue,
 ) {
   subscriptionNodeNameCache.set(projectId, { value, at: Date.now() });
+}
+
+export const SUBSCRIPTION_DOMAINS_MAX = 20;
+
+export const subscriptionDomainsValueSchema = z.object({
+  domains: z.array(z.string().min(1).max(500)).max(SUBSCRIPTION_DOMAINS_MAX),
+});
+
+export type SubscriptionDomainsValue = z.infer<
+  typeof subscriptionDomainsValueSchema
+>;
+
+export const DEFAULT_SUBSCRIPTION_DOMAINS_VALUE: SubscriptionDomainsValue = {
+  domains: [],
+};
+
+const SUBSCRIPTION_DOMAINS_CACHE_TTL_MS = 30_000;
+const subscriptionDomainsCache = new Map<
+  string,
+  { value: SubscriptionDomainsValue; at: number }
+>();
+
+/** Origin only, e.g. https://sub.example.com. Bare host → https. */
+export function normalizeSubscriptionPublicOrigin(
+  raw: string | null | undefined,
+): string | null {
+  if (raw == null) return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (!url.hostname) return null;
+  return `${url.protocol}//${url.host}`;
+}
+
+export function parseSubscriptionDomainsValue(
+  raw: unknown,
+): SubscriptionDomainsValue {
+  const o = asObject(raw);
+  const list = Array.isArray(o.domains) ? o.domains : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    if (typeof item !== "string") continue;
+    const origin = normalizeSubscriptionPublicOrigin(item);
+    if (!origin || seen.has(origin)) continue;
+    seen.add(origin);
+    out.push(origin);
+  }
+  return subscriptionDomainsValueSchema.parse({
+    domains: out.slice(0, SUBSCRIPTION_DOMAINS_MAX),
+  });
+}
+
+export async function getSubscriptionDomainsConfig(projectId: string): Promise<{
+  enabled: boolean;
+  value: SubscriptionDomainsValue;
+  remark: string | null;
+}> {
+  const row = await getProjectSetting(
+    projectId,
+    SETTING_KEYS.SUBSCRIPTION_DOMAINS,
+  );
+  if (!row) {
+    return {
+      enabled: false,
+      value: { ...DEFAULT_SUBSCRIPTION_DOMAINS_VALUE },
+      remark: null,
+    };
+  }
+  const value = parseSubscriptionDomainsValue(row.value);
+  return {
+    enabled: row.enabled && value.domains.length > 0,
+    value,
+    remark: row.remark,
+  };
+}
+
+/** Configured public origins; empty → caller should fall back to API origin. */
+export async function getSubscriptionPublicOrigins(
+  projectId: string,
+): Promise<string[]> {
+  const hit = subscriptionDomainsCache.get(projectId);
+  if (hit && Date.now() - hit.at < SUBSCRIPTION_DOMAINS_CACHE_TTL_MS) {
+    return hit.value.domains;
+  }
+  const cfg = await getSubscriptionDomainsConfig(projectId);
+  subscriptionDomainsCache.set(projectId, {
+    value: cfg.value,
+    at: Date.now(),
+  });
+  return cfg.value.domains;
+}
+
+export function primeSubscriptionDomainsCache(
+  projectId: string,
+  value: SubscriptionDomainsValue,
+) {
+  subscriptionDomainsCache.set(projectId, { value, at: Date.now() });
 }
 
 /** Normalize TG / ops language codes → short key used on quick replies. */

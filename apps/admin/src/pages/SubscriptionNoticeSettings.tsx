@@ -17,6 +17,7 @@ import {
   DownOutlined,
   FileTextOutlined,
   FontSizeOutlined,
+  GlobalOutlined,
   PlusOutlined,
   UpOutlined,
 } from "@ant-design/icons";
@@ -39,6 +40,28 @@ type NodeNameConfig = {
   remark: string | null;
   mode: "original" | "zh_region" | "code_region";
 };
+
+type DomainsConfig = {
+  project_id: string;
+  key: string;
+  remark: string | null;
+  domains: string[];
+  domains_max: number;
+};
+
+function isHttpOrigin(raw: string): boolean {
+  const s = raw.trim();
+  if (!s) return false;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`;
+  try {
+    const u = new URL(withScheme);
+    return (
+      (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname
+    );
+  } catch {
+    return false;
+  }
+}
 
 type NoticeClientBlock = {
   enabled: boolean;
@@ -72,14 +95,17 @@ export default function SubscriptionNoticeSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingName, setSavingName] = useState(false);
+  const [savingDomains, setSavingDomains] = useState(false);
   const [meta, setMeta] = useState({
     itemMax: 80,
     itemsMax: 15,
     titleMax: 80,
+    domainsMax: 20,
     availableClients: Object.keys(CLIENT_LABELS),
   });
   const [form] = Form.useForm();
   const [nameForm] = Form.useForm();
+  const [domainsForm] = Form.useForm();
 
   const load = useCallback(async () => {
     if (!getProjectId()) {
@@ -89,11 +115,12 @@ export default function SubscriptionNoticeSettingsPage() {
     }
     setLoading(true);
     try {
-      const [cfg, nameCfg] = await Promise.all([
+      const [cfg, nameCfg, domainsCfg] = await Promise.all([
         adminFetch<NoticeConfig>("/admin/v1/settings/subscription/notice"),
         adminFetch<NodeNameConfig>(
           "/admin/v1/settings/subscription/node-name",
         ),
+        adminFetch<DomainsConfig>("/admin/v1/settings/subscription/domains"),
       ]);
       const available = cfg.available_clients?.length
         ? cfg.available_clients
@@ -102,6 +129,7 @@ export default function SubscriptionNoticeSettingsPage() {
         itemMax: cfg.item_max,
         itemsMax: cfg.items_max,
         titleMax: cfg.profile_title_max || 80,
+        domainsMax: domainsCfg.domains_max || 20,
         availableClients: available,
       });
       const byClient = emptyByClient();
@@ -120,12 +148,15 @@ export default function SubscriptionNoticeSettingsPage() {
       nameForm.setFieldsValue({
         mode: nameCfg.mode || "original",
       });
+      domainsForm.setFieldsValue({
+        domains: domainsCfg.domains?.length ? domainsCfg.domains : [""],
+      });
     } catch (e) {
       message.error(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [form, nameForm]);
+  }, [form, nameForm, domainsForm]);
 
   useEffect(() => {
     void load();
@@ -170,6 +201,31 @@ export default function SubscriptionNoticeSettingsPage() {
     }
   };
 
+  const onSaveDomains = async () => {
+    const values = await domainsForm.validateFields();
+    const domains = ((values.domains || []) as string[])
+      .map((s) => (s || "").trim())
+      .filter(Boolean);
+    setSavingDomains(true);
+    try {
+      await adminFetch("/admin/v1/settings/subscription/domains", {
+        method: "PUT",
+        body: JSON.stringify({ domains }),
+      });
+      message.success("订阅域名已保存（本进程立即生效）");
+      await load();
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : "";
+      message.error(
+        raw === "subscription.domain_invalid"
+          ? "域名不合法，请填写如 sub.example.com 或 https://sub.example.com"
+          : raw || "保存失败",
+      );
+    } finally {
+      setSavingDomains(false);
+    }
+  };
+
   const onSaveName = async () => {
     const values = await nameForm.validateFields();
     setSavingName(true);
@@ -190,9 +246,143 @@ export default function SubscriptionNoticeSettingsPage() {
   return (
     <PageContainer
       title="订阅转换"
-      subTitle="按顶部当前项目配置；影响 /api/v1/sub 转换订阅的节点名与说明节点"
+      subTitle="按顶部当前项目配置；订阅域名用于拼接客户端链接，节点名与说明节点影响 /api/v1/sub 转换结果"
       loading={loading}
     >
+      <Card
+        title={
+          <span>
+            <GlobalOutlined style={{ marginRight: 8 }} />
+            订阅域名
+          </span>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="用来拼客户端转换订阅 URL，不要再用 API 主域名"
+          description={
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+              <li>
+                生成的链接形如{" "}
+                <Typography.Text code>
+                  https://你的域名/api/v1/sub/…/clash
+                </Typography.Text>
+                ，该域名需反代到 API。
+              </li>
+              <li>
+                未填写则回退环境变量{" "}
+                <Typography.Text code>API_PUBLIC_ORIGIN</Typography.Text>。
+              </li>
+              <li>
+                多个域名时按订阅槽位稳定分配，同一用户看到的链接不变。
+              </li>
+              <li>
+                可填{" "}
+                <Typography.Text code>sub.example.com</Typography.Text> 或{" "}
+                <Typography.Text code>https://sub.example.com</Typography.Text>
+                。
+              </li>
+            </ul>
+          }
+        />
+        <Form
+          form={domainsForm}
+          layout="vertical"
+          initialValues={{ domains: [""] }}
+          style={{ maxWidth: 720 }}
+        >
+          <Form.List name="domains">
+            {(fields, { add, remove, move }) => (
+              <div>
+                <Typography.Text
+                  style={{ display: "block", marginBottom: 8 }}
+                >
+                  域名列表（最多 {meta.domainsMax} 个）
+                </Typography.Text>
+                {fields.map((field, index) => (
+                  <Space
+                    key={field.key}
+                    align="start"
+                    style={{
+                      display: "flex",
+                      marginBottom: 8,
+                      width: "100%",
+                    }}
+                  >
+                    <Typography.Text
+                      type="secondary"
+                      style={{ width: 28, lineHeight: "32px" }}
+                    >
+                      {index + 1}.
+                    </Typography.Text>
+                    <Form.Item
+                      {...field}
+                      style={{ flex: 1, marginBottom: 0 }}
+                      rules={[
+                        {
+                          validator: async (_, value) => {
+                            const s = (value || "").trim();
+                            if (!s) return;
+                            if (!isHttpOrigin(s)) {
+                              throw new Error(
+                                "请填写合法域名，如 sub.example.com 或 https://sub.example.com",
+                              );
+                            }
+                          },
+                        },
+                      ]}
+                    >
+                      <Input
+                        placeholder="https://sub.example.com"
+                        maxLength={500}
+                      />
+                    </Form.Item>
+                    <Button
+                      type="text"
+                      icon={<UpOutlined />}
+                      disabled={index === 0}
+                      onClick={() => move(index, index - 1)}
+                    />
+                    <Button
+                      type="text"
+                      icon={<DownOutlined />}
+                      disabled={index === fields.length - 1}
+                      onClick={() => move(index, index + 1)}
+                    />
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      disabled={fields.length <= 1}
+                      onClick={() => remove(field.name)}
+                    />
+                  </Space>
+                ))}
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  disabled={fields.length >= meta.domainsMax}
+                  onClick={() => add("")}
+                >
+                  添加域名
+                </Button>
+              </div>
+            )}
+          </Form.List>
+          <Button
+            type="primary"
+            loading={savingDomains}
+            onClick={() => void onSaveDomains()}
+            style={{ marginTop: 16 }}
+          >
+            保存订阅域名
+          </Button>
+        </Form>
+      </Card>
+
       <Card
         title={
           <span>

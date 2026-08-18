@@ -17,7 +17,9 @@ import { listUserAuthEvents } from "../services/auth-events.js";
 import {
   buildClientSubscriptionUrls,
   buildProfileTitle,
+  pickSubscriptionPublicOrigin,
 } from "../services/subscription-convert/index.js";
+import { getSubscriptionPublicOrigins } from "../services/system-settings.js";
 import { WireRawError } from "../wireraw/client.js";
 
 const provisionBody = z.object({
@@ -110,6 +112,7 @@ export const adminUsersRoutes: FastifyPluginAsync = async (app) => {
     const rechargeMap = new Map(
       rechargeRows.map((r) => [r.userId, r._sum.amountCents || 0]),
     );
+    const subOrigins = await getSubscriptionPublicOrigins(projectId);
 
     return {
       total,
@@ -161,6 +164,7 @@ export const adminUsersRoutes: FastifyPluginAsync = async (app) => {
                   u.project?.name || u.project?.code,
                   s.plan?.name,
                 ),
+                origin: pickSubscriptionPublicOrigin(subOrigins, s.id),
               })
             : null,
           expires_at: s.expiresAt,

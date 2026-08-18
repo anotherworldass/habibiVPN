@@ -77,6 +77,7 @@ const ACTION_ENUM: Record<string, { text: string }> = {
   "settings.storage_s3.profile.delete": { text: "删除存储配置" },
   "settings.storage_s3.profile.test": { text: "测试存储配置" },
   "settings.storage_s3.profile.update": { text: "更新存储配置" },
+  "settings.subscription_domains.upsert": { text: "保存订阅域名" },
   "settings.subscription_node_name.upsert": { text: "保存节点命名" },
   "settings.subscription_notice.upsert": { text: "保存订阅转换文案" },
   "settings.support_client_message_window.upsert": { text: "保存客服窗口" },
