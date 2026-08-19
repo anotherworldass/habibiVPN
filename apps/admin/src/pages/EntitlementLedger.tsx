@@ -20,6 +20,7 @@ const REASON_ENUM = {
   free_claim: { text: "免费领取" },
   admin_provision: { text: "后台开通" },
   refund_clawback: { text: "退款扣回" },
+  signup_trial: { text: "注册赠送" },
 } as const;
 
 function formatBytes(raw: string | null | undefined) {

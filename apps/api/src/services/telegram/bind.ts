@@ -3,6 +3,7 @@ import { getBotTokenForProject } from "./bot-config.js";
 import { parseWebAppUser, validateWebAppInitData } from "./crypto.js";
 import { scheduleInviterJoinNotify } from "./invite-notify.js";
 import { upsertSubscriber } from "./subscribers.js";
+import { scheduleSignupTrialGrant } from "../signup-trial.js";
 
 /**
  * Bind Mini App initData to Habibi user + upsert Telegram subscriber.
@@ -83,6 +84,8 @@ export async function bindTelegramFromInitData(input: {
       waitForTelegram: false,
     });
   }
+
+  scheduleSignupTrialGrant(user.id, "telegram_bind", tgUser.language_code ?? null);
 
   return {
     ok: true as const,

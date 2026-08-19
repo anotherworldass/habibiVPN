@@ -11,6 +11,7 @@ import {
   DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE,
   DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE,
   SETTING_KEYS,
+  SIGNUP_TRIAL_TRIGGERS,
   STORAGE_S3_ROLES,
   SUBSCRIPTION_DOMAINS_MAX,
   SUBSCRIPTION_NOTICE_CLIENTS,
@@ -28,6 +29,7 @@ import {
   getSubscriptionDomainsConfig,
   getSubscriptionNoticeConfig,
   getSubscriptionNodeNameConfig,
+  getSignupTrialConfig,
   getSupportClientMessageWindowConfig,
   listStorageS3ProfilesPublic,
   mailRateLimitValueSchema,
@@ -43,6 +45,7 @@ import {
   subscriptionNoticeClientBlockSchema,
   subscriptionNoticeValueSchema,
   subscriptionNodeNameValueSchema,
+  signupTrialValueSchema,
   supportClientMessageWindowValueSchema,
   updateStorageS3Bindings,
   updateStorageS3Profile,
@@ -76,6 +79,13 @@ const authEmailPatch = z.object({
   allowSoftBindWithoutCode: z.boolean(),
   allowUnverifiedPasswordLogin: z.boolean(),
   allowClaimUnverifiedEmail: z.boolean(),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const signupTrialPatch = z.object({
+  enabled: z.boolean(),
+  planId: z.string().max(64),
+  trigger: z.enum(SIGNUP_TRIAL_TRIGGERS),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -297,6 +307,87 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
       return {
         project_id: projectId,
         key: SETTING_KEYS.AUTH_EMAIL,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/signup/trial`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const cfg = await getSignupTrialConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SIGNUP_TRIAL,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/signup/trial`, async (req, reply) => {
+    const parsed = signupTrialPatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const planId = parsed.data.planId.trim();
+      if (parsed.data.enabled) {
+        if (!planId) {
+          return reply.code(400).send({ error: "signup_trial.plan_required" });
+        }
+        const plan = await prisma.plan.findFirst({
+          where: { id: planId, projectId, enabled: true },
+          select: { id: true },
+        });
+        if (!plan) {
+          return reply.code(400).send({ error: "signup_trial.plan_invalid" });
+        }
+      }
+      const value = signupTrialValueSchema.parse({
+        planId,
+        trigger: parsed.data.trigger,
+      });
+      const row = await upsertProjectSetting({
+        projectId,
+        key: SETTING_KEYS.SIGNUP_TRIAL,
+        value,
+        enabled: parsed.data.enabled,
+        remark: parsed.data.remark ?? null,
+      });
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.signup_trial.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: {
+          enabled: row.enabled,
+          ...value,
+        },
+      });
+
+      const cfg = await getSignupTrialConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.SIGNUP_TRIAL,
         enabled: cfg.enabled,
         remark: cfg.remark,
         ...cfg.value,

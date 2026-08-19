@@ -13,6 +13,7 @@ const REASONS = new Set<EntitlementReason>([
   "free_claim",
   "admin_provision",
   "refund_clawback",
+  "signup_trial",
 ]);
 
 function mapErr(

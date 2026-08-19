@@ -124,22 +124,34 @@ type SellPlansFilters = {
   groupId: string;
   client: string;
   enabled: string;
+  billing: string;
 };
 
 function loadSellPlansFilters(): SellPlansFilters {
   try {
     const raw = localStorage.getItem(SELL_PLANS_FILTER_KEY);
     if (!raw) {
-      return { groupId: FILTER_ALL, client: FILTER_ALL, enabled: FILTER_ALL };
+      return {
+        groupId: FILTER_ALL,
+        client: FILTER_ALL,
+        enabled: FILTER_ALL,
+        billing: FILTER_ALL,
+      };
     }
     const parsed = JSON.parse(raw) as Partial<SellPlansFilters>;
     return {
       groupId: typeof parsed.groupId === "string" ? parsed.groupId : FILTER_ALL,
       client: typeof parsed.client === "string" ? parsed.client : FILTER_ALL,
       enabled: typeof parsed.enabled === "string" ? parsed.enabled : FILTER_ALL,
+      billing: typeof parsed.billing === "string" ? parsed.billing : FILTER_ALL,
     };
   } catch {
-    return { groupId: FILTER_ALL, client: FILTER_ALL, enabled: FILTER_ALL };
+    return {
+      groupId: FILTER_ALL,
+      client: FILTER_ALL,
+      enabled: FILTER_ALL,
+      billing: FILTER_ALL,
+    };
   }
 }
 
@@ -697,6 +709,9 @@ export default function SellPlansPage() {
   const [filterEnabled, setFilterEnabled] = useState(
     () => loadSellPlansFilters().enabled,
   );
+  const [filterBilling, setFilterBilling] = useState(
+    () => loadSellPlansFilters().billing,
+  );
   const [dataSource, setDataSource] = useState<SellPlan[]>([]);
   const [orderDirty, setOrderDirty] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -748,8 +763,9 @@ export default function SellPlansPage() {
       groupId: filterGroupId,
       client: filterClient,
       enabled: filterEnabled,
+      billing: filterBilling,
     });
-  }, [filterGroupId, filterClient, filterEnabled]);
+  }, [filterGroupId, filterClient, filterEnabled, filterBilling]);
 
   // Drop stale group filter if that group was deleted
   useEffect(() => {
@@ -1595,6 +1611,16 @@ export default function SellPlansPage() {
                   { label: "下架", value: "false" },
                 ],
               },
+              {
+                title: "价格",
+                value: filterBilling,
+                onChange: setFilterBilling,
+                options: [
+                  { label: "全部", value: FILTER_ALL },
+                  { label: "免费", value: "free" },
+                  { label: "付费", value: "paid" },
+                ],
+              },
             ] as const
           ).map((row) => (
             <div
@@ -1692,6 +1718,7 @@ export default function SellPlansPage() {
               filterGroupId,
               filterClient,
               filterEnabled,
+              filterBilling,
             }}
             request={async (params) => {
               const qs = new URLSearchParams();
@@ -1716,6 +1743,11 @@ export default function SellPlansPage() {
                 list = list.filter((p) => !p.groupId);
               } else if (filterGroupId !== FILTER_ALL) {
                 list = list.filter((p) => p.groupId === filterGroupId);
+              }
+              if (filterBilling === "free") {
+                list = list.filter((p) => Number(p.priceCents ?? 0) <= 0);
+              } else if (filterBilling === "paid") {
+                list = list.filter((p) => Number(p.priceCents ?? 0) > 0);
               }
               setDataSource(list);
               setOrderDirty(false);

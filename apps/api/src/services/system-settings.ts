@@ -24,6 +24,8 @@ export const SETTING_KEYS = {
   SUBSCRIPTION_DOMAINS: "subscription.domains",
   /** OpenAI-compatible models available to admin translation tools. */
   LLM_PROVIDERS: "llm.providers",
+  /** Auto-grant a trial plan after register / identity events. */
+  SIGNUP_TRIAL: "signup.trial",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */
@@ -58,6 +60,26 @@ export const DEFAULT_AUTH_EMAIL_VALUE: AuthEmailValue = {
   allowSoftBindWithoutCode: true,
   allowUnverifiedPasswordLogin: false,
   allowClaimUnverifiedEmail: true,
+};
+
+export const SIGNUP_TRIAL_TRIGGERS = [
+  "verified_email",
+  "bootstrap",
+  "identity",
+] as const;
+
+export type SignupTrialTrigger = (typeof SIGNUP_TRIAL_TRIGGERS)[number];
+
+export const signupTrialValueSchema = z.object({
+  planId: z.string().max(64),
+  trigger: z.enum(SIGNUP_TRIAL_TRIGGERS),
+});
+
+export type SignupTrialValue = z.infer<typeof signupTrialValueSchema>;
+
+export const DEFAULT_SIGNUP_TRIAL_VALUE: SignupTrialValue = {
+  planId: "",
+  trigger: "verified_email",
 };
 
 /** Mail OTP / reset send anti-abuse limits (Redis counters). */
@@ -391,6 +413,38 @@ export async function getAuthEmailPolicy(
   const cfg = await getAuthEmailConfig(projectId);
   if (!cfg.enabled) return { ...DEFAULT_AUTH_EMAIL_VALUE };
   return cfg.value;
+}
+
+export function parseSignupTrialValue(raw: unknown): SignupTrialValue {
+  const o = asObject(raw);
+  const trigger = SIGNUP_TRIAL_TRIGGERS.includes(o.trigger as SignupTrialTrigger)
+    ? (o.trigger as SignupTrialTrigger)
+    : DEFAULT_SIGNUP_TRIAL_VALUE.trigger;
+  const planId = typeof o.planId === "string" ? o.planId.trim() : "";
+  return signupTrialValueSchema.parse({
+    planId,
+    trigger,
+  });
+}
+
+export async function getSignupTrialConfig(projectId: string): Promise<{
+  enabled: boolean;
+  value: SignupTrialValue;
+  remark: string | null;
+}> {
+  const row = await getProjectSetting(projectId, SETTING_KEYS.SIGNUP_TRIAL);
+  if (!row) {
+    return {
+      enabled: false,
+      value: { ...DEFAULT_SIGNUP_TRIAL_VALUE },
+      remark: null,
+    };
+  }
+  return {
+    enabled: row.enabled,
+    value: parseSignupTrialValue(row.value),
+    remark: row.remark,
+  };
 }
 
 export function parseMailRateLimitValue(raw: unknown): MailRateLimitValue {

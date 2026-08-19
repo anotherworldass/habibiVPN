@@ -79,6 +79,7 @@ import SupportSettingsPage from "./pages/SupportSettings";
 import MailSettingsPage from "./pages/MailSettings";
 import AuditLogsPage from "./pages/AuditLogs";
 import AuthEmailSettingsPage from "./pages/AuthEmailSettings";
+import SignupTrialSettingsPage from "./pages/SignupTrialSettings";
 import StorageSettingsPage from "./pages/StorageSettings";
 import SubscriptionNoticeSettingsPage from "./pages/SubscriptionNoticeSettings";
 import LlmSettingsPage from "./pages/LlmSettings";
@@ -160,6 +161,11 @@ function ProtectedLayout() {
                 path: "/settings/auth-email",
                 name: "账号与邮箱",
                 icon: <SafetyCertificateOutlined />,
+              },
+              {
+                path: "/settings/signup-trial",
+                name: "注册赠送",
+                icon: <GiftOutlined />,
               },
               {
                 path: "/settings/support",
@@ -342,6 +348,7 @@ function ProtectedLayout() {
         <Route path="/settings/mail" element={<MailSettingsPage />} />
         <Route path="/settings/storage" element={<StorageSettingsPage />} />
         <Route path="/settings/auth-email" element={<AuthEmailSettingsPage />} />
+        <Route path="/settings/signup-trial" element={<SignupTrialSettingsPage />} />
         <Route path="/settings/support" element={<SupportSettingsPage />} />
         <Route
           path="/settings/subscription-notice"

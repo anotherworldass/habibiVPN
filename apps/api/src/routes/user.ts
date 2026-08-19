@@ -35,6 +35,7 @@ import {
   sendRegisterEmailCode,
 } from "../services/email-otp.js";
 import { getAuthEmailPolicy } from "../services/system-settings.js";
+import { scheduleSignupTrialGrant } from "../services/signup-trial.js";
 import {
   assertBootstrapBurstLimit,
   assertBootstrapNewAccountAllowed,
@@ -283,6 +284,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         fallbackClient: source.sourceClient,
         meta: { project_id: source.projectId, reused: false },
       });
+      scheduleSignupTrialGrant(user.id, "bootstrap", localeFromRequest(req));
       const token = await signUserToken({ sub: user.id, email: user.email });
       return { token, user: publicAuthUser(user), reused: false };
     } catch (err) {
@@ -508,6 +510,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
               verify_soft_bind: true,
             },
           });
+          scheduleSignupTrialGrant(user.id, "verified_email", localeFromRequest(req));
           const token = await signUserToken({ sub: user.id, email: user.email });
           return { token, user: publicAuthUser(user) };
         }
@@ -542,6 +545,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
             email_changed: !!current.email && current.email !== email,
           },
         });
+        scheduleSignupTrialGrant(user.id, "verified_email", localeFromRequest(req));
         const token = await signUserToken({ sub: user.id, email: user.email });
         return { token, user: publicAuthUser(user) };
       }
@@ -567,6 +571,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
           email_verified: true,
         },
       });
+      scheduleSignupTrialGrant(user.id, "verified_email", localeFromRequest(req));
       const token = await signUserToken({ sub: user.id, email: user.email });
       return { token, user: publicAuthUser(user) };
     } catch (err) {

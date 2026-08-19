@@ -183,6 +183,7 @@ const REASON_LABEL: Record<EntitlementReason, string> = {
   free_claim: "免费领取",
   admin_provision: "后台开通",
   refund_clawback: "退款扣回",
+  signup_trial: "注册赠送",
 };
 
 function bigToString(v: bigint | null | undefined): string | null {
