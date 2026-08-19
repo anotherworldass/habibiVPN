@@ -35,6 +35,7 @@ import {
   sendRegisterEmailCode,
 } from "../services/email-otp.js";
 import { getAuthEmailPolicy } from "../services/system-settings.js";
+import { emailCredentialData, listEmailHolders } from "../services/email-canonical.js";
 import { scheduleSignupTrialGrant } from "../services/signup-trial.js";
 import {
   assertBootstrapBurstLimit,
@@ -377,20 +378,26 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
         // Update soft-bound email (and optional password) without OTP.
         if (current.email && !current.emailVerifiedAt) {
-          const taken = await prisma.user.findUnique({
-            where: { email },
-            select: { id: true },
-          });
-          if (taken && taken.id !== current.id) {
+          const aliasHolders = await listEmailHolders(
+            prisma,
+            email,
+            authPolicy.blockGmailAliasVariants,
+          );
+          if (aliasHolders.some((h) => h.id !== current.id)) {
             return reply.code(409).send({ error: "auth.email_taken" });
           }
           if (password && password.length < 6) {
             return reply.code(400).send({ error: "validation.failed" });
           }
+          const cred = emailCredentialData(email);
           const data: {
             email: string;
+            emailCanonical: string | null;
             passwordHash?: string;
-          } = { email };
+          } = {
+            email: cred.email!,
+            emailCanonical: cred.emailCanonical,
+          };
           if (password.length >= 6) {
             data.passwordHash = await hashPassword(password);
           }
@@ -419,11 +426,12 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         if (!password || password.length < 6) {
           return reply.code(400).send({ error: "validation.failed" });
         }
-        const taken = await prisma.user.findUnique({
-          where: { email },
-          select: { id: true },
-        });
-        if (taken) {
+        const takenHolders = await listEmailHolders(
+          prisma,
+          email,
+          authPolicy.blockGmailAliasVariants,
+        );
+        if (takenHolders.length) {
           return reply.code(409).send({ error: "auth.email_taken" });
         }
         const passwordHash = await hashPassword(password);
@@ -518,7 +526,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         if (current.email && current.email !== email && !current.emailVerifiedAt) {
           await prisma.user.update({
             where: { id: current.id },
-            data: { email: null, emailVerifiedAt: null },
+            data: { ...emailCredentialData(null), emailVerifiedAt: null },
           });
         } else if (current.email) {
           return reply.code(409).send({ error: "auth.already_registered" });

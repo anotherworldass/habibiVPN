@@ -14,6 +14,7 @@ type AuthEmailConfig = {
   allowSoftBindWithoutCode: boolean;
   allowUnverifiedPasswordLogin: boolean;
   allowClaimUnverifiedEmail: boolean;
+  blockGmailAliasVariants: boolean;
 };
 
 export default function AuthEmailSettingsPage() {
@@ -37,6 +38,7 @@ export default function AuthEmailSettingsPage() {
         allowSoftBindWithoutCode: cfg.allowSoftBindWithoutCode,
         allowUnverifiedPasswordLogin: cfg.allowUnverifiedPasswordLogin,
         allowClaimUnverifiedEmail: cfg.allowClaimUnverifiedEmail,
+        blockGmailAliasVariants: cfg.blockGmailAliasVariants,
         remark: cfg.remark || "",
       });
     } catch (e) {
@@ -61,6 +63,7 @@ export default function AuthEmailSettingsPage() {
           allowSoftBindWithoutCode: !!values.allowSoftBindWithoutCode,
           allowUnverifiedPasswordLogin: !!values.allowUnverifiedPasswordLogin,
           allowClaimUnverifiedEmail: !!values.allowClaimUnverifiedEmail,
+          blockGmailAliasVariants: !!values.blockGmailAliasVariants,
           remark: values.remark?.trim() || null,
         }),
       });
@@ -97,6 +100,10 @@ export default function AuthEmailSettingsPage() {
               新建账号（无匿名会话）仍须邮箱验证码，不会开放「未验证直接注册」。
             </li>
             <li>找回密码 / 邮箱验证码登录始终仅面向已验证邮箱。</li>
+            <li>
+              Gmail 小号限制开启后，用户名里的点、+后缀、googlemail.com
+              视为同一邮箱，不能再开第二个号；已有小号不会自动合并。
+            </li>
           </ul>
         }
       />
@@ -110,6 +117,7 @@ export default function AuthEmailSettingsPage() {
             allowSoftBindWithoutCode: true,
             allowUnverifiedPasswordLogin: false,
             allowClaimUnverifiedEmail: true,
+            blockGmailAliasVariants: false,
           }}
         >
           <Form.Item
@@ -141,6 +149,14 @@ export default function AuthEmailSettingsPage() {
             label="验码可抢走未验证邮箱"
             valuePropName="checked"
             extra="验证码注册/绑定成功时，可从仅软绑定占用者剥离该邮箱（UID/套餐保留）"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="blockGmailAliasVariants"
+            label="限制 Gmail 点号 / + 小号"
+            valuePropName="checked"
+            extra="aaaa@gmail.com、aaa.a@gmail.com、aaaa+1@gmail.com、googlemail.com 只能注册其中一个"
           >
             <Switch />
           </Form.Item>

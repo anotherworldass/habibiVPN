@@ -9,6 +9,8 @@ import {
   assertMailSendAttemptAllowed,
 } from "./mail/rate-limit.js";
 import { sendMailViaProjectSes } from "./mail/ses.js";
+import { getAuthEmailPolicy } from "./system-settings.js";
+import { listEmailHolders } from "./email-canonical.js";
 
 const TTL_MS = 15 * 60_000;
 const CODE_LEN = 6;
@@ -66,16 +68,17 @@ export async function sendRegisterEmailCode(input: {
   verify_code?: string;
 }> {
   const email = input.email.trim().toLowerCase();
-  // Only a verified holder blocks send-code; unverified may be claimed after OTP.
-  const taken = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, emailVerifiedAt: true },
-  });
-  if (taken?.emailVerifiedAt) {
+  const authPolicy = await getAuthEmailPolicy(input.projectId);
+  const holders = await listEmailHolders(
+    prisma,
+    email,
+    authPolicy.blockGmailAliasVariants,
+  );
+  if (holders.some((h) => h.emailVerifiedAt)) {
     throw Object.assign(new Error("auth.email_taken"), { statusCode: 409 });
   }
-  // Another account soft-bound this address — only that holder (or claim after OTP) may proceed.
-  if (taken && input.bindUserId && taken.id !== input.bindUserId) {
+  const other = holders.find((h) => h.id !== input.bindUserId);
+  if (other && input.bindUserId) {
     throw Object.assign(new Error("auth.email_taken"), { statusCode: 409 });
   }
 

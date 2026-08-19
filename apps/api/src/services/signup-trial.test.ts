@@ -23,6 +23,12 @@ describe("signupTrialTriggerMatches", () => {
     assert.equal(signupTrialTriggerMatches("identity", "telegram_bind"), true);
     assert.equal(signupTrialTriggerMatches("identity", "bootstrap"), false);
   });
+
+  it("any_register matches Web, App/TG bootstrap, and telegram bind", () => {
+    assert.equal(signupTrialTriggerMatches("any_register", "verified_email"), true);
+    assert.equal(signupTrialTriggerMatches("any_register", "bootstrap"), true);
+    assert.equal(signupTrialTriggerMatches("any_register", "telegram_bind"), true);
+  });
 });
 
 describe("evaluateSignupTrialGrant", () => {

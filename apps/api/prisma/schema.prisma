@@ -803,6 +803,8 @@ model User {
   /// Public numeric ID shown in App / account (stable across register bind)
   uid          Int        @unique
   email        String?    @unique
+  /// Gmail-normalized mailbox (dots / plus / googlemail) for optional alias uniqueness
+  emailCanonical String?  @map("email_canonical")
   /// When the current email was verified via OTP (null = unverified / anonymous)
   emailVerifiedAt DateTime? @map("email_verified_at")
   phone        String?    @unique
@@ -865,6 +867,7 @@ model User {
   @@index([projectId])
   @@index([sourceSiteId])
   @@index([sourcePackageId])
+  @@index([emailCanonical])
   @@map("users")
 }
 

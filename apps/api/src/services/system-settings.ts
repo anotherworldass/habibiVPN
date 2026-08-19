@@ -52,6 +52,8 @@ export const authEmailValueSchema = z.object({
   allowUnverifiedPasswordLogin: z.boolean(),
   /** Verified register/bind may strip an unverified holder of the same email. */
   allowClaimUnverifiedEmail: z.boolean(),
+  /** Treat Gmail dots / plus-tags / googlemail.com as the same mailbox. */
+  blockGmailAliasVariants: z.boolean(),
 });
 
 export type AuthEmailValue = z.infer<typeof authEmailValueSchema>;
@@ -60,9 +62,11 @@ export const DEFAULT_AUTH_EMAIL_VALUE: AuthEmailValue = {
   allowSoftBindWithoutCode: true,
   allowUnverifiedPasswordLogin: false,
   allowClaimUnverifiedEmail: true,
+  blockGmailAliasVariants: false,
 };
 
 export const SIGNUP_TRIAL_TRIGGERS = [
+  "any_register",
   "verified_email",
   "bootstrap",
   "identity",
@@ -79,7 +83,7 @@ export type SignupTrialValue = z.infer<typeof signupTrialValueSchema>;
 
 export const DEFAULT_SIGNUP_TRIAL_VALUE: SignupTrialValue = {
   planId: "",
-  trigger: "verified_email",
+  trigger: "any_register",
 };
 
 /** Mail OTP / reset send anti-abuse limits (Redis counters). */
@@ -378,6 +382,10 @@ export function parseAuthEmailValue(raw: unknown): AuthEmailValue {
       typeof o.allowClaimUnverifiedEmail === "boolean"
         ? o.allowClaimUnverifiedEmail
         : DEFAULT_AUTH_EMAIL_VALUE.allowClaimUnverifiedEmail,
+    blockGmailAliasVariants:
+      typeof o.blockGmailAliasVariants === "boolean"
+        ? o.blockGmailAliasVariants
+        : DEFAULT_AUTH_EMAIL_VALUE.blockGmailAliasVariants,
   };
   return authEmailValueSchema.parse(merged);
 }

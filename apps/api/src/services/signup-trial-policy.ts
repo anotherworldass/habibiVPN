@@ -14,6 +14,7 @@ export function signupTrialTriggerMatches(
   trigger: SignupTrialTrigger,
   event: SignupTrialEvent,
 ): boolean {
+  if (trigger === "any_register") return true;
   if (trigger === "verified_email") return event === "verified_email";
   if (trigger === "bootstrap") return event === "bootstrap";
   return event === "verified_email" || event === "telegram_bind";

@@ -10,6 +10,11 @@ import { scheduleInviteMilestoneForInviter } from "../growth/invite-milestone.js
 import { allocateInviteCode } from "./codes.js";
 import { getReferralConfig } from "./config.js";
 import { DEFAULT_PROMO_GROUP_ID, getDefaultPromoGroupId } from "./groups.js";
+import { getAuthEmailPolicy } from "../system-settings.js";
+import {
+  emailCredentialData,
+  listEmailHolders,
+} from "../email-canonical.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -144,18 +149,14 @@ export async function createUserWithInvite(input: {
   const promoGroupId = await getDefaultPromoGroupId(source.projectId).catch(
     () => DEFAULT_PROMO_GROUP_ID,
   );
+  const policy = await getAuthEmailPolicy(source.projectId);
 
   const user = await prisma.$transaction(async (tx) => {
-    const taken = await tx.user.findUnique({
-      where: { email: input.email },
-      select: { id: true, emailVerifiedAt: true },
+    await claimEmailAddress(tx, {
+      email: input.email,
+      claimUnverified: !!input.claimUnverified,
+      blockGmailAliases: policy.blockGmailAliasVariants,
     });
-    if (taken) {
-      if (taken.emailVerifiedAt || !input.claimUnverified) {
-        throw Object.assign(new Error("auth.email_taken"), { statusCode: 409 });
-      }
-      await clearUnverifiedEmailHolder(tx, input.email);
-    }
 
     const uid = await allocateUid(tx);
     const verifiedAt =
@@ -163,7 +164,7 @@ export async function createUserWithInvite(input: {
     const created = await tx.user.create({
       data: {
         uid,
-        email: input.email,
+        ...emailCredentialData(input.email),
         emailVerifiedAt: verifiedAt,
         passwordHash: input.passwordHash,
         inviteCode: ownCode,
@@ -266,6 +267,7 @@ export async function verifySoftBoundEmail(input: {
       data: {
         emailVerifiedAt: new Date(),
         passwordHash: input.passwordHash,
+        ...emailCredentialData(input.email),
       },
     });
     return tx.user.findUniqueOrThrow({ where: { id: input.userId } });
@@ -297,12 +299,33 @@ export async function clearUnverifiedEmailHolder(
   await tx.user.update({
     where: { id: holder.id },
     data: {
-      email: null,
+      ...emailCredentialData(null),
       emailVerifiedAt: null,
       passwordHash,
     },
   });
   return { clearedUserId: holder.id };
+}
+
+async function claimEmailAddress(
+  tx: Tx,
+  input: {
+    email: string;
+    exceptUserId?: string | null;
+    claimUnverified: boolean;
+    blockGmailAliases: boolean;
+  },
+) {
+  const holders = await listEmailHolders(tx, input.email, input.blockGmailAliases);
+  for (const holder of holders) {
+    if (input.exceptUserId && holder.id === input.exceptUserId) continue;
+    if (holder.emailVerifiedAt || !input.claimUnverified) {
+      throw Object.assign(new Error("auth.email_taken"), { statusCode: 409 });
+    }
+    if (holder.email) {
+      await clearUnverifiedEmailHolder(tx, holder.email, input.exceptUserId);
+    }
+  }
 }
 
 /**
@@ -319,22 +342,26 @@ export async function bindCredentialsToUser(input: {
   claimUnverified?: boolean;
 }): Promise<User> {
   let newlyBoundInviterId: string | null = null;
+  const peek = await prisma.user.findUniqueOrThrow({
+    where: { id: input.userId },
+    select: { projectId: true, email: true },
+  });
+  if (peek.email) {
+    throw Object.assign(new Error("auth.already_registered"), { statusCode: 409 });
+  }
+  const policy = await getAuthEmailPolicy(peek.projectId);
   const user = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findUniqueOrThrow({ where: { id: input.userId } });
     if (existing.email) {
       throw Object.assign(new Error("auth.already_registered"), { statusCode: 409 });
     }
 
-    const taken = await tx.user.findUnique({
-      where: { email: input.email },
-      select: { id: true, emailVerifiedAt: true },
+    await claimEmailAddress(tx, {
+      email: input.email,
+      exceptUserId: input.userId,
+      claimUnverified: !!input.claimUnverified,
+      blockGmailAliases: policy.blockGmailAliasVariants,
     });
-    if (taken) {
-      if (taken.emailVerifiedAt || !input.claimUnverified) {
-        throw Object.assign(new Error("auth.email_taken"), { statusCode: 409 });
-      }
-      await clearUnverifiedEmailHolder(tx, input.email, input.userId);
-    }
 
     const verifiedAt =
       input.emailVerifiedAt !== undefined ? input.emailVerifiedAt : new Date();
@@ -342,7 +369,7 @@ export async function bindCredentialsToUser(input: {
     await tx.user.update({
       where: { id: input.userId },
       data: {
-        email: input.email,
+        ...emailCredentialData(input.email),
         emailVerifiedAt: verifiedAt,
         passwordHash: input.passwordHash,
       },

@@ -21,7 +21,7 @@ type SignupTrialConfig = {
   enabled: boolean;
   remark: string | null;
   planId: string;
-  trigger: "verified_email" | "bootstrap" | "identity";
+  trigger: "any_register" | "verified_email" | "bootstrap" | "identity";
 };
 
 type SellPlan = {
@@ -53,7 +53,7 @@ export default function SignupTrialSettingsPage() {
       form.setFieldsValue({
         enabled: cfg.enabled,
         planId: cfg.planId || undefined,
-        trigger: cfg.trigger || "verified_email",
+        trigger: cfg.trigger || "any_register",
         remark: cfg.remark || "",
       });
     } catch (e) {
@@ -121,7 +121,7 @@ export default function SignupTrialSettingsPage() {
           layout="vertical"
           initialValues={{
             enabled: false,
-            trigger: "verified_email",
+            trigger: "any_register",
           }}
         >
           <Form.Item
@@ -152,21 +152,25 @@ export default function SignupTrialSettingsPage() {
           <Form.Item
             name="trigger"
             label="发放时机"
-            extra="匿名打开 App 就送更容易被刷；默认建议验证邮箱"
+            extra="要 Web / App / TG 体验一致，选「各端注册都送」。同一用户只会开通一次。"
           >
             <Select
               options={[
                 {
+                  value: "any_register",
+                  label: "各端注册都送（Web 验邮、App/TG 新建匿名号）",
+                },
+                {
                   value: "verified_email",
-                  label: "验证邮箱后（注册 / 绑定成功）",
+                  label: "仅验证邮箱后（含 Web 注册、App 绑邮箱）",
                 },
                 {
                   value: "bootstrap",
-                  label: "新建匿名账号时（打开 App / TG 立刻送）",
+                  label: "仅 App/TG 新建匿名账号（不含 Web）",
                 },
                 {
                   value: "identity",
-                  label: "验证邮箱或绑定 Telegram（不给纯匿名）",
+                  label: "验证邮箱或绑定 Telegram（含 Web，不含纯匿名）",
                 },
               ]}
             />

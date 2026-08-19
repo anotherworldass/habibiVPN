@@ -79,6 +79,7 @@ const authEmailPatch = z.object({
   allowSoftBindWithoutCode: z.boolean(),
   allowUnverifiedPasswordLogin: z.boolean(),
   allowClaimUnverifiedEmail: z.boolean(),
+  blockGmailAliasVariants: z.boolean(),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -282,6 +283,7 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         allowSoftBindWithoutCode: parsed.data.allowSoftBindWithoutCode,
         allowUnverifiedPasswordLogin: parsed.data.allowUnverifiedPasswordLogin,
         allowClaimUnverifiedEmail: parsed.data.allowClaimUnverifiedEmail,
+        blockGmailAliasVariants: parsed.data.blockGmailAliasVariants,
       });
       const row = await upsertProjectSetting({
         projectId,
