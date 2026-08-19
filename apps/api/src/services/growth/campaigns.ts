@@ -134,6 +134,8 @@ export function serializeCampaignPublic(
           current_count: elig.inviteProgress.currentCount,
           grant_mode: elig.inviteProgress.grantMode,
           plan_id: reward?.planId ?? null,
+          per_invite_plan_id: elig.inviteProgress.perInvitePlanId,
+          per_invite_granted_count: elig.inviteProgress.perInviteGrantedCount,
           requirements: {
             paid: elig.inviteProgress.requirements.paid,
             has_subscription: elig.inviteProgress.requirements.hasSubscription,

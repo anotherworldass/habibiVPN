@@ -18,6 +18,7 @@ import {
   type InviteGrantMode,
   type InviteeRequirements,
   MILESTONE_PERIOD_KEY,
+  PER_INVITE_PERIOD_KEY,
 } from "./types.js";
 
 export type CampaignRewardWithPlan = CampaignReward & {
@@ -43,6 +44,8 @@ export type InviteProgress = {
   currentCount: number;
   grantMode: InviteGrantMode;
   requirements: InviteeRequirements;
+  perInvitePlanId: string | null;
+  perInviteGrantedCount: number;
 };
 
 export type EligibilityResult = {
@@ -229,6 +232,7 @@ export async function evaluateEligibility(
       campaignId: campaign.id,
       userId: user.id,
       result: { in: ["claimed", "won"] },
+      ...(isMilestone ? { periodKey: MILESTONE_PERIOD_KEY } : {}),
     },
   });
   if (limitPerUserTotal != null && totalWinCount >= limitPerUserTotal) {
@@ -238,12 +242,24 @@ export async function evaluateEligibility(
   let inviteProgress: InviteProgress | undefined;
   if (isMilestone) {
     const invite = normalizeInviteFromRules(rules);
-    const currentCount = await countQualifiedInvites(user.id, campaign);
+    const [currentCount, perInviteGrantedCount] = await Promise.all([
+      countQualifiedInvites(user.id, campaign),
+      prisma.campaignClaim.count({
+        where: {
+          campaignId: campaign.id,
+          userId: user.id,
+          periodKey: PER_INVITE_PERIOD_KEY,
+          result: { in: ["claimed", "won"] },
+        },
+      }),
+    ]);
     inviteProgress = {
       requiredCount: invite?.requiredCount ?? 0,
       currentCount,
       grantMode: invite?.grantMode ?? "claim",
       requirements: invite?.inviteeRequirements ?? emptyInviteeRequirements(),
+      perInvitePlanId: invite?.perInvitePlanId ?? null,
+      perInviteGrantedCount,
     };
     if (totalWinCount < 1) {
       if (!invite) push(reasons, "campaign.invite_misconfigured");

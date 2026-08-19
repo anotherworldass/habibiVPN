@@ -515,6 +515,8 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
     "current_count": 2,
     "grant_mode": "auto",
     "plan_id": "...",
+    "per_invite_plan_id": "...",
+    "per_invite_granted_count": 2,
     "requirements": {
       "paid": false,
       "has_subscription": true,
@@ -526,6 +528,8 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 ```
 
 只统计活动开始后新注册的直邀。`grant_mode=auto` 时达标后后台自动开通套餐；`claim` 时需 `POST /campaigns/:id/participate`。流量条件看订阅同步缓存（`usedTrafficBytes`），不是秒级实时。未达标 reason 为 `campaign.invite_progress`。
+
+若配置了 `per_invite_plan_id`，达标前按注册时间排序的前 N-1 个合格直邀各开通一次该套餐（绑定邀请 / 被邀人开通订阅后自动发放）；第 N 个只发达标套餐。未配置则为 `null`。`already_participated` / 每人一次上限只看达标领取，不含每邀账本。
 
 客户端应展示 `ui.*`，勿用后台 `name`。
 
