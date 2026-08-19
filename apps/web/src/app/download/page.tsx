@@ -5,8 +5,9 @@ import { QRCodeSVG } from "qrcode.react";
 import Link from "../../components/LocaleLink";
 import { useLocale } from "../../components/LocaleProvider";
 import Shell from "../../components/Shell";
+import { apiFetch } from "../../lib/api";
 import { t } from "../../lib/copy";
-import { downloadPlatforms, isPlaceholderUrl } from "../../lib/site";
+import { downloadPlatforms } from "../../lib/site";
 
 const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
   ios: (
@@ -31,6 +32,17 @@ const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
   ),
 };
 
+type DownloadItem = {
+  id: string;
+  name: string;
+  package_name: string;
+  platform: (typeof downloadPlatforms)[number]["id"];
+  client: string;
+  version_name: string | null;
+  action_url: string | null;
+  store: boolean;
+};
+
 export default function DownloadPage() {
   const messages = t(useLocale());
   const copy = messages.download;
@@ -42,9 +54,23 @@ export default function DownloadPage() {
   } as const;
   const [toast, setToast] = useState("");
   const [pageUrl, setPageUrl] = useState("");
+  const [items, setItems] = useState<DownloadItem[]>([]);
+  const [packageLanding, setPackageLanding] = useState(false);
 
   useEffect(() => {
     setPageUrl(window.location.href.split("#")[0] || window.location.href);
+    const params = new URLSearchParams(window.location.search);
+    const packageName = params.get("pkg")?.trim() || "";
+    const platform = params.get("platform")?.trim() || "";
+    setPackageLanding(Boolean(packageName));
+    const query = new URLSearchParams();
+    if (packageName) query.set("package", packageName);
+    if (platform) query.set("platform", platform);
+    void apiFetch<{ items: DownloadItem[] }>(
+      `/api/v1/app/downloads${query.size ? `?${query.toString()}` : ""}`,
+    )
+      .then((result) => setItems(result.items || []))
+      .catch(() => setItems([]));
   }, []);
 
   function onFakeDownload(label: string) {
@@ -62,38 +88,49 @@ export default function DownloadPage() {
           </div>
 
           <div className="download-grid">
-            {downloadPlatforms.map((item) => {
-              const href = item.url();
-              const placeholder = isPlaceholderUrl(href);
-              const extra = platformCopy[item.id];
-              return (
-                <div key={item.id} className="download-card">
-                  <div className="download-card-icon">{icons[item.id]}</div>
-                  <div className="download-card-copy">
-                    <h2>{item.label}</h2>
-                    <p>{"hint" in extra ? extra.hint : item.hint}</p>
+            {downloadPlatforms
+              .filter((platform) =>
+                packageLanding
+                  ? items.some((item) => item.platform === platform.id)
+                  : true,
+              )
+              .map((item) => {
+                const download = items.find(
+                  (candidate) => candidate.platform === item.id,
+                );
+                const placeholder = !download?.action_url;
+                const href = download
+                  ? `/api/v1/app/dl?package=${encodeURIComponent(download.package_name)}&platform=${encodeURIComponent(download.platform)}`
+                  : "#";
+                const extra = platformCopy[item.id];
+                return (
+                  <div key={item.id} className="download-card">
+                    <div className="download-card-icon">{icons[item.id]}</div>
+                    <div className="download-card-copy">
+                      <h2>{item.label}</h2>
+                      <p>{"hint" in extra ? extra.hint : item.hint}</p>
+                    </div>
+                    {placeholder ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary download-card-cta"
+                        onClick={() => onFakeDownload(item.label)}
+                      >
+                        {platformCopy[item.id].cta}
+                      </button>
+                    ) : (
+                      <a
+                        className="btn btn-primary download-card-cta"
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {platformCopy[item.id].cta}
+                      </a>
+                    )}
                   </div>
-                  {placeholder ? (
-                    <button
-                      type="button"
-                      className="btn btn-secondary download-card-cta"
-                      onClick={() => onFakeDownload(item.label)}
-                    >
-                      {platformCopy[item.id].cta}
-                    </button>
-                  ) : (
-                    <a
-                      className="btn btn-primary download-card-cta"
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {platformCopy[item.id].cta}
-                    </a>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
 
           {toast ? (

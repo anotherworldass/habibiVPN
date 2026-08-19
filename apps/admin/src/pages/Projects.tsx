@@ -78,6 +78,8 @@ type AppPkg = {
   client: string;
   isPrimary: boolean;
   enabled: boolean;
+  listedOnWeb: boolean;
+  downloadCount: number;
   minSupportVersionCode?: number | null;
   storeUrl?: string | null;
   remark?: string | null;
@@ -599,6 +601,15 @@ type AppRelease = {
   remark?: string | null;
 };
 
+type ReleaseUploadKey = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+};
+
 function i18nFromForm(
   values: Record<string, unknown>,
   field: "title" | "changelog",
@@ -661,6 +672,33 @@ export default function ProjectsPage() {
   const [releaseSaving, setReleaseSaving] = useState(false);
   const [releaseForm] = Form.useForm();
   const [pkgPolicyForm] = Form.useForm();
+  const [uploadKeysOpen, setUploadKeysOpen] = useState(false);
+  const [uploadKeys, setUploadKeys] = useState<ReleaseUploadKey[]>([]);
+  const [uploadKeysLoading, setUploadKeysLoading] = useState(false);
+  const [uploadKeyName, setUploadKeyName] = useState("");
+  const [newUploadKey, setNewUploadKey] = useState<string | null>(null);
+
+  async function loadUploadKeys(projectId: string) {
+    setUploadKeysLoading(true);
+    try {
+      const res = await adminFetch<{ upload_keys: ReleaseUploadKey[] }>(
+        `/admin/v1/projects/${projectId}/upload-keys`,
+      );
+      setUploadKeys(res.upload_keys || []);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "加载上传密钥失败");
+    } finally {
+      setUploadKeysLoading(false);
+    }
+  }
+
+  async function openUploadKeys() {
+    if (!currentId) return;
+    setNewUploadKey(null);
+    setUploadKeyName("");
+    setUploadKeysOpen(true);
+    await loadUploadKeys(currentId);
+  }
 
   async function loadReleases(pkg: AppPkg) {
     if (!currentId) return;
@@ -898,31 +936,39 @@ export default function ProjectsPage() {
               label: "App 包名 / 马甲",
               children: (
                 <>
-                  <Button
-                    type="primary"
-                    size="small"
-                    style={{ marginBottom: 12 }}
-                    onClick={() => {
-                      setEditingPkg(null);
-                      pkgForm.resetFields();
-                      pkgForm.setFieldsValue({
-                        platform: "ios",
-                        client: "ios_appstore",
-                        enabled: true,
-                        isPrimary: false,
-                        apiBasesText: "",
-                        h5BasesText: "",
-                        supportTelegram: "",
-                        supportEmail: "",
-                        flagIap: true,
-                        flagPromo: true,
-                        extrasNodes: [],
-                      });
-                      setPkgOpen(true);
-                    }}
-                  >
-                    添加包
-                  </Button>
+                  <Space style={{ marginBottom: 12 }}>
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => {
+                        setEditingPkg(null);
+                        pkgForm.resetFields();
+                        pkgForm.setFieldsValue({
+                          platform: "ios",
+                          client: "ios_appstore",
+                          enabled: true,
+                          isPrimary: false,
+                          listedOnWeb: false,
+                          apiBasesText: "",
+                          h5BasesText: "",
+                          supportTelegram: "",
+                          supportEmail: "",
+                          flagIap: true,
+                          flagPromo: true,
+                          extrasNodes: [],
+                        });
+                        setPkgOpen(true);
+                      }}
+                    >
+                      添加包
+                    </Button>
+                    <Button size="small" onClick={() => void openUploadKeys()}>
+                      上传密钥
+                    </Button>
+                  </Space>
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+                    对外下载需要同时满足：包已开启“官网展示”，且版本状态为 published。打包脚本同步的版本默认为 draft，可进入“版本”审核后发布。
+                  </Typography.Paragraph>
                   <Table
                     rowKey="id"
                     loading={detailLoading}
@@ -959,6 +1005,33 @@ export default function ProjectsPage() {
                         render: (v) => (v ? <Tag color="success">是</Tag> : <Tag>否</Tag>),
                       },
                       {
+                        title: "官网展示",
+                        dataIndex: "listedOnWeb",
+                        width: 90,
+                        render: (v, row) => (
+                          <Switch
+                            size="small"
+                            checked={v}
+                            onChange={async (checked) => {
+                              await adminFetch(
+                                `/admin/v1/projects/${currentId}/packages/${row.id}`,
+                                {
+                                  method: "PATCH",
+                                  body: JSON.stringify({ listedOnWeb: checked }),
+                                },
+                              );
+                              message.success("官网下载展示位已更新");
+                              void loadDetail(currentId);
+                            }}
+                          />
+                        ),
+                      },
+                      {
+                        title: "下载次数",
+                        dataIndex: "downloadCount",
+                        width: 100,
+                      },
+                      {
                         title: "最低版本",
                         dataIndex: "minSupportVersionCode",
                         width: 90,
@@ -966,10 +1039,22 @@ export default function ProjectsPage() {
                       },
                       {
                         title: "操作",
-                        width: 220,
+                        width: 280,
                         render: (_, row) => (
                           <Space wrap>
                             <a onClick={() => void openReleases(row)}>版本</a>
+                            <a
+                              onClick={async () => {
+                                const path = `/download?pkg=${encodeURIComponent(row.packageName)}`;
+                                const host = sites.find((site) => site.enabled)?.host;
+                                await navigator.clipboard.writeText(
+                                  host ? `https://${host}${path}` : path,
+                                );
+                                message.success("马甲下载链接已复制");
+                              }}
+                            >
+                              复制下载链接
+                            </a>
                             <a
                               onClick={() => {
                                 setEditingPkg(row);
@@ -981,6 +1066,7 @@ export default function ProjectsPage() {
                                   client: row.client,
                                   isPrimary: row.isPrimary,
                                   enabled: row.enabled,
+                                  listedOnWeb: row.listedOnWeb,
                                   minSupportVersionCode: row.minSupportVersionCode,
                                   storeUrl: row.storeUrl,
                                   remark: row.remark,
@@ -1228,6 +1314,7 @@ export default function ProjectsPage() {
             client: values.client,
             isPrimary: values.isPrimary,
             enabled: values.enabled,
+            listedOnWeb: values.listedOnWeb,
             minSupportVersionCode:
               values.minSupportVersionCode === "" ||
               values.minSupportVersionCode == null
@@ -1318,6 +1405,14 @@ export default function ProjectsPage() {
             <Switch />
           </Form.Item>
           <Form.Item
+            name="listedOnWeb"
+            label="官网下载页展示"
+            valuePropName="checked"
+            extra="同一项目每个平台只展示一个包；启用后会自动替换该平台当前展示包"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
             name="minSupportVersionCode"
             label="最低支持 versionCode"
             extra="客户端低于此值强制更新；留空表示不设包级底线"
@@ -1368,6 +1463,125 @@ export default function ProjectsPage() {
             <ExtrasJsonPreview />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="安装包上传密钥"
+        open={uploadKeysOpen}
+        footer={null}
+        width={760}
+        onCancel={() => {
+          setUploadKeysOpen(false);
+          setNewUploadKey(null);
+        }}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary">
+          仅用于打包脚本上传安装包，权限限定为当前项目。安装包始终同步为草稿，需在版本管理中发布后才会对外提供下载。
+        </Typography.Paragraph>
+        <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
+          <Input
+            value={uploadKeyName}
+            maxLength={64}
+            placeholder="密钥名称，例如：开发机打包"
+            onChange={(e) => setUploadKeyName(e.target.value)}
+          />
+          <Button
+            type="primary"
+            disabled={!uploadKeyName.trim() || !currentId}
+            onClick={async () => {
+              if (!currentId) return;
+              try {
+                const res = await adminFetch<{
+                  upload_key: ReleaseUploadKey;
+                  plaintext: string;
+                }>(`/admin/v1/projects/${currentId}/upload-keys`, {
+                  method: "POST",
+                  body: JSON.stringify({ name: uploadKeyName.trim() }),
+                });
+                setNewUploadKey(res.plaintext);
+                setUploadKeyName("");
+                message.success("上传密钥已生成");
+                void loadUploadKeys(currentId);
+              } catch (e) {
+                message.error(e instanceof Error ? e.message : "生成失败");
+              }
+            }}
+          >
+            生成密钥
+          </Button>
+        </Space.Compact>
+        {newUploadKey ? (
+          <Card size="small" style={{ marginBottom: 16 }}>
+            <Typography.Text strong>请立即复制，关闭后无法再次查看：</Typography.Text>
+            <Typography.Paragraph
+              copyable={{ text: newUploadKey }}
+              code
+              style={{ marginTop: 8, marginBottom: 0, wordBreak: "break-all" }}
+            >
+              {newUploadKey}
+            </Typography.Paragraph>
+          </Card>
+        ) : null}
+        <Table
+          rowKey="id"
+          size="small"
+          loading={uploadKeysLoading}
+          dataSource={uploadKeys}
+          pagination={false}
+          columns={[
+            { title: "名称", dataIndex: "name" },
+            {
+              title: "状态",
+              width: 90,
+              render: (_, row) =>
+                row.enabled && !row.revoked_at ? (
+                  <Tag color="success">有效</Tag>
+                ) : (
+                  <Tag>已撤销</Tag>
+                ),
+            },
+            {
+              title: "最后使用",
+              dataIndex: "last_used_at",
+              width: 180,
+              render: (v) => (v ? new Date(v).toLocaleString() : "从未"),
+            },
+            {
+              title: "创建时间",
+              dataIndex: "created_at",
+              width: 180,
+              render: (v) => new Date(v).toLocaleString(),
+            },
+            {
+              title: "操作",
+              width: 80,
+              render: (_, row) =>
+                row.enabled && !row.revoked_at ? (
+                  <Popconfirm
+                    title="撤销此上传密钥？"
+                    description="使用该密钥的打包脚本将立即无法上传"
+                    okText="撤销"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={async () => {
+                      if (!currentId) return;
+                      await adminFetch(
+                        `/admin/v1/projects/${currentId}/upload-keys/${row.id}`,
+                        { method: "DELETE" },
+                      );
+                      message.success("密钥已撤销");
+                      void loadUploadKeys(currentId);
+                    }}
+                  >
+                    <a style={{ color: "#cf1322" }}>撤销</a>
+                  </Popconfirm>
+                ) : (
+                  "—"
+                ),
+            },
+          ]}
+        />
       </Modal>
 
       <Modal
@@ -1441,7 +1655,8 @@ export default function ProjectsPage() {
                 新建版本
               </Button>
               <span style={{ marginLeft: 12, color: "rgba(0,0,0,0.45)", fontSize: 12 }}>
-                允许多条 published；客户端 latest = 最大 versionCode
+                draft 不对外下载；点击“发布”后生效。允许多条 published，客户端 latest =
+                最大 versionCode
               </span>
             </div>
             <Table

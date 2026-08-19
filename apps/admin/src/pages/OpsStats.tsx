@@ -47,6 +47,8 @@ type OpsStats = {
   };
   registrations_by_client: NamedCount[];
   registrations_by_package: NamedCount[];
+  downloads_by_package: NamedCount[];
+  downloads_by_version: NamedCount[];
   orders_by_status: NamedCount[];
   revenue_by_provider: NamedCount[];
   revenue_by_plan: NamedCount[];
@@ -297,6 +299,30 @@ export default function OpsStatsPage() {
                     dataSource={data.registrations_by_package}
                     columns={namedColumns(false)}
                     locale={{ emptyText: "区间内无包来源数据" }}
+                  />
+                </ProCard>
+              </Col>
+              <Col xs={24} lg={12}>
+                <ProCard title="下载点击 · 按安装包" headerBordered>
+                  <Table<NamedCount>
+                    size="small"
+                    rowKey="key"
+                    pagination={false}
+                    dataSource={data.downloads_by_package}
+                    columns={namedColumns(false)}
+                    locale={{ emptyText: "区间内无下载点击" }}
+                  />
+                </ProCard>
+              </Col>
+              <Col xs={24} lg={12}>
+                <ProCard title="下载点击 · 按版本" headerBordered>
+                  <Table<NamedCount>
+                    size="small"
+                    rowKey="key"
+                    pagination={false}
+                    dataSource={data.downloads_by_version}
+                    columns={namedColumns(false)}
+                    locale={{ emptyText: "区间内无版本下载点击" }}
                   />
                 </ProCard>
               </Col>

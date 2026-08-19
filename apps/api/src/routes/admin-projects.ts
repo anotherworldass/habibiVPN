@@ -15,6 +15,13 @@ import {
   deleteReleaseArtifact,
   upsertReleaseWithArtifact,
 } from "../services/storage/release-artifact.js";
+import {
+  createReleaseUploadKey,
+  listReleaseUploadKeys,
+  revokeReleaseUploadKey,
+  touchReleaseUploadKey,
+} from "../services/release-upload-key.js";
+import { writeAudit } from "../lib/audit.js";
 
 function mapErr(err: unknown, reply: { code: (n: number) => { send: (b: unknown) => unknown } }) {
   const status = (err as { statusCode?: number }).statusCode || 500;
@@ -47,9 +54,78 @@ function fieldString(
 
 export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
   const prefix = `${ADMIN_API_PREFIX}/projects`;
-  app.addHook("preHandler", app.requireAdmin);
+  app.addHook("preHandler", async (req, reply) => {
+    if (req.routeOptions.url?.endsWith("/releases/upload")) {
+      return app.requireAdminOrReleaseUploadKey(req, reply);
+    }
+    return app.requireAdmin(req, reply);
+  });
 
   app.get(prefix, async () => ({ projects: await listProjects() }));
+
+  app.get(`${prefix}/:projectId/upload-keys`, async (req, reply) => {
+    const { projectId } = req.params as { projectId: string };
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true },
+    });
+    if (!project) return reply.code(404).send({ error: "project.not_found" });
+    return { upload_keys: await listReleaseUploadKeys(projectId) };
+  });
+
+  app.post(`${prefix}/:projectId/upload-keys`, async (req, reply) => {
+    const { projectId } = req.params as { projectId: string };
+    const parsed = z
+      .object({ name: z.string().trim().min(1).max(64) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation.failed" });
+    }
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true },
+    });
+    if (!project) return reply.code(404).send({ error: "project.not_found" });
+    const created = await createReleaseUploadKey({
+      projectId,
+      name: parsed.data.name,
+      createdById: req.admin?.sub,
+    });
+    await writeAudit({
+      actorType: "admin",
+      actorId: req.admin?.sub,
+      action: "release_upload_key.create",
+      targetType: "release_upload_key",
+      targetId: created.key.id,
+      meta: { projectId, name: parsed.data.name },
+      ip: req.ip,
+    });
+    return reply.code(201).send({
+      upload_key: created.key,
+      plaintext: created.plaintext,
+    });
+  });
+
+  app.delete(`${prefix}/:projectId/upload-keys/:keyId`, async (req, reply) => {
+    const { projectId, keyId } = req.params as {
+      projectId: string;
+      keyId: string;
+    };
+    const key = await revokeReleaseUploadKey(projectId, keyId);
+    if (!key) {
+      return reply.code(404).send({ error: "release_upload_key.not_found" });
+    }
+    await writeAudit({
+      actorType: "admin",
+      actorId: req.admin?.sub,
+      action: "release_upload_key.revoke",
+      targetType: "release_upload_key",
+      targetId: keyId,
+      meta: { projectId },
+      ip: req.ip,
+    });
+    return { ok: true, upload_key: key };
+  });
 
   app.post(prefix, async (req, reply) => {
     const parsed = z
@@ -245,6 +321,7 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
         ]),
         isPrimary: z.boolean().optional(),
         enabled: z.boolean().optional(),
+        listedOnWeb: z.boolean().optional(),
         minSupportVersionCode: z.number().int().nonnegative().nullable().optional(),
         storeUrl: z.union([z.string().url().max(2000), z.literal(""), z.null()]).optional(),
         remark: z.string().max(2000).nullable().optional(),
@@ -268,20 +345,29 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
         parsed.data.clientConfig !== undefined
           ? clientConfigToPrismaJson(normalizeClientConfig(parsed.data.clientConfig))
           : undefined;
-      const pkg = await prisma.appPackage.create({
-        data: {
-          projectId: id,
-          name: parsed.data.name.trim(),
-          packageName: parsed.data.packageName.trim(),
-          platform: parsed.data.platform,
-          client: parsed.data.client,
-          isPrimary: parsed.data.isPrimary ?? false,
-          enabled: parsed.data.enabled ?? true,
-          minSupportVersionCode: parsed.data.minSupportVersionCode ?? null,
-          storeUrl,
-          remark: parsed.data.remark ?? null,
-          ...(clientConfig !== undefined ? { clientConfig } : {}),
-        },
+      const pkg = await prisma.$transaction(async (tx) => {
+        if (parsed.data.listedOnWeb) {
+          await tx.appPackage.updateMany({
+            where: { projectId: id, platform: parsed.data.platform, listedOnWeb: true },
+            data: { listedOnWeb: false },
+          });
+        }
+        return tx.appPackage.create({
+          data: {
+            projectId: id,
+            name: parsed.data.name.trim(),
+            packageName: parsed.data.packageName.trim(),
+            platform: parsed.data.platform,
+            client: parsed.data.client,
+            isPrimary: parsed.data.isPrimary ?? false,
+            enabled: parsed.data.enabled ?? true,
+            listedOnWeb: parsed.data.listedOnWeb ?? false,
+            minSupportVersionCode: parsed.data.minSupportVersionCode ?? null,
+            storeUrl,
+            remark: parsed.data.remark ?? null,
+            ...(clientConfig !== undefined ? { clientConfig } : {}),
+          },
+        });
       });
       return reply.code(201).send({ package: pkg });
     } catch (err: unknown) {
@@ -320,6 +406,7 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
           .optional(),
         isPrimary: z.boolean().optional(),
         enabled: z.boolean().optional(),
+        listedOnWeb: z.boolean().optional(),
         minSupportVersionCode: z.number().int().nonnegative().nullable().optional(),
         storeUrl: z.union([z.string().url().max(2000), z.literal(""), z.null()]).optional(),
         remark: z.string().max(2000).nullable().optional(),
@@ -347,24 +434,42 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
         parsed.data.clientConfig !== undefined
           ? clientConfigToPrismaJson(normalizeClientConfig(parsed.data.clientConfig))
           : undefined;
-      const pkg = await prisma.appPackage.update({
-        where: { id: packageId },
-        data: {
-          ...(parsed.data.name != null ? { name: parsed.data.name.trim() } : {}),
-          ...(parsed.data.packageName != null
-            ? { packageName: parsed.data.packageName.trim() }
-            : {}),
-          ...(parsed.data.platform != null ? { platform: parsed.data.platform } : {}),
-          ...(parsed.data.client != null ? { client: parsed.data.client } : {}),
-          ...(parsed.data.isPrimary != null ? { isPrimary: parsed.data.isPrimary } : {}),
-          ...(parsed.data.enabled != null ? { enabled: parsed.data.enabled } : {}),
-          ...(parsed.data.minSupportVersionCode !== undefined
-            ? { minSupportVersionCode: parsed.data.minSupportVersionCode }
-            : {}),
-          ...(storeUrl !== undefined ? { storeUrl } : {}),
-          ...(parsed.data.remark !== undefined ? { remark: parsed.data.remark } : {}),
-          ...(clientConfig !== undefined ? { clientConfig } : {}),
-        },
+      const nextPlatform = parsed.data.platform ?? existing.platform;
+      const nextListedOnWeb = parsed.data.listedOnWeb ?? existing.listedOnWeb;
+      const pkg = await prisma.$transaction(async (tx) => {
+        if (nextListedOnWeb) {
+          await tx.appPackage.updateMany({
+            where: {
+              projectId,
+              platform: nextPlatform,
+              listedOnWeb: true,
+              id: { not: packageId },
+            },
+            data: { listedOnWeb: false },
+          });
+        }
+        return tx.appPackage.update({
+          where: { id: packageId },
+          data: {
+            ...(parsed.data.name != null ? { name: parsed.data.name.trim() } : {}),
+            ...(parsed.data.packageName != null
+              ? { packageName: parsed.data.packageName.trim() }
+              : {}),
+            ...(parsed.data.platform != null ? { platform: parsed.data.platform } : {}),
+            ...(parsed.data.client != null ? { client: parsed.data.client } : {}),
+            ...(parsed.data.isPrimary != null ? { isPrimary: parsed.data.isPrimary } : {}),
+            ...(parsed.data.enabled != null ? { enabled: parsed.data.enabled } : {}),
+            ...(parsed.data.listedOnWeb != null
+              ? { listedOnWeb: parsed.data.listedOnWeb }
+              : {}),
+            ...(parsed.data.minSupportVersionCode !== undefined
+              ? { minSupportVersionCode: parsed.data.minSupportVersionCode }
+              : {}),
+            ...(storeUrl !== undefined ? { storeUrl } : {}),
+            ...(parsed.data.remark !== undefined ? { remark: parsed.data.remark } : {}),
+            ...(clientConfig !== undefined ? { clientConfig } : {}),
+          },
+        });
       });
       return { package: pkg };
     } catch (err: unknown) {
@@ -676,9 +781,11 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
         const forceRaw = fieldString(fields, "forceUpdate");
         const statusRaw = fieldString(fields, "status");
         const status =
-          statusRaw === "draft" ||
-          statusRaw === "published" ||
-          statusRaw === "archived"
+          req.releaseUploadKey
+            ? "draft"
+            : statusRaw === "draft" ||
+                statusRaw === "published" ||
+                statusRaw === "archived"
             ? statusRaw
             : undefined;
 
@@ -712,11 +819,14 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
           versionName,
           versionCode,
           replace:
-            replaceRaw === "1" ||
-            replaceRaw === "true" ||
-            replaceRaw === "yes",
+            !req.releaseUploadKey &&
+            (replaceRaw === "1" ||
+              replaceRaw === "true" ||
+              replaceRaw === "yes"),
           forceUpdate:
-            forceRaw === undefined
+            req.releaseUploadKey
+              ? false
+              : forceRaw === undefined
               ? undefined
               : forceRaw === "1" || forceRaw === "true",
           status,
@@ -738,6 +848,9 @@ export const adminProjectsRoutes: FastifyPluginAsync = async (app) => {
           changelog: fieldString(fields, "changelog"),
         });
 
+        if (req.releaseUploadKey) {
+          await touchReleaseUploadKey(req.releaseUploadKey.id);
+        }
         return result;
       } catch (err) {
         return mapErr(err, reply);

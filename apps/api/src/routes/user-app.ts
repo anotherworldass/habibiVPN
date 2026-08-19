@@ -5,6 +5,10 @@ import { USER_API_PREFIX } from "@habibi/shared";
 import { CLIENT_CHANNELS } from "../services/catalog.js";
 import { getAppConfigByPackageName } from "../services/app-config.js";
 import { checkAppUpdate } from "../services/app-update.js";
+import {
+  listPublicDownloads,
+  recordDownloadAndResolve,
+} from "../services/app-downloads.js";
 import { sourceHintsFromRequest } from "../services/project.js";
 
 function softParseClient(raw: string | null | undefined): ClientChannel | null {
@@ -15,6 +19,54 @@ function softParseClient(raw: string | null | undefined): ClientChannel | null {
 }
 
 export const userAppRoutes: FastifyPluginAsync = async (app) => {
+  /** Website download catalog. Host selects the project; package enables a private 马甲 landing. */
+  app.get(`${USER_API_PREFIX}/app/downloads`, async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const hints = sourceHintsFromRequest(req);
+    try {
+      return await listPublicDownloads({
+        projectCode: q.project || q.project_code || hints.projectCode,
+        siteHost: hints.siteHost,
+        packageName: q.package || q.package_name || null,
+        platform: q.platform || null,
+      });
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  /** Count one download click and redirect to the package's current store/artifact URL. */
+  app.get(`${USER_API_PREFIX}/app/dl`, async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const parsed = z
+      .object({
+        package: z.string().trim().min(1).max(191),
+        platform: z.enum(["ios", "android", "windows", "macos"]),
+      })
+      .safeParse({
+        package: q.package || q.package_name,
+        platform: q.platform?.trim().toLowerCase(),
+      });
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation.failed" });
+    }
+    try {
+      const url = await recordDownloadAndResolve({
+        packageName: parsed.data.package,
+        platform: parsed.data.platform,
+      });
+      return reply.code(302).header("Cache-Control", "no-store").redirect(url);
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
   /**
    * Per-package remote client config (api bases, flags, extras). No auth.
    * Requires package name (query/header). Same name on iOS/Android needs client/platform.

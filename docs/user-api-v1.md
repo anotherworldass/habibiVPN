@@ -686,8 +686,51 @@ Admin：运营活动 → **公告**（内部 `code` 创建时按时间自动生�
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
+| GET | `/app/downloads` | 无 | 官网展示包或指定马甲的下载目录 |
+| GET | `/app/dl` | 无 | 记录下载点击并 302 跳转 |
 | GET | `/app/config` | 无 | 按包下发客户端配置（多域名、开关、扩展 JSON） |
 | GET | `/app/update-check` | 无 | 检查是否有更新 |
+
+### `GET /app/downloads`
+
+公开下载目录，无需登录。官网按请求 Host（或 `x-habibi-site-host`）解析项目，只返回后台勾选“官网下载页展示”的已启用包；每个平台最多一项。
+
+马甲落地页传已知包名，不会暴露其它马甲：
+
+```http
+GET /api/v1/app/downloads?package=com.example.app
+GET /api/v1/app/downloads?package=com.example.app&platform=android
+```
+
+响应：
+
+```json
+{
+  "project": { "id": "habibi", "code": "habibi" },
+  "items": [{
+    "id": "pkg_id",
+    "name": "Android 主包",
+    "package_name": "com.example.app",
+    "platform": "android",
+    "client": "android_direct",
+    "version_name": "1.3.0",
+    "action_url": "https://cdn.example.com/app.apk",
+    "store": false
+  }]
+}
+```
+
+### `GET /app/dl`
+
+下载按钮统计跳转，无需登录：
+
+```http
+GET /api/v1/app/dl?package=com.example.app&platform=android
+```
+
+服务端累计包下载点击，并按“包 + 当时解析到的发布版本 + Asia/Shanghai 日期”统计，然后以 `302` 跳转到最新已发布版本的下载地址（商店端跳商店地址）。版本名和 versionCode 会写入快照，即使版本记录以后删除，历史统计仍可识别。仅配置包级商店链接、尚无发布版本时归入“未标记版本”。响应包含 `Cache-Control: no-store`。商店端统计的是跳转点击及跳转时对应版本，不代表实际安装版本。
+
+Admin：项目管理 → App 包名 / 马甲 →「官网下载页展示」；运营统计可分别按包、按版本查看区间下载点击。
 
 ### `GET /app/config`
 

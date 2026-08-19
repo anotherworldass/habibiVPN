@@ -13,6 +13,9 @@ function clientHeaders(): Record<string, string> {
   if (typeof navigator !== "undefined" && navigator.language) {
     headers["x-habibi-locale"] = navigator.language;
   }
+  if (typeof window !== "undefined" && window.location.hostname) {
+    headers["x-habibi-site-host"] = window.location.hostname;
+  }
   return headers;
 }
 

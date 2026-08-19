@@ -159,6 +159,7 @@ export async function getOpsStats(projectId: string, range: OpsStatsRange) {
     authByLocale,
     authByLanguage,
     authByTimezone,
+    downloadsByPackage,
   ] = await Promise.all([
     prisma.user.count({ where: { projectId } }),
     prisma.user.count({
@@ -407,11 +408,24 @@ export async function getOpsStats(projectId: string, range: OpsStatsRange) {
       from,
       toExclusive,
     ),
+    prisma.appDownloadDaily.groupBy({
+      by: ["packageId", "versionKey", "versionName", "versionCode"],
+      where: {
+        package: { projectId },
+        day: { gte: parseDay(fromDay)!, lte: parseDay(toDay)! },
+      },
+      _sum: { count: true },
+    }),
   ]);
 
-  const packageIds = regsByPackage
-    .map((r) => r.sourcePackageId)
-    .filter((id): id is string => !!id);
+  const packageIds = [
+    ...new Set([
+      ...regsByPackage
+        .map((r) => r.sourcePackageId)
+        .filter((id): id is string => !!id),
+      ...downloadsByPackage.map((r) => r.packageId),
+    ]),
+  ];
   const planIds = paidByPlan.map((r) => r.planId);
   const [packages, plans] = await Promise.all([
     packageIds.length
@@ -447,6 +461,42 @@ export async function getOpsStats(projectId: string, range: OpsStatsRange) {
           ? `${pkg.name} (${clientLabel(pkg.client)})`
           : r.sourcePackageId || "未知包",
         count: r._count._all,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  const downloadTotals = new Map<string, number>();
+  for (const row of downloadsByPackage) {
+    downloadTotals.set(
+      row.packageId,
+      (downloadTotals.get(row.packageId) || 0) + (row._sum.count || 0),
+    );
+  }
+  const downloadsByPackageOut: NamedCount[] = [...downloadTotals.entries()]
+    .map(([packageId, count]) => {
+      const pkg = pkgMap.get(packageId);
+      return {
+        key: packageId,
+        name: pkg ? `${pkg.name} (${clientLabel(pkg.client)})` : packageId,
+        count,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  const downloadsByVersionOut: NamedCount[] = downloadsByPackage
+    .map((r) => {
+      const pkg = pkgMap.get(r.packageId);
+      const packageName = pkg
+        ? `${pkg.name} (${clientLabel(pkg.client)})`
+        : r.packageId;
+      const version =
+        r.versionName && r.versionCode != null
+          ? `${r.versionName} (${r.versionCode})`
+          : r.versionName || (r.versionCode != null ? String(r.versionCode) : "未标记版本");
+      return {
+        key: `${r.packageId}:${r.versionKey}`,
+        name: `${packageName} · ${version}`,
+        count: r._sum.count || 0,
       };
     })
     .sort((a, b) => b.count - a.count);
@@ -567,6 +617,8 @@ export async function getOpsStats(projectId: string, range: OpsStatsRange) {
     },
     registrations_by_client: regsByClientOut,
     registrations_by_package: regsByPackageOut,
+    downloads_by_package: downloadsByPackageOut,
+    downloads_by_version: downloadsByVersionOut,
     orders_by_status: byOrderStatus,
     revenue_by_provider: byProvider,
     revenue_by_plan: byPlan,

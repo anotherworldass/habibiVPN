@@ -240,6 +240,7 @@ model Project {
   supportGuests              SupportGuest[]
   supportConversations       SupportConversation[]
   supportTelegramForwardMaps SupportTelegramForwardMap[]
+  releaseUploadKeys          ReleaseUploadKey[]
 
   @@map("projects")
 }
@@ -602,6 +603,10 @@ model AppPackage {
   minSupportVersionCode Int? @map("min_support_version_code")
   /// Default store listing URL (App Store / Play); release may override
   storeUrl    String?       @map("store_url") @db.Text
+  /// Whether this package is the single package shown for its platform on the public download page
+  listedOnWeb Boolean       @default(false) @map("listed_on_web")
+  /// Lifetime download-link clicks (store redirects and direct downloads)
+  downloadCount Int         @default(0) @map("download_count")
   /// Public client remote config (api_bases, flags, extras…). See app-config service.
   clientConfig Json         @default("{}") @map("client_config")
   remark      String?       @db.Text
@@ -613,12 +618,37 @@ model AppPackage {
   campaignPackages  CampaignPackage[]
   releases          AppPackageRelease[]
   announcements     AnnouncementPackage[]
+  downloadDaily     AppDownloadDaily[]
 
   /// Same bundle id / applicationId allowed on different platforms (e.g. iOS + Android)
   @@unique([packageName, platform])
   @@index([projectId, enabled])
   @@index([client])
   @@map("app_packages")
+}
+
+/// Daily download-link clicks, bucketed by Asia/Shanghai calendar day.
+model AppDownloadDaily {
+  id          String   @id @default(cuid())
+  packageId   String   @map("package_id")
+  releaseId   String?  @map("release_id")
+  /// Stable non-null bucket key: release id, or "unversioned" when only a package store URL exists
+  versionKey  String   @map("version_key")
+  /// Snapshots remain available if a release record is later removed
+  versionName String?  @map("version_name")
+  versionCode Int?     @map("version_code")
+  day         DateTime @db.Date
+  count       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  package AppPackage         @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  release AppPackageRelease? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+
+  @@unique([packageId, versionKey, day])
+  @@index([releaseId])
+  @@index([day])
+  @@map("app_download_daily")
 }
 
 enum AnnouncementType {
@@ -739,11 +769,31 @@ model AppPackageRelease {
   createdAt     DateTime         @default(now()) @map("created_at")
   updatedAt     DateTime         @updatedAt @map("updated_at")
 
-  package AppPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package       AppPackage         @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  downloadDaily AppDownloadDaily[]
 
   @@unique([packageId, versionCode])
   @@index([packageId, status, versionCode])
   @@map("app_package_releases")
+}
+
+/// Long-lived project-scoped key used only for uploading app release artifacts.
+/// The plaintext key is returned once on creation; only its SHA-256 hash is stored.
+model ReleaseUploadKey {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  name        String    @db.VarChar(64)
+  keyHash     String    @unique @map("key_hash") @db.VarChar(64)
+  enabled     Boolean   @default(true)
+  revokedAt   DateTime? @map("revoked_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, enabled])
+  @@map("release_upload_keys")
 }
 
 /// Habibi end-user (App / H5)
