@@ -18,6 +18,7 @@ import {
   saveInviteCode,
 } from "../../../lib/invite";
 import { site } from "../../../lib/site";
+import { fetchSignupTrialPromo } from "../../../lib/signup-trial";
 
 const iosIcon = (
   <svg viewBox="0 0 24 24" fill="currentColor">
@@ -90,6 +91,11 @@ export default function InviteLandingPage() {
   const [toast, setToast] = useState("");
   const [pageUrl, setPageUrl] = useState("");
   const [items, setItems] = useState<DownloadItem[]>([]);
+  const [trial, setTrial] = useState<{
+    plan: string;
+    web: boolean;
+    app: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (valid) saveInviteCode(code);
@@ -97,7 +103,15 @@ export default function InviteLandingPage() {
     void fetchPublicDownloads()
       .then(setItems)
       .catch(() => setItems([]));
-  }, [code, valid]);
+    void fetchSignupTrialPromo().then((promo) => {
+      if (!promo.enabled || (!promo.web && !promo.app)) return;
+      setTrial({
+        plan: promo.plan?.name?.trim() || messages.home.trialPlanFallback,
+        web: promo.web,
+        app: promo.app,
+      });
+    });
+  }, [code, valid, messages.home.trialPlanFallback]);
 
   function onVirtualDownload(label: string) {
     setToast(copy.toast(label));
@@ -115,8 +129,21 @@ export default function InviteLandingPage() {
             {site.brand}
           </Link>
           <h1 className="invite-plain-slogan font-display">{messages.home.slogan}</h1>
-            <p className="invite-plain-lead">
-            {valid ? copy.validLead : copy.invalidLead}
+          {trial ? (
+            <p className="invite-trial-chip">
+              {trial.web ? copy.trialHint(trial.plan) : copy.trialHintApp(trial.plan)}
+            </p>
+          ) : null}
+          <p className="invite-plain-lead">
+            {valid
+              ? trial
+                ? trial.web
+                  ? copy.validLeadTrial(trial.plan)
+                  : copy.validLeadTrialApp(trial.plan)
+                : copy.validLead
+              : trial
+                ? copy.invalidLeadTrial
+                : copy.invalidLead}
           </p>
 
           {valid && (

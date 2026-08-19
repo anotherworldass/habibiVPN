@@ -36,7 +36,10 @@ import {
 } from "../services/email-otp.js";
 import { getAuthEmailPolicy } from "../services/system-settings.js";
 import { emailCredentialData, listEmailHolders } from "../services/email-canonical.js";
-import { scheduleSignupTrialGrant } from "../services/signup-trial.js";
+import {
+  getPublicSignupTrialPromo,
+  scheduleSignupTrialGrant,
+} from "../services/signup-trial.js";
 import {
   assertBootstrapBurstLimit,
   assertBootstrapNewAccountAllowed,
@@ -1028,6 +1031,19 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         groups,
         plans,
       };
+    } catch (err) {
+      return mapErr(err, reply);
+    }
+  });
+
+  /** Public signup-gift campaign for homepage / invite landing. */
+  app.get(`${USER_API_PREFIX}/signup-trial`, async (req, reply) => {
+    try {
+      const source = await resolveSource(sourceHintsFromRequest(req));
+      return await getPublicSignupTrialPromo(
+        source.projectId,
+        localeFromRequest(req),
+      );
     } catch (err) {
       return mapErr(err, reply);
     }

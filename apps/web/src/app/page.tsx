@@ -7,6 +7,7 @@ import { useLocale } from "../components/LocaleProvider";
 import Shell from "../components/Shell";
 import { getToken } from "../lib/auth";
 import { t } from "../lib/copy";
+import { fetchSignupTrialPromo } from "../lib/signup-trial";
 
 const extraIcons = {
   nodes: (
@@ -34,11 +35,17 @@ export default function Home() {
   const copy = t(locale).home;
   const [loggedIn, setLoggedIn] = useState(false);
   const [ready, setReady] = useState(false);
+  const [trialPlan, setTrialPlan] = useState<string | null>(null);
 
   useEffect(() => {
     setLoggedIn(!!getToken());
     setReady(true);
-  }, []);
+    void fetchSignupTrialPromo().then((promo) => {
+      if (promo.enabled && promo.web) {
+        setTrialPlan(promo.plan?.name?.trim() || copy.trialPlanFallback);
+      }
+    });
+  }, [copy.trialPlanFallback]);
 
   return (
     <Shell flush>
@@ -48,7 +55,16 @@ export default function Home() {
           <div className="hero-copy">
             <p className="hero-brand">{copy.brand}</p>
             <h1 className="hero-title">{copy.slogan}</h1>
-            <p className="hero-lead">{loggedIn ? copy.leadIn : copy.leadOut}</p>
+            {!loggedIn && trialPlan ? (
+              <p className="hero-trial-chip">{copy.trialChip(trialPlan)}</p>
+            ) : null}
+            <p className="hero-lead">
+              {loggedIn
+                ? copy.leadIn
+                : trialPlan
+                  ? copy.leadOutTrial(trialPlan)
+                  : copy.leadOut}
+            </p>
             <div className="hero-cta">
               {!ready ? null : loggedIn ? (
                 <>
@@ -62,7 +78,7 @@ export default function Home() {
               ) : (
                 <>
                   <Link href="/register" className="btn btn-primary">
-                    {copy.ctaStart}
+                    {trialPlan ? copy.ctaStartTrial : copy.ctaStart}
                   </Link>
                   <Link href="/login" className="btn btn-secondary">
                     {copy.ctaLogin}
@@ -83,14 +99,14 @@ export default function Home() {
               <div className="step-num">1</div>
               <div>
                 <h3>{copy.step1Title}</h3>
-                <p>{copy.step1Body}</p>
+                <p>{trialPlan ? copy.step1BodyTrial : copy.step1Body}</p>
               </div>
             </div>
             <div className="step">
               <div className="step-num">2</div>
               <div>
-                <h3>{copy.step2Title}</h3>
-                <p>{copy.step2Body}</p>
+                <h3>{trialPlan ? copy.step2TitleTrial : copy.step2Title}</h3>
+                <p>{trialPlan ? copy.step2BodyTrial : copy.step2Body}</p>
               </div>
             </div>
             <div className="step">

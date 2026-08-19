@@ -462,6 +462,20 @@ input {
   animation: rise 0.7s ease 0.16s both;
 }
 
+.hero-trial-chip {
+  display: inline-flex;
+  margin: 14px 0 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  color: #10251f;
+  background: #d7f4e8;
+  animation: rise 0.7s ease 0.12s both;
+}
+
 .hero-cta {
   display: flex;
   flex-wrap: wrap;
@@ -529,6 +543,19 @@ input {
   line-height: 1.55;
   color: var(--muted);
   max-width: 26em;
+}
+
+.invite-trial-chip {
+  display: inline-flex;
+  margin: 14px 0 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--teal-deep, #0f6b5c);
+  background: color-mix(in srgb, var(--teal-deep, #0f6b5c) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--teal-deep, #0f6b5c) 22%, var(--line));
 }
 
 .invite-plain-code {
@@ -2081,6 +2108,7 @@ input {
   .status-dot,
   .hero-brand,
   .hero-title,
+  .hero-trial-chip,
   .hero-lead,
   .hero-cta {
     animation: none !important;

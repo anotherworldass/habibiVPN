@@ -21,6 +21,11 @@ type ClientUrls = {
   quantumult_x?: string;
 };
 
+type Plan = {
+  is_free_claimable?: boolean;
+  already_claimed?: boolean;
+};
+
 type Subscription = {
   id: string;
   plan_id: string | null;
@@ -61,13 +66,15 @@ function planLabel(sub: Subscription, fallback: string) {
 }
 
 function SubscriptionContent() {
-  const copy = t(useLocale());
+  const locale = useLocale();
+  const copy = t(locale);
   const router = useLocaleRouter();
   const search = useSearchParams();
   const claimed = search.get("claimed") === "1";
   const queryId = search.get("id");
 
   const [subs, setSubs] = useState<Subscription[]>([]);
+  const [hasClaimableFree, setHasClaimableFree] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -84,8 +91,13 @@ function SubscriptionContent() {
       router.replace("/login");
       return;
     }
-    apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions")
-      .then((subRes) => {
+    Promise.all([
+      apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions"),
+      apiFetch<{ plans: Plan[] }>(
+        `/api/v1/plans?client=h5&locale=${encodeURIComponent(locale)}`,
+      ).catch(() => ({ plans: [] as Plan[] })),
+    ])
+      .then(([subRes, planRes]) => {
         const list = subRes.subscriptions || [];
         setSubs(list);
         const preferred =
@@ -94,10 +106,15 @@ function SubscriptionContent() {
           list[0]?.id ||
           null;
         setSelectedId(preferred);
+        setHasClaimableFree(
+          (planRes.plans || []).some(
+            (p) => p.is_free_claimable && !p.already_claimed,
+          ),
+        );
       })
       .catch((e) => setError(friendlyError(e, copy.sub.loadFailed)))
       .finally(() => setLoading(false));
-  }, [router, queryId, copy.sub.loadFailed]);
+  }, [router, queryId, locale, copy.sub.loadFailed]);
 
   const selected = useMemo(
     () => subs.find((s) => s.id === selectedId) || null,
@@ -208,10 +225,14 @@ function SubscriptionContent() {
             {copy.sub.emptyTitle}
           </h2>
           <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--muted)", lineHeight: 1.5 }}>
-            {copy.sub.emptyLead}
+            {hasClaimableFree ? copy.sub.emptyLead : copy.sub.emptyLeadBuy}
           </p>
-          <Link href="/plans?welcome=1" className="btn btn-primary btn-block" style={{ marginTop: 16 }}>
-            {copy.sub.claimCta}
+          <Link
+            href={hasClaimableFree ? "/plans?welcome=1" : "/plans"}
+            className="btn btn-primary btn-block"
+            style={{ marginTop: 16 }}
+          >
+            {hasClaimableFree ? copy.sub.claimCta : copy.sub.buyCta}
           </Link>
         </div>
       )}
