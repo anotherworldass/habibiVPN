@@ -482,25 +482,35 @@ input {
 }
 
 /* Invite landing — plain, brand-first, no imagery */
+.habibi-main:has(.invite-plain) {
+  display: flex;
+  flex-direction: column;
+}
+
 .invite-plain {
   box-sizing: border-box;
   width: 100%;
   max-width: 420px;
   margin: 0 auto;
-  padding: 48px 0 32px;
-  min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 32px);
+  padding: 32px 0 16px;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
 .invite-plain-brand {
+  display: inline-block;
   margin: 0;
   font-size: clamp(2.6rem, 11vw, 3.2rem);
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 0.92;
   color: var(--teal-deep);
+}
+
+.invite-plain-brand:hover {
+  color: var(--ink);
 }
 
 .invite-plain-slogan {
@@ -2019,6 +2029,10 @@ input {
 .habibi-main--narrow .footer-mini,
 .habibi-main--no-nav .footer-mini {
   margin-top: 32px;
+}
+
+.habibi-main:has(.invite-plain) > .footer-mini {
+  margin-top: auto;
 }
 
 .footer-mini-links a {
@@ -4093,15 +4107,15 @@ input {
     margin-right: auto;
   }
 
-  /* Invite: full-viewport center, no clipped glow band inside narrow column */
+  /* Invite: fill viewport, keep QR beside copy, pin footer to the bottom */
   .habibi-main--no-nav.habibi-main--narrow:has(.invite-plain) {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: stretch;
     min-height: 100dvh;
     max-width: 780px;
     padding-top: 48px;
-    padding-bottom: 48px;
+    padding-bottom: 24px;
   }
 
   .invite-plain {
@@ -4114,6 +4128,17 @@ input {
     grid-template-columns: minmax(0, 1fr) 220px;
     gap: 36px;
     align-items: center;
+  }
+
+  .habibi-main:has(.invite-plain) > .footer-mini {
+    max-width: none;
+    width: 100%;
+    align-items: center;
+    padding-bottom: 8px;
+  }
+
+  .habibi-main:has(.invite-plain) > .footer-mini .footer-mini-links {
+    justify-content: center;
   }
 
   .invite-plain-main {

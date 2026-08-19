@@ -34,6 +34,10 @@ import {
   updateUserInviteCode,
 } from "../services/referral/codes.js";
 import { bindInviteForExistingUser } from "../services/referral/bind.js";
+import {
+  compareInviteEnvironment,
+  loadAuthEnvRows,
+} from "../services/referral/invite-env.js";
 import { writeAudit } from "../lib/audit.js";
 
 function mapErr(err: unknown, reply: { code: (n: number) => { send: (b: unknown) => unknown } }) {
@@ -581,12 +585,12 @@ export const adminReferralRoutes: FastifyPluginAsync = async (app) => {
           sourcePackage: { select: { id: true, name: true, packageName: true, client: true } },
           promoWallet: true,
           promoGroup: { select: { id: true, name: true, code: true } },
-          inviter: { select: { id: true, email: true, inviteCode: true } },
+          inviter: { select: { id: true, uid: true, email: true, inviteCode: true } },
         },
       });
       if (!user) return reply.code(404).send({ error: "user.not_found" });
 
-      const [upline, downlineCounts, groups] = await Promise.all([
+      const [upline, downlineCounts, groups, invitees] = await Promise.all([
         getUplineChain(user.id),
         prisma.inviteClosure.groupBy({
           by: ["depth"],
@@ -594,7 +598,38 @@ export const adminReferralRoutes: FastifyPluginAsync = async (app) => {
           _count: { _all: true },
         }),
         listPromoGroups(projectId),
+        prisma.user.findMany({
+          where: { invitedById: user.id, projectId },
+          select: {
+            id: true,
+            uid: true,
+            email: true,
+            inviteCode: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        }),
       ]);
+
+      const envUserIds = [
+        user.id,
+        ...(user.invitedById ? [user.invitedById] : []),
+        ...invitees.map((row) => row.id),
+      ];
+      const envRows = await loadAuthEnvRows(envUserIds);
+      const selfRows = envRows.get(user.id) || [];
+      const invite_env = user.invitedById
+        ? compareInviteEnvironment(selfRows, envRows.get(user.invitedById) || [])
+        : null;
+      const direct_invitees_env = invitees.map((row) => ({
+        id: row.id,
+        uid: row.uid,
+        email: row.email,
+        invite_code: row.inviteCode,
+        created_at: row.createdAt,
+        invite_env: compareInviteEnvironment(envRows.get(row.id) || [], selfRows),
+      }));
 
       return {
         user: {
@@ -613,6 +648,8 @@ export const adminReferralRoutes: FastifyPluginAsync = async (app) => {
           code: g.code,
           enabled: g.enabled,
         })),
+        invite_env,
+        direct_invitees_env,
       };
     } catch (err) {
       return mapErr(err, reply);

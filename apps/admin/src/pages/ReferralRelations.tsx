@@ -95,7 +95,12 @@ type RelationRes = {
       spentCents?: number;
     } | null;
     promoGroup?: { id: string; name: string; code: string } | null;
-    inviter?: { id: string; email?: string | null; inviteCode: string } | null;
+    inviter?: {
+      id: string;
+      uid?: number;
+      email?: string | null;
+      inviteCode: string;
+    } | null;
   };
   upline: Array<{
     level: number;
@@ -106,7 +111,75 @@ type RelationRes = {
   }>;
   downline_by_level: Record<string, number>;
   groups: Array<{ id: string; name: string; code: string; enabled: boolean }>;
+  invite_env?: InviteEnvCompare | null;
+  direct_invitees_env?: DirectInviteeEnvRow[];
 };
+
+type InviteEnvFlag = "same_device" | "same_ip" | "similar_env";
+
+type InviteEnvCompare = {
+  flags: InviteEnvFlag[];
+  shared_ips: string[];
+  shared_device_count: number;
+  similar: {
+    timezone: string;
+    locale: string;
+    os_name: string;
+    ua_stem: string;
+  } | null;
+  event_count_a: number;
+  event_count_b: number;
+};
+
+type DirectInviteeEnvRow = {
+  id: string;
+  uid?: number;
+  email?: string | null;
+  invite_code: string;
+  created_at: string;
+  invite_env: InviteEnvCompare;
+};
+
+function inviteEnvFlagTags(flags: InviteEnvFlag[]) {
+  return flags.map((f) => {
+    if (f === "same_device") {
+      return (
+        <Tag key={f} color="error">
+          同设备
+        </Tag>
+      );
+    }
+    if (f === "same_ip") {
+      return (
+        <Tag key={f} color="warning">
+          同 IP
+        </Tag>
+      );
+    }
+    return (
+      <Tag key={f} color="blue">
+        环境相似
+      </Tag>
+    );
+  });
+}
+
+function inviteEnvEvidence(env: InviteEnvCompare): string {
+  const parts: string[] = [];
+  if (env.shared_device_count > 0) {
+    parts.push(`同设备哈希 ×${env.shared_device_count}`);
+  }
+  if (env.shared_ips.length) parts.push(`IP ${env.shared_ips.join("、")}`);
+  if (env.similar) {
+    parts.push(
+      `${env.similar.timezone} · ${env.similar.locale} · ${env.similar.os_name} · ${env.similar.ua_stem}`,
+    );
+  }
+  if (!env.event_count_a || !env.event_count_b) {
+    parts.push("一方缺少认证记录");
+  }
+  return parts.join("；") || "—";
+}
 
 type ClientUrls = {
   clash_meta?: string;
@@ -1175,6 +1248,29 @@ export default function ReferralRelationsPage() {
 
       {data && (
         <>
+          {data.invite_env && data.invite_env.flags.length > 0 && (
+            <Alert
+              style={{ marginTop: 16 }}
+              showIcon
+              type={
+                data.invite_env.flags.includes("same_device")
+                  ? "error"
+                  : data.invite_env.flags.includes("same_ip")
+                    ? "warning"
+                    : "info"
+              }
+              message="与邀请人环境重叠（仅标注，不自动处理）"
+              description={
+                <span>
+                  {inviteEnvFlagTags(data.invite_env.flags)}
+                  <Typography.Text type="secondary">
+                    {inviteEnvEvidence(data.invite_env)}
+                    。不会拒绝绑定或扣佣金，可结合运营备注 / 关闭推广资格处理。
+                  </Typography.Text>
+                </span>
+              }
+            />
+          )}
           <Card
             title="基本信息"
             style={{ marginTop: 16 }}
@@ -1283,12 +1379,13 @@ export default function ReferralRelationsPage() {
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label="上级">
-                <Space size={6}>
+                <Space size={6} wrap>
                   <span>
                     {data.user.inviter
-                      ? `${data.user.inviter.email || data.user.inviter.id} (${data.user.inviter.inviteCode})`
+                      ? `${data.user.inviter.email || data.user.inviter.uid || data.user.inviter.id} (${data.user.inviter.inviteCode})`
                       : "无"}
                   </span>
+                  {data.invite_env ? inviteEnvFlagTags(data.invite_env.flags) : null}
                   {!data.user.inviter && (
                     <Button
                       type="link"
@@ -1374,6 +1471,61 @@ export default function ReferralRelationsPage() {
               columns={[
                 { title: "层级", dataIndex: "level" },
                 { title: "人数", dataIndex: "count" },
+              ]}
+            />
+          </Card>
+
+          <Card
+            title="直邀环境比对"
+            style={{ marginTop: 16 }}
+            extra="最近 50 人 · 同设备 / 公网同 IP / 环境相似仅供参考"
+          >
+            <Table
+              size="small"
+              rowKey="id"
+              pagination={false}
+              dataSource={data.direct_invitees_env || []}
+              locale={{ emptyText: "暂无直邀" }}
+              columns={[
+                {
+                  title: "UID",
+                  width: 100,
+                  render: (_, r: DirectInviteeEnvRow) => (
+                    <a
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void load(r.id);
+                      }}
+                    >
+                      {r.uid ?? r.id.slice(0, 8)}
+                    </a>
+                  ),
+                },
+                {
+                  title: "邮箱",
+                  dataIndex: "email",
+                  ellipsis: true,
+                  render: (v: string | null) => v || <Tag>匿名</Tag>,
+                },
+                {
+                  title: "邀请码",
+                  dataIndex: "invite_code",
+                  width: 110,
+                },
+                {
+                  title: "重叠",
+                  width: 200,
+                  render: (_, r: DirectInviteeEnvRow) =>
+                    r.invite_env.flags.length
+                      ? inviteEnvFlagTags(r.invite_env.flags)
+                      : "—",
+                },
+                {
+                  title: "证据",
+                  ellipsis: true,
+                  render: (_, r: DirectInviteeEnvRow) =>
+                    inviteEnvEvidence(r.invite_env),
+                },
               ]}
             />
           </Card>

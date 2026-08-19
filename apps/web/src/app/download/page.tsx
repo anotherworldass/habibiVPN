@@ -5,8 +5,12 @@ import { QRCodeSVG } from "qrcode.react";
 import Link from "../../components/LocaleLink";
 import { useLocale } from "../../components/LocaleProvider";
 import Shell from "../../components/Shell";
-import { apiFetch } from "../../lib/api";
 import { t } from "../../lib/copy";
+import {
+  downloadActionHref,
+  fetchPublicDownloads,
+  type DownloadItem,
+} from "../../lib/downloads";
 import { downloadPlatforms } from "../../lib/site";
 
 const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
@@ -32,17 +36,6 @@ const icons: Record<(typeof downloadPlatforms)[number]["id"], ReactNode> = {
   ),
 };
 
-type DownloadItem = {
-  id: string;
-  name: string;
-  package_name: string;
-  platform: (typeof downloadPlatforms)[number]["id"];
-  client: string;
-  version_name: string | null;
-  action_url: string | null;
-  store: boolean;
-};
-
 export default function DownloadPage() {
   const messages = t(useLocale());
   const copy = messages.download;
@@ -63,13 +56,8 @@ export default function DownloadPage() {
     const packageName = params.get("pkg")?.trim() || "";
     const platform = params.get("platform")?.trim() || "";
     setPackageLanding(Boolean(packageName));
-    const query = new URLSearchParams();
-    if (packageName) query.set("package", packageName);
-    if (platform) query.set("platform", platform);
-    void apiFetch<{ items: DownloadItem[] }>(
-      `/api/v1/app/downloads${query.size ? `?${query.toString()}` : ""}`,
-    )
-      .then((result) => setItems(result.items || []))
+    void fetchPublicDownloads({ packageName, platform })
+      .then(setItems)
       .catch(() => setItems([]));
   }, []);
 
@@ -99,9 +87,7 @@ export default function DownloadPage() {
                   (candidate) => candidate.platform === item.id,
                 );
                 const placeholder = !download?.action_url;
-                const href = download
-                  ? `/api/v1/app/dl?package=${encodeURIComponent(download.package_name)}&platform=${encodeURIComponent(download.platform)}`
-                  : "#";
+                const href = download ? downloadActionHref(download) : "#";
                 const extra = platformCopy[item.id];
                 return (
                   <div key={item.id} className="download-card">

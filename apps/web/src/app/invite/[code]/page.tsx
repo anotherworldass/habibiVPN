@@ -1,18 +1,82 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Link from "../../../components/LocaleLink";
 import { useLocale } from "../../../components/LocaleProvider";
 import Shell from "../../../components/Shell";
 import { t } from "../../../lib/copy";
 import {
+  downloadActionHref,
+  fetchPublicDownloads,
+  type DownloadItem,
+} from "../../../lib/downloads";
+import {
   INVITE_CODE_RE,
   normalizeInviteCode,
   saveInviteCode,
 } from "../../../lib/invite";
-import { isPlaceholderUrl, site } from "../../../lib/site";
+import { site } from "../../../lib/site";
+
+const iosIcon = (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M16.7 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 3 2.3s1.7-.8 3.1-.8 1.9.8 3.1.8 2.1-1.1 2.9-2.2c.9-1.3 1.3-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.9ZM14.8 5.6c.7-.9 1.2-2.1 1.1-3.3-1.1 0-2.4.7-3.2 1.6-.7.8-1.3 2.1-1.1 3.3 1.2.1 2.4-.6 3.2-1.6Z" />
+  </svg>
+);
+
+const androidIcon = (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M6 18c0 .6.4 1 1 1h1v3.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V19h2v3.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V19h1c.6 0 1-.4 1-1V8H6v10ZM3.5 8C2.7 8 2 8.7 2 9.5v6c0 .8.7 1.5 1.5 1.5S5 16.3 5 15.5v-6C5 8.7 4.3 8 3.5 8Zm17 0c-.8 0-1.5.7-1.5 1.5v6c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5v-6c0-.8-.7-1.5-1.5-1.5ZM15.5 1.1l1.2-2.1c.1-.2 0-.5-.2-.6-.2-.1-.5 0-.6.2l-1.2 2.2A7.3 7.3 0 0 0 12 0c-.9 0-1.8.2-2.7.8L8.1-1.4c-.1-.2-.4-.3-.6-.2-.2.1-.3.4-.2.6L8.5 1.1A6.9 6.9 0 0 0 5.1 6h13.8a6.9 6.9 0 0 0-3.4-4.9ZM9.5 3.8a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6Zm5 0a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6Z" />
+  </svg>
+);
+
+function StoreDownloadButton({
+  download,
+  label,
+  kicker,
+  icon,
+  onUnavailable,
+}: {
+  download: DownloadItem | undefined;
+  label: string;
+  kicker: string;
+  icon: ReactNode;
+  onUnavailable: (label: string) => void;
+}) {
+  const inner = (
+    <>
+      <span className="invite-download-icon" aria-hidden>
+        {icon}
+      </span>
+      <span>
+        <small>{kicker}</small>
+        {label}
+      </span>
+    </>
+  );
+  if (download?.action_url) {
+    return (
+      <a
+        className="invite-download-btn"
+        href={downloadActionHref(download)}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="invite-download-btn"
+      onClick={() => onUnavailable(label)}
+    >
+      {inner}
+    </button>
+  );
+}
 
 export default function InviteLandingPage() {
   const messages = t(useLocale());
@@ -25,10 +89,14 @@ export default function InviteLandingPage() {
   const registerHref = valid ? `/register?ref=${encodeURIComponent(code)}` : "/register";
   const [toast, setToast] = useState("");
   const [pageUrl, setPageUrl] = useState("");
+  const [items, setItems] = useState<DownloadItem[]>([]);
 
   useEffect(() => {
     if (valid) saveInviteCode(code);
     setPageUrl(window.location.href.split("#")[0] || window.location.href);
+    void fetchPublicDownloads()
+      .then(setItems)
+      .catch(() => setItems([]));
   }, [code, valid]);
 
   function onVirtualDownload(label: string) {
@@ -36,11 +104,16 @@ export default function InviteLandingPage() {
     window.setTimeout(() => setToast(""), 2200);
   }
 
+  const ios = items.find((item) => item.platform === "ios");
+  const android = items.find((item) => item.platform === "android");
+
   return (
     <Shell narrow hideNavigation>
       <div className="invite-plain">
         <div className="invite-plain-main">
-          <p className="invite-plain-brand font-display">{site.brand}</p>
+          <Link href="/" className="invite-plain-brand font-display">
+            {site.brand}
+          </Link>
           <h1 className="invite-plain-slogan font-display">{messages.home.slogan}</h1>
             <p className="invite-plain-lead">
             {valid ? copy.validLead : copy.invalidLead}
@@ -65,79 +138,20 @@ export default function InviteLandingPage() {
           <div className="invite-download">
             <p className="invite-download-label">{copy.downloadLabel}</p>
             <div className="invite-download-row">
-              {isPlaceholderUrl(site.appStoreUrl) ? (
-                <button
-                  type="button"
-                  className="invite-download-btn"
-                  onClick={() => onVirtualDownload("App Store")}
-                >
-                  <span className="invite-download-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M16.7 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 3 2.3s1.7-.8 3.1-.8 1.9.8 3.1.8 2.1-1.1 2.9-2.2c.9-1.3 1.3-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.9ZM14.8 5.6c.7-.9 1.2-2.1 1.1-3.3-1.1 0-2.4.7-3.2 1.6-.7.8-1.3 2.1-1.1 3.3 1.2.1 2.4-.6 3.2-1.6Z" />
-                    </svg>
-                  </span>
-                  <span>
-                    <small>Download on the</small>
-                    App Store
-                  </span>
-                </button>
-              ) : (
-                <a
-                  className="invite-download-btn"
-                  href={site.appStoreUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="invite-download-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M16.7 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 3 2.3s1.7-.8 3.1-.8 1.9.8 3.1.8 2.1-1.1 2.9-2.2c.9-1.3 1.3-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.9ZM14.8 5.6c.7-.9 1.2-2.1 1.1-3.3-1.1 0-2.4.7-3.2 1.6-.7.8-1.3 2.1-1.1 3.3 1.2.1 2.4-.6 3.2-1.6Z" />
-                    </svg>
-                  </span>
-                  <span>
-                    <small>Download on the</small>
-                    App Store
-                  </span>
-                </a>
-              )}
-
-              {isPlaceholderUrl(site.androidApkUrl) && isPlaceholderUrl(site.playStoreUrl) ? (
-                <button
-                  type="button"
-                  className="invite-download-btn"
-                  onClick={() => onVirtualDownload("Android")}
-                >
-                  <span className="invite-download-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M6 18c0 .6.4 1 1 1h1v3.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V19h2v3.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V19h1c.6 0 1-.4 1-1V8H6v10ZM3.5 8C2.7 8 2 8.7 2 9.5v6c0 .8.7 1.5 1.5 1.5S5 16.3 5 15.5v-6C5 8.7 4.3 8 3.5 8Zm17 0c-.8 0-1.5.7-1.5 1.5v6c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5v-6c0-.8-.7-1.5-1.5-1.5ZM15.5 1.1l1.2-2.1c.1-.2 0-.5-.2-.6-.2-.1-.5 0-.6.2l-1.2 2.2A7.3 7.3 0 0 0 12 0c-.9 0-1.8.2-2.7.8L8.1-1.4c-.1-.2-.4-.3-.6-.2-.2.1-.3.4-.2.6L8.5 1.1A6.9 6.9 0 0 0 5.1 6h13.8a6.9 6.9 0 0 0-3.4-4.9ZM9.5 3.8a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6Zm5 0a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6Z" />
-                    </svg>
-                  </span>
-                  <span>
-                    <small>Get it on</small>
-                    Android
-                  </span>
-                </button>
-              ) : (
-                <a
-                  className="invite-download-btn"
-                  href={
-                    isPlaceholderUrl(site.androidApkUrl)
-                      ? site.playStoreUrl
-                      : site.androidApkUrl
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="invite-download-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M6 18c0 .6.4 1 1 1h1v3.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V19h2v3.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V19h1c.6 0 1-.4 1-1V8H6v10ZM3.5 8C2.7 8 2 8.7 2 9.5v6c0 .8.7 1.5 1.5 1.5S5 16.3 5 15.5v-6C5 8.7 4.3 8 3.5 8Zm17 0c-.8 0-1.5.7-1.5 1.5v6c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5v-6c0-.8-.7-1.5-1.5-1.5ZM15.5 1.1l1.2-2.1c.1-.2 0-.5-.2-.6-.2-.1-.5 0-.6.2l-1.2 2.2A7.3 7.3 0 0 0 12 0c-.9 0-1.8.2-2.7.8L8.1-1.4c-.1-.2-.4-.3-.6-.2-.2.1-.3.4-.2.6L8.5 1.1A6.9 6.9 0 0 0 5.1 6h13.8a6.9 6.9 0 0 0-3.4-4.9ZM9.5 3.8a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6Zm5 0a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6Z" />
-                    </svg>
-                  </span>
-                  <span>
-                    <small>Get it on</small>
-                    Android
-                  </span>
-                </a>
-              )}
+              <StoreDownloadButton
+                download={ios}
+                kicker="Download on the"
+                label="App Store"
+                icon={iosIcon}
+                onUnavailable={onVirtualDownload}
+              />
+              <StoreDownloadButton
+                download={android}
+                kicker="Get it on"
+                label="Android"
+                icon={androidIcon}
+                onUnavailable={onVirtualDownload}
+              />
             </div>
             {toast ? <p className="invite-download-toast">{toast}</p> : null}
             <p className="invite-download-more">
