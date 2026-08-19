@@ -8,6 +8,10 @@ import { formatCents } from "../../lib/plan-format";
 import { ensureSession } from "../../lib/session";
 import { site, supportTelegramUrl } from "../../lib/site";
 import {
+  fetchSignupTrialPromo,
+  telegramSignupTrialPlan,
+} from "../../lib/signup-trial";
+import {
   haptic,
   hapticSuccess,
   openTelegramUrl,
@@ -96,21 +100,24 @@ export default function TgInvitePage() {
   const [copied, setCopied] = useState("");
   const [loading, setLoading] = useState(true);
   const [openLevel, setOpenLevel] = useState<number | null>(null);
+  const [trialPlan, setTrialPlan] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await ensureSession();
       try {
-        const [o, t, r] = await Promise.all([
+        const [o, t, r, promo] = await Promise.all([
           apiFetch<Overview>("/api/v1/promo/overview"),
           apiFetch<Tools>("/api/v1/promo/tools"),
           apiFetch<PromoRules>("/api/v1/promo/rules"),
+          fetchSignupTrialPromo(),
         ]);
         if (cancelled) return;
         setOverview(o);
         setTools(t);
         setRules(r);
+        setTrialPlan(telegramSignupTrialPlan(promo)?.name ?? null);
       } catch (e) {
         if (!cancelled) setError(friendlyError(e, "加载失败"));
       } finally {
@@ -139,7 +146,9 @@ export default function TgInvitePage() {
     const l1 = rules?.levels.find((l) => l.level === 1);
     const tip = l1
       ? `好友付费你可得 ${formatRate(l1.rate_bps)} 永久回馈`
-      : "一起领免费试用";
+      : trialPlan
+        ? `新用户注册即送「${trialPlan}」`
+        : `一起用 ${site.brand}`;
     return `我在用 ${site.brand}，${tip}，点链接：`;
   }
 
@@ -172,7 +181,13 @@ export default function TgInvitePage() {
           </h1>
           <p className="invite-lead">
             邀请好友，享永久绑定的分佣
+            {trialPlan ? `。新用户注册即送「${trialPlan}」。` : ""}
           </p>
+          {trialPlan ? (
+            <p className="invite-trial-chip">
+              限时活动 · 注册即送「{trialPlan}」
+            </p>
+          ) : null}
           {l1Rate != null && l1Rate > 0 ? (
             <div className="invite-hero-rate">
               <span>邀请回馈</span>

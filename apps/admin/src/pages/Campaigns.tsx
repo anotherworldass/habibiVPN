@@ -89,6 +89,7 @@ type CampaignRules = {
   invite?: {
     requiredCount?: number;
     grantMode?: "auto" | "claim";
+    perInvitePlanId?: string | null;
     inviteeRequirements?: {
       paid?: boolean;
       hasSubscription?: boolean;
@@ -441,6 +442,7 @@ function CampaignForm(props: {
         inviteReqTraffic: Boolean(inviteReqs.hasTraffic),
         inviteMinTrafficBytes: inviteReqs.minTrafficBytes ?? undefined,
         rewardPlanId: initial?.rewards?.[0]?.plan_id || undefined,
+        invitePerInvitePlanId: invite.perInvitePlanId || undefined,
         remark: initial?.remark ?? undefined,
         ...uiFormFieldsFromCampaign(initial?.ui),
       }}
@@ -503,6 +505,11 @@ function CampaignForm(props: {
                     ),
                     grantMode:
                       raw.inviteGrantMode === "claim" ? "claim" : "auto",
+                    perInvitePlanId:
+                      raw.invitePerInvitePlanId == null ||
+                      raw.invitePerInvitePlanId === ""
+                        ? null
+                        : String(raw.invitePerInvitePlanId),
                     inviteeRequirements: {
                       paid: Boolean(raw.inviteReqPaid),
                       hasSubscription: Boolean(raw.inviteReqSubscription),
@@ -711,6 +718,16 @@ function CampaignForm(props: {
                   label: `${p.name} (${p.code})`,
                 }))}
                 rules={[{ required: true, message: "请选择奖励套餐" }]}
+              />
+              <ProFormSelect
+                name="invitePerInvitePlanId"
+                label="达标前每邀请 1 人奖励套餐"
+                options={plans.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} (${p.code})`,
+                }))}
+                fieldProps={{ allowClear: true }}
+                extra="只发给前 N-1 个合格直邀；第 N 个只发达标套餐。不选则不发。"
               />
               <Divider orientation="left" plain>
                 被邀请人须同时满足

@@ -20,14 +20,18 @@ export function signupTrialTriggerMatches(
   return event === "verified_email" || event === "telegram_bind";
 }
 
-/** Where the public promo may appear: Web register vs App/TG bootstrap. */
+/** Where the public promo may appear: Web, native App bootstrap, Telegram Mini App. */
 export function publicSignupTrialChannels(trigger: SignupTrialTrigger): {
   web: boolean;
   app: boolean;
+  telegram: boolean;
 } {
   return {
     web: signupTrialTriggerMatches(trigger, "verified_email"),
     app: signupTrialTriggerMatches(trigger, "bootstrap"),
+    telegram:
+      signupTrialTriggerMatches(trigger, "telegram_bind") ||
+      signupTrialTriggerMatches(trigger, "bootstrap"),
   };
 }
 

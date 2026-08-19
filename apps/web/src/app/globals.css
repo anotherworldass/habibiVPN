@@ -481,7 +481,11 @@ input {
 }
 
 .hero-lead-rotating {
-  min-height: 3.1em;
+  min-height: 1.55em;
+}
+
+.hero-lead-rotating + .hero-lead {
+  margin-top: 6px;
 }
 
 .hero-lead-swap {

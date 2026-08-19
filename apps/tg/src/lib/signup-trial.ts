@@ -20,6 +20,8 @@ const EMPTY: SignupTrialPromo = {
   plan: null,
 };
 
+const TRIAL_PLAN_FALLBACK = "体验套餐";
+
 export async function fetchSignupTrialPromo(): Promise<SignupTrialPromo> {
   try {
     const res = await apiFetch<SignupTrialPromo>("/api/v1/signup-trial");
@@ -40,4 +42,13 @@ export async function fetchSignupTrialPromo(): Promise<SignupTrialPromo> {
   } catch {
     return EMPTY;
   }
+}
+
+/** Mini App: show campaign when TG bind or bootstrap would grant. */
+export function telegramSignupTrialPlan(
+  promo: SignupTrialPromo,
+): { name: string; validity_seconds: number | null; data_limit_bytes: number | null } | null {
+  if (!promo.enabled || !promo.telegram || !promo.plan) return null;
+  const name = promo.plan.name.trim() || TRIAL_PLAN_FALLBACK;
+  return { ...promo.plan, name };
 }

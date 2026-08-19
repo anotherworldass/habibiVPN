@@ -10,6 +10,7 @@ import { createUpstreamSlot } from "../provision.js";
 import type { CampaignWithRelations } from "./eligibility.js";
 import {
   MILESTONE_PERIOD_KEY,
+  PER_INVITE_PERIOD_KEY,
   emptyInviteeRequirements,
   normalizeInviteRules,
 } from "./types.js";
@@ -36,6 +37,52 @@ export function milestoneIdempotencyKey(campaignId: string, userId: string) {
   return `${campaignId}:${userId}:${MILESTONE_PERIOD_KEY}:1`;
 }
 
+export function perInviteIdempotencyKey(
+  campaignId: string,
+  userId: string,
+  inviteeId: string,
+) {
+  return `${campaignId}:${userId}:${PER_INVITE_PERIOD_KEY}:${inviteeId}`;
+}
+
+export function nextPerInviteGrants(input: {
+  qualifiedIds: string[];
+  requiredCount: number;
+  existing: Array<{ inviteeId: string; attemptIndex: number }>;
+}): Array<{ inviteeId: string; attemptIndex: number }> {
+  const cap = Math.max(0, Math.floor(input.requiredCount) - 1);
+  if (cap < 1) return [];
+  const eligible = input.qualifiedIds.slice(0, cap);
+  const granted = new Set(input.existing.map((e) => e.inviteeId));
+  const usedAttempts = new Set(input.existing.map((e) => e.attemptIndex));
+  let nextAttempt = 1;
+  const out: Array<{ inviteeId: string; attemptIndex: number }> = [];
+  for (const inviteeId of eligible) {
+    if (granted.has(inviteeId)) continue;
+    while (usedAttempts.has(nextAttempt) && nextAttempt <= cap) {
+      nextAttempt += 1;
+    }
+    if (nextAttempt > cap) break;
+    out.push({ inviteeId, attemptIndex: nextAttempt });
+    usedAttempts.add(nextAttempt);
+    nextAttempt += 1;
+  }
+  return out;
+}
+
+function inviteeIdFromClaim(claim: {
+  idempotencyKey: string;
+  meta: Prisma.JsonValue | null;
+}): string | null {
+  const meta = claim.meta;
+  if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+    const id = (meta as { invitee_id?: unknown }).invitee_id;
+    if (typeof id === "string" && id.trim()) return id;
+  }
+  const parts = claim.idempotencyKey.split(":");
+  return parts.length >= 4 ? parts[parts.length - 1] || null : null;
+}
+
 function trafficThreshold(reqs: {
   hasTraffic: boolean;
   minTrafficBytes: number | null;
@@ -47,11 +94,11 @@ function trafficThreshold(reqs: {
   return null;
 }
 
-export async function countQualifiedInvites(
+export async function listQualifiedInvitees(
   inviterId: string,
   campaign: Pick<Campaign, "startAt" | "endAt" | "rulesJson">,
-): Promise<number> {
-  if (!campaign.startAt) return 0;
+): Promise<Array<{ id: string; createdAt: Date }>> {
+  if (!campaign.startAt) return [];
   const invite = normalizeInviteRules(campaign.rulesJson);
   const reqs = invite?.inviteeRequirements ?? emptyInviteeRequirements();
 
@@ -74,16 +121,15 @@ export async function countQualifiedInvites(
     where.upstreams = { some: {} };
   }
 
-  const minBytes = trafficThreshold(reqs);
-  if (minBytes == null) {
-    return prisma.user.count({ where });
-  }
-
   const invitees = await prisma.user.findMany({
     where,
-    select: { id: true },
+    select: { id: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
   });
-  if (!invitees.length) return 0;
+  if (!invitees.length) return [];
+
+  const minBytes = trafficThreshold(reqs);
+  if (minBytes == null) return invitees;
 
   const sums = await prisma.userUpstream.groupBy({
     by: ["userId"],
@@ -96,7 +142,15 @@ export async function countQualifiedInvites(
     const n = used == null ? 0 : Number(used);
     if (Number.isFinite(n) && n >= minBytes) qualified.add(row.userId);
   }
-  return invitees.filter((u) => qualified.has(u.id)).length;
+  return invitees.filter((u) => qualified.has(u.id));
+}
+
+export async function countQualifiedInvites(
+  inviterId: string,
+  campaign: Pick<Campaign, "startAt" | "endAt" | "rulesJson">,
+): Promise<number> {
+  const rows = await listQualifiedInvitees(inviterId, campaign);
+  return rows.length;
 }
 
 function pickGrantClient(
@@ -152,7 +206,7 @@ export async function tryGrantInviteMilestone(input: {
     await prisma.campaignClaim.delete({ where: { id: existing.id } }).catch(() => {});
   }
 
-  const count = await countQualifiedInvites(input.userId, campaign);
+  const count = (await listQualifiedInvitees(input.userId, campaign)).length;
   if (count < invite.requiredCount) {
     return { granted: false, reason: "campaign.invite_progress" };
   }
@@ -237,6 +291,158 @@ export async function tryGrantInviteMilestone(input: {
   }
 }
 
+export async function tryGrantPerInviteRewards(input: {
+  campaign: CampaignWithRelations;
+  userId: string;
+  client: ClientChannel;
+}): Promise<{ granted: number }> {
+  const { campaign } = input;
+  const now = new Date();
+  if (campaign.type !== "invite_milestone") return { granted: 0 };
+  if (campaign.status !== "active") return { granted: 0 };
+  if (!isWithinWindow(campaign, now)) return { granted: 0 };
+
+  const invite = normalizeInviteRules(campaign.rulesJson);
+  const planId = invite?.perInvitePlanId;
+  if (!invite || !planId) return { granted: 0 };
+
+  const qualified = await listQualifiedInvitees(input.userId, campaign);
+  const existingRows = await prisma.campaignClaim.findMany({
+    where: {
+      campaignId: campaign.id,
+      userId: input.userId,
+      periodKey: PER_INVITE_PERIOD_KEY,
+    },
+    select: { attemptIndex: true, idempotencyKey: true, meta: true, result: true },
+  });
+  const existing = existingRows
+    .map((row) => {
+      const inviteeId = inviteeIdFromClaim(row);
+      return inviteeId
+        ? { inviteeId, attemptIndex: row.attemptIndex }
+        : null;
+    })
+    .filter((row): row is { inviteeId: string; attemptIndex: number } =>
+      Boolean(row),
+    );
+
+  const pending = nextPerInviteGrants({
+    qualifiedIds: qualified.map((u) => u.id),
+    requiredCount: invite.requiredCount,
+    existing,
+  });
+  if (!pending.length) return { granted: 0 };
+
+  const plan = await prisma.plan.findUnique({
+    where: { id: planId },
+    select: { id: true, validitySeconds: true },
+  });
+  if (!plan) return { granted: 0 };
+
+  let granted = 0;
+  for (const item of pending) {
+    const idempotencyKey = perInviteIdempotencyKey(
+      campaign.id,
+      input.userId,
+      item.inviteeId,
+    );
+    const existingClaim = await prisma.campaignClaim.findUnique({
+      where: { idempotencyKey },
+    });
+    if (
+      existingClaim &&
+      (existingClaim.result === "claimed" || existingClaim.result === "won")
+    ) {
+      continue;
+    }
+    if (existingClaim) {
+      await prisma.campaignClaim.delete({ where: { id: existingClaim.id } }).catch(
+        () => {},
+      );
+    }
+
+    let claim: CampaignClaim;
+    try {
+      claim = await prisma.campaignClaim.create({
+        data: {
+          campaignId: campaign.id,
+          userId: input.userId,
+          client: input.client,
+          periodKey: PER_INVITE_PERIOD_KEY,
+          attemptIndex: item.attemptIndex,
+          result: "lost",
+          grantedSeconds: null,
+          slotId: null,
+          idempotencyKey,
+          meta: {
+            type: "invite_per_invite",
+            pending: true,
+            invitee_id: item.inviteeId,
+            plan_id: planId,
+          },
+        },
+      });
+    } catch {
+      continue;
+    }
+
+    try {
+      const grant = await createUpstreamSlot({
+        userId: input.userId,
+        planId,
+        allowRenew: true,
+        note: `campaign:${campaign.code}:per_invite`,
+        ledger: {
+          reason: "campaign",
+          refType: "campaign_claim",
+          refId: claim.id,
+          actorType: "user",
+          actorId: input.userId,
+          idempotencyKey: `campaign_claim:${claim.id}`,
+        },
+      });
+      await prisma.campaignClaim.update({
+        where: { id: claim.id },
+        data: {
+          result: "claimed",
+          grantedSeconds: plan.validitySeconds ?? null,
+          slotId: grant.slot.id,
+          meta: {
+            type: "invite_per_invite",
+            invitee_id: item.inviteeId,
+            plan_id: planId,
+          },
+        },
+      });
+      await writeAudit({
+        actorType: "user",
+        actorId: input.userId,
+        action: "campaign.participate",
+        targetType: "campaign",
+        targetId: campaign.id,
+        meta: {
+          result: "claimed",
+          period_key: PER_INVITE_PERIOD_KEY,
+          granted_seconds: plan.validitySeconds ?? null,
+          plan_id: planId,
+          invitee_id: item.inviteeId,
+          trigger: "invite_per_invite",
+        },
+      });
+      granted += 1;
+    } catch (err) {
+      await prisma.campaignClaim.delete({ where: { id: claim.id } }).catch(() => {});
+      console.error("[invite-milestone] per-invite grant failed", {
+        campaignId: campaign.id,
+        userId: input.userId,
+        inviteeId: item.inviteeId,
+        err,
+      });
+    }
+  }
+  return { granted };
+}
+
 export async function maybeAutoGrantForInviter(
   inviterId: string,
   projectId?: string,
@@ -267,12 +473,27 @@ export async function maybeAutoGrantForInviter(
 
   for (const campaign of rows) {
     const invite = normalizeInviteRules(campaign.rulesJson);
-    if (!invite || invite.grantMode !== "auto") continue;
+    if (!invite) continue;
+    const client = pickGrantClient(campaign, user.sourceClient);
+    try {
+      await tryGrantPerInviteRewards({
+        campaign,
+        userId: user.id,
+        client,
+      });
+    } catch (err) {
+      console.error("[invite-milestone] per-invite auto-grant failed", {
+        campaignId: campaign.id,
+        userId: user.id,
+        err,
+      });
+    }
+    if (invite.grantMode !== "auto") continue;
     try {
       await tryGrantInviteMilestone({
         campaign,
         userId: user.id,
-        client: pickGrantClient(campaign, user.sourceClient),
+        client,
       });
     } catch (err) {
       console.error("[invite-milestone] auto-grant failed", {

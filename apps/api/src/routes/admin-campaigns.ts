@@ -69,7 +69,8 @@ const campaignPatch = campaignBody.partial().extend({
   type: campaignTypeEnum.optional(),
 });
 
-function assertInviteMilestoneConfig(input: {
+async function assertInviteMilestoneConfig(input: {
+  projectId: string;
   type: string;
   startAt?: string | Date | null;
   rules?: unknown;
@@ -92,6 +93,21 @@ function assertInviteMilestoneConfig(input: {
     throw Object.assign(new Error("campaign.invite_plan_required"), {
       statusCode: 400,
     });
+  }
+  if (invite.perInvitePlanId) {
+    const plan = await prisma.plan.findFirst({
+      where: {
+        id: invite.perInvitePlanId,
+        projectId: input.projectId,
+        enabled: true,
+      },
+      select: { id: true },
+    });
+    if (!plan) {
+      throw Object.assign(new Error("campaign.invite_per_invite_plan_invalid"), {
+        statusCode: 400,
+      });
+    }
   }
 }
 
@@ -169,7 +185,8 @@ export const adminCampaignRoutes: FastifyPluginAsync = async (app) => {
           : [{ kind: "vpn_duration" as const, validitySeconds: 7200 }];
 
     try {
-      assertInviteMilestoneConfig({
+      await assertInviteMilestoneConfig({
+        projectId,
         type: body.type,
         startAt: body.startAt,
         rules: body.rules,
@@ -236,7 +253,8 @@ export const adminCampaignRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      assertInviteMilestoneConfig({
+      await assertInviteMilestoneConfig({
+        projectId,
         type: body.type ?? existing.type,
         startAt:
           body.startAt !== undefined

@@ -1,17 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import TgShell from "../components/TgShell";
-import { apiFetch } from "../lib/api";
-import { getToken } from "../lib/auth";
 import { friendlyError } from "../lib/errors";
-import {
-  formatBytes,
-  formatDays,
-  type PlanLike,
-} from "../lib/plan-format";
+import { formatBytes, formatDays } from "../lib/plan-format";
 import {
   type ConnectMode,
   type UserPreferences,
@@ -20,6 +13,10 @@ import {
 } from "../lib/preferences";
 import { ensureSession } from "../lib/session";
 import { site } from "../lib/site";
+import {
+  fetchSignupTrialPromo,
+  telegramSignupTrialPlan,
+} from "../lib/signup-trial";
 import {
   getTelegramUser,
   haptic,
@@ -39,11 +36,12 @@ function prefShortLabel(mode: ConnectMode) {
 }
 
 export default function TgHomePage() {
-  const router = useRouter();
-  const [ready, setReady] = useState(false);
-  const [freePlan, setFreePlan] = useState<PlanLike | null>(null);
+  const [trialPlan, setTrialPlan] = useState<{
+    name: string;
+    validity_seconds: number | null;
+    data_limit_bytes: number | null;
+  } | null>(null);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
-  const [claiming, setClaiming] = useState(false);
   const [savingPref, setSavingPref] = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [error, setError] = useState("");
@@ -86,25 +84,16 @@ export default function TgHomePage() {
     (async () => {
       await ensureSession();
       try {
-        const [planRes, pref] = await Promise.all([
-          apiFetch<{ plans: PlanLike[] }>("/api/v1/plans?client=h5"),
+        const [pref, promo] = await Promise.all([
           fetchPreferences().catch(() => null),
+          fetchSignupTrialPromo(),
         ]);
         if (cancelled) return;
-        const free =
-          (planRes.plans || []).find(
-            (p) => p.is_free_claimable && !p.already_claimed,
-          ) ||
-          (planRes.plans || []).find((p) => p.is_free_claimable) ||
-          null;
-        setFreePlan(free);
         setPrefs(pref);
-        // Only expand survey when preference not set yet
+        setTrialPlan(telegramSignupTrialPlan(promo));
         setSurveyOpen(!pref || pref.connect_mode === "unset");
       } catch (e) {
         if (!cancelled) setError(friendlyError(e, "加载失败"));
-      } finally {
-        if (!cancelled) setReady(true);
       }
     })();
 
@@ -112,40 +101,6 @@ export default function TgHomePage() {
       cancelled = true;
     };
   }, []);
-
-  async function claimFree() {
-    haptic("medium");
-    setError("");
-    setClaiming(true);
-    try {
-      if (!getToken()) {
-        const token = await ensureSession();
-        if (!token) throw new Error("请稍后重试登录");
-      }
-      if (!freePlan || freePlan.already_claimed) {
-        router.push("/connect");
-        return;
-      }
-      const res = await apiFetch<{ subscription?: { id?: string } }>(
-        "/api/v1/subscriptions/claim",
-        {
-          method: "POST",
-          body: JSON.stringify({ plan_id: freePlan.id }),
-        },
-      );
-      hapticSuccess();
-      const id = res.subscription?.id;
-      router.push(
-        id
-          ? `/connect?claimed=1&id=${encodeURIComponent(id)}`
-          : "/connect?claimed=1",
-      );
-    } catch (e) {
-      setError(friendlyError(e, "领取失败"));
-    } finally {
-      setClaiming(false);
-    }
-  }
 
   async function pickPref(mode: ConnectMode) {
     haptic("medium");
@@ -166,15 +121,9 @@ export default function TgHomePage() {
     }
   }
 
-  const days = formatDays(freePlan?.validity_seconds);
-  const traffic = formatBytes(freePlan?.data_limit_bytes);
+  const days = formatDays(trialPlan?.validity_seconds);
+  const traffic = formatBytes(trialPlan?.data_limit_bytes);
   const specs = [days, traffic].filter(Boolean).join(" · ");
-  const claimed = !!freePlan?.already_claimed;
-  const planLabel = !ready
-    ? "加载中…"
-    : freePlan
-      ? freePlan.name
-      : "免费试用";
   const connectMode = prefs?.connect_mode ?? "unset";
 
   return (
@@ -184,26 +133,21 @@ export default function TgHomePage() {
           <h1 className="brand-stage-name">{site.brand}</h1>
           <p className="brand-stage-tag">
             {tgName ? `${tgName}，` : ""}
-            {site.slogan}。先免费领一份，再决定要不要升级。
+            {site.slogan}
+            {trialPlan ? `。新用户注册即送「${trialPlan.name}」。` : "。"}
           </p>
+          {trialPlan ? (
+            <p className="brand-stage-chip">
+              限时活动 · 注册即送「{trialPlan.name}」
+            </p>
+          ) : null}
           <div className="brand-stage-cta stack" style={{ marginTop: 20 }}>
-            {claimed ? (
-              <Link
-                href="/connect"
-                className="btn btn-on-dark btn-block btn-lg"
-              >
-                查看我的套餐
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-on-dark btn-block btn-lg btn-pulse"
-                disabled={claiming || !ready || !freePlan}
-                onClick={() => void claimFree()}
-              >
-                {claiming ? "开通中…" : "一键免费领取"}
-              </button>
-            )}
+            <Link
+              href={trialPlan ? "/connect" : "/plans"}
+              className="btn btn-on-dark btn-block btn-lg"
+            >
+              {trialPlan ? "去连接" : "查看套餐"}
+            </Link>
             <div>
               <Link
                 href="/invite"
@@ -225,19 +169,17 @@ export default function TgHomePage() {
 
       {error && <p className="alert-error">{error}</p>}
 
-      <div className="card card--accent card--claim">
-        <div className="plan-card-top">
-          <span className="badge">限时免费</span>
-          <div className="plan-price plan-price--free">¥0</div>
+      {trialPlan ? (
+        <div className="card card--accent card--claim">
+          <div className="plan-card-top">
+            <span className="badge">限时活动</span>
+            <div className="plan-price plan-price--free">¥0</div>
+          </div>
+          <h2 style={{ marginTop: 12 }}>{trialPlan.name}</h2>
+          {specs ? <p className="plan-specs">{specs}</p> : null}
+          <p>新用户注册即送，无需付款。适合先试网速与稳定性。</p>
         </div>
-        <h2 style={{ marginTop: 12 }}>{planLabel}</h2>
-        {specs ? <p className="plan-specs">{specs}</p> : null}
-        <p>
-          {claimed
-            ? "已领取。复制订阅链接到客户端即可上网。"
-            : "无需付款，马上开通。适合先试网速与稳定性。"}
-        </p>
-      </div>
+      ) : null}
 
       {connectMode !== "unset" && !surveyOpen ? (
         <button

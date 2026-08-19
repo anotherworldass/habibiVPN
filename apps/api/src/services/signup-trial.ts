@@ -19,6 +19,7 @@ export type PublicSignupTrialPromo = {
   enabled: boolean;
   web: boolean;
   app: boolean;
+  telegram: boolean;
   plan: {
     name: string;
     validity_seconds: number | null;
@@ -30,6 +31,7 @@ const EMPTY_PROMO: PublicSignupTrialPromo = {
   enabled: false,
   web: false,
   app: false,
+  telegram: false,
   plan: null,
 };
 
@@ -61,6 +63,7 @@ export async function getPublicSignupTrialPromo(
     enabled: true,
     web: channels.web,
     app: channels.app,
+    telegram: channels.telegram,
     plan: {
       name: copy.name,
       validity_seconds: plan.validitySeconds,

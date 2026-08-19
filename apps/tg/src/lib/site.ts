@@ -1,7 +1,7 @@
 /** Public copy & links for Telegram Mini App */
 export const site = {
   brand: "TiTiVPN",
-  slogan: "免费试用，随时连上",
+  slogan: "随时连上，快速访问",
   supportEmail:
     process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@tizi.work",
   /** Optional override; otherwise use this Mini App bot (see supportTelegramUrl) */

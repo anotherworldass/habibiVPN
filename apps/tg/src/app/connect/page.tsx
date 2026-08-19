@@ -17,6 +17,10 @@ import { formatResetAt, resetPolicyLabel } from "../../lib/plan-format";
 import { copyText } from "../../lib/clipboard";
 import { ensureSession } from "../../lib/session";
 import { appDownloadUrl, isPlaceholderUrl, site } from "../../lib/site";
+import {
+  fetchSignupTrialPromo,
+  telegramSignupTrialPlan,
+} from "../../lib/signup-trial";
 import { haptic, hapticSuccess } from "../../lib/telegram";
 
 type ClientUrls = {
@@ -124,19 +128,22 @@ function ConnectContent() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [copiedClient, setCopiedClient] = useState<string | null>(null);
+  const [trialPlan, setTrialPlan] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await ensureSession();
       try {
-        const [subRes, pref] = await Promise.all([
+        const [subRes, pref, promo] = await Promise.all([
           apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions"),
           fetchPreferences().catch(() => null),
+          fetchSignupTrialPromo(),
         ]);
         if (cancelled) return;
         const list = subRes.subscriptions || [];
         setSubs(list);
+        setTrialPlan(telegramSignupTrialPlan(promo)?.name ?? null);
         const preferred =
           (queryId && list.find((s) => s.id === queryId)?.id) ||
           list.find((s) => s.status === "active")?.id ||
@@ -323,10 +330,14 @@ function ConnectContent() {
       {!loading && subs.length === 0 && (
         <div className="card card--accent">
           <h2>还没有套餐</h2>
-          <p>先免费领取试用，系统会自动生成订阅链接。</p>
+          <p>
+            {trialPlan
+              ? `新用户注册即送「${trialPlan}」。若尚未到账，请稍后刷新，或去套餐页开通。`
+              : "选择套餐开通后，系统会自动生成订阅链接。"}
+          </p>
           <div className="stack">
-            <Link href="/" className="btn btn-primary btn-block btn-lg">
-              去免费领取
+            <Link href="/plans" className="btn btn-primary btn-block btn-lg">
+              查看套餐
             </Link>
           </div>
         </div>

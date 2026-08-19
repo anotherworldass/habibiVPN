@@ -37,21 +37,25 @@ describe("publicSignupTrialChannels", () => {
     assert.deepEqual(publicSignupTrialChannels("any_register"), {
       web: true,
       app: true,
+      telegram: true,
     });
     assert.deepEqual(publicSignupTrialChannels("verified_email"), {
       web: true,
       app: false,
+      telegram: false,
     });
   });
 
-  it("bootstrap is App-only; identity is Web (and TG bind, not anonymous App)", () => {
+  it("bootstrap is App/TG; identity is Web and TG bind, not anonymous App", () => {
     assert.deepEqual(publicSignupTrialChannels("bootstrap"), {
       web: false,
       app: true,
+      telegram: true,
     });
     assert.deepEqual(publicSignupTrialChannels("identity"), {
       web: true,
       app: false,
+      telegram: true,
     });
   });
 });

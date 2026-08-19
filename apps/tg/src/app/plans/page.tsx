@@ -127,7 +127,7 @@ export default function TgPlansPage() {
   return (
     <TgShell>
       <h1 className="page-title">套餐</h1>
-      <p className="page-lead">先试用，后付费</p>
+      <p className="page-lead">开通后即可连接</p>
 
       {error && <p className="alert-error">{error}</p>}
       {loading && <p className="muted" style={{ marginTop: 16 }}>加载套餐中…</p>}

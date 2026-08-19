@@ -264,6 +264,20 @@ input {
   animation: tg-rise 0.5s ease 0.08s both;
 }
 
+.brand-stage-chip {
+  display: inline-flex;
+  margin: 12px 0 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  color: #10251f;
+  background: #d7f4e8;
+  animation: tg-rise 0.5s ease 0.1s both;
+}
+
 .brand-stage-cta {
   margin-top: 22px;
   animation: tg-rise 0.5s ease 0.14s both;
@@ -1486,6 +1500,19 @@ input {
   line-height: 1.5;
   color: rgba(255, 248, 238, 0.78);
   text-wrap: pretty;
+}
+
+.invite-trial-chip {
+  display: inline-flex;
+  margin: 12px 0 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  color: #10251f;
+  background: #d7f4e8;
 }
 
 .invite-hero-rate {

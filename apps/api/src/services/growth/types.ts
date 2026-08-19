@@ -36,6 +36,8 @@ export type InviteMilestoneRules = {
   requiredCount: number;
   grantMode: InviteGrantMode;
   inviteeRequirements: InviteeRequirements;
+  /** Plan granted once per qualified invite before the Nth (cap N-1). Null = off. */
+  perInvitePlanId: string | null;
 };
 
 export type CampaignRules = {
@@ -51,6 +53,7 @@ export type CampaignRules = {
   invite?: {
     requiredCount?: number;
     grantMode?: InviteGrantMode;
+    perInvitePlanId?: string | null;
     inviteeRequirements?: {
       paid?: boolean;
       hasSubscription?: boolean;
@@ -61,6 +64,13 @@ export type CampaignRules = {
 };
 
 export const MILESTONE_PERIOD_KEY = "milestone";
+export const PER_INVITE_PERIOD_KEY = "per_invite";
+
+function normalizePerInvitePlanId(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const id = raw.trim();
+  return id.length > 0 ? id : null;
+}
 
 export function emptyInviteeRequirements(): InviteeRequirements {
   return {
@@ -96,6 +106,7 @@ export function normalizeInviteFromRules(
   return {
     requiredCount,
     grantMode,
+    perInvitePlanId: normalizePerInvitePlanId(invite.perInvitePlanId),
     inviteeRequirements: {
       paid: Boolean(rawReqs.paid),
       hasSubscription: Boolean(rawReqs.hasSubscription),
