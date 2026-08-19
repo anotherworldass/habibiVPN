@@ -1593,11 +1593,23 @@ export default function ProjectsPage() {
           setReleases([]);
         }}
         footer={null}
-        width={900}
+        width={1100}
         destroyOnClose
       >
         {releasePkg ? (
           <>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+              Package ID：{" "}
+              <Typography.Text
+                copyable={{
+                  text: releasePkg.id,
+                  tooltips: ["复制 Package ID", "已复制"],
+                }}
+                code
+              >
+                {releasePkg.id}
+              </Typography.Text>
+            </Typography.Paragraph>
             <Form
               form={pkgPolicyForm}
               layout="inline"
@@ -1665,6 +1677,7 @@ export default function ProjectsPage() {
               size="small"
               dataSource={releases}
               pagination={false}
+              scroll={{ x: 1000 }}
               columns={[
                 {
                   title: "版本",
