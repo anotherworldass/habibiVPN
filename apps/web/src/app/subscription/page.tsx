@@ -19,6 +19,15 @@ import { site } from "../../lib/site";
 import { useLocale } from "../../components/LocaleProvider";
 import { t } from "../../lib/copy";
 
+type ClientUrls = {
+  clash_meta?: string;
+  hiddify?: string;
+  v2ray?: string;
+  shadowrocket?: string;
+  surge?: string;
+  quantumult_x?: string;
+};
+
 type Subscription = {
   id: string;
   plan_id: string | null;
@@ -29,6 +38,7 @@ type Subscription = {
   used_traffic_bytes: number | null;
   data_limit_bytes: number | null;
   subscription_url: string | null;
+  client_urls?: ClientUrls | null;
   online_ip_limit: number | null;
   next_plan_ref: string | null;
   upstream_username?: string;
@@ -122,6 +132,12 @@ function SubscriptionContent() {
     () => subs.find((s) => s.id === selectedId) || null,
     [subs, selectedId],
   );
+  const subscriptionUrl =
+    selected?.client_urls?.v2ray || selected?.subscription_url || null;
+  const clashSubscriptionUrl =
+    selected?.client_urls?.clash_meta || subscriptionUrl;
+  const shadowrocketSubscriptionUrl =
+    selected?.client_urls?.shadowrocket || subscriptionUrl;
 
   async function selectPlan(id: string) {
     if (id === selectedId) return;
@@ -180,8 +196,8 @@ function SubscriptionContent() {
   }
 
   async function copyUrl() {
-    if (!selected?.subscription_url) return;
-    await navigator.clipboard.writeText(selected.subscription_url);
+    if (!subscriptionUrl) return;
+    await navigator.clipboard.writeText(subscriptionUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   }
@@ -337,7 +353,7 @@ function SubscriptionContent() {
                 limitBytes={selected.data_limit_bytes}
               />
 
-              {selected.subscription_url ? (
+              {subscriptionUrl ? (
                 <div style={{ marginTop: 16 }}>
                   <div
                     style={{
@@ -374,12 +390,12 @@ function SubscriptionContent() {
                   </div>
 
                   {linkView === "link" ? (
-                    <code className="sub-url">{selected.subscription_url}</code>
+                    <code className="sub-url">{subscriptionUrl}</code>
                   ) : (
                     <div className="sub-qr-wrap">
                       <div className="sub-qr-card">
                         <QRCodeCanvas
-                          value={selected.subscription_url}
+                          value={subscriptionUrl}
                           size={196}
                           level="M"
                           includeMargin
@@ -415,7 +431,7 @@ function SubscriptionContent() {
                     </div>
                     <div className="client-import-grid">
                       <a
-                        href={clashImportUrl(selected.subscription_url)}
+                        href={clashImportUrl(clashSubscriptionUrl || subscriptionUrl)}
                         className="client-import-button"
                       >
                         <span className="client-import-logo client-import-logo--clash" aria-hidden>
@@ -427,7 +443,9 @@ function SubscriptionContent() {
                         </span>
                       </a>
                       <a
-                        href={shadowrocketImportUrl(selected.subscription_url)}
+                        href={shadowrocketImportUrl(
+                          shadowrocketSubscriptionUrl || subscriptionUrl,
+                        )}
                         className="client-import-button"
                       >
                         <span className="client-import-logo client-import-logo--rocket" aria-hidden>

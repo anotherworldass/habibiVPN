@@ -22,6 +22,8 @@ export const SETTING_KEYS = {
   SUBSCRIPTION_NODE_NAME: "subscription.node_name",
   /** Public origins used to build /api/v1/sub client URLs. */
   SUBSCRIPTION_DOMAINS: "subscription.domains",
+  /** OpenAI-compatible models available to admin translation tools. */
+  LLM_PROVIDERS: "llm.providers",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */

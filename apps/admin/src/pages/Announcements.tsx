@@ -11,11 +11,15 @@ import {
   ProFormTextArea,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Form, Input, Tabs, Tag } from "antd";
+import { Button, Tag } from "antd";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
-import { APP_COPY_LOCALES } from "@habibi/shared";
 import { adminFetch } from "../lib/api";
+import AppCopyI18nFields from "../components/AppCopyI18nFields";
+import {
+  formValuesToI18n,
+  i18nToFormValues,
+} from "../lib/app-copy-form";
 
 type Announcement = {
   id: string;
@@ -74,21 +78,14 @@ function i18nFromValues(
   values: Record<string, unknown>,
   field: "title" | "body",
 ): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    const v = values[`${field}_${loc.code}`];
-    if (typeof v === "string" && v.trim()) out[loc.code] = v.trim();
-  }
-  return out;
+  return formValuesToI18n(values, field, "sparse");
 }
 
 function valuesFromI18n(row: Announcement | null) {
-  const fields: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    fields[`title_${loc.code}`] = row?.title_i18n?.[loc.code] || "";
-    fields[`body_${loc.code}`] = row?.body_i18n?.[loc.code] || "";
-  }
-  return fields;
+  return {
+    ...i18nToFormValues("title", row?.title_i18n),
+    ...i18nToFormValues("body", row?.body_i18n),
+  };
 }
 
 export default function AnnouncementsPage() {
@@ -430,39 +427,26 @@ export default function AnnouncementsPage() {
           extra="与「允许关闭」独立：every_launch 仅当次会话内不重复弹，下次启动仍会出"
         />
 
-        <Form.Item label="多语言文案" style={{ marginBottom: 8 }}>
-          <Tabs
-            size="small"
-            items={APP_COPY_LOCALES.map((loc) => ({
-              key: loc.code,
-              label: loc.label,
-              forceRender: true,
-              children: (
-                <>
-                  <Form.Item
-                    name={`title_${loc.code}`}
-                    label="标题"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Input
-                      placeholder={loc.code === "zh" ? "系统维护通知" : "Maintenance notice"}
-                    />
-                  </Form.Item>
-                  <Form.Item name={`body_${loc.code}`} label="正文" style={{ marginBottom: 0 }}>
-                    <Input.TextArea
-                      rows={4}
-                      placeholder={
-                        loc.code === "zh"
-                          ? "我们将于今晚进行维护…"
-                          : "We will perform maintenance tonight…"
-                      }
-                    />
-                  </Form.Item>
-                </>
-              ),
-            }))}
-          />
-        </Form.Item>
+        <AppCopyI18nFields
+          context="announcement"
+          fields={[
+            {
+              key: "title",
+              label: "标题",
+              placeholders: { zh: "系统维护通知", en: "Maintenance notice" },
+            },
+            {
+              key: "body",
+              label: "正文",
+              input: "textarea",
+              rows: 4,
+              placeholders: {
+                zh: "我们将于今晚进行维护…",
+                en: "We will perform maintenance tonight…",
+              },
+            },
+          ]}
+        />
 
         <ProFormTextArea name="remark" label="备注（仅后台）" />
       </ModalForm>

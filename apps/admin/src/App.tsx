@@ -81,6 +81,7 @@ import AuditLogsPage from "./pages/AuditLogs";
 import AuthEmailSettingsPage from "./pages/AuthEmailSettings";
 import StorageSettingsPage from "./pages/StorageSettings";
 import SubscriptionNoticeSettingsPage from "./pages/SubscriptionNoticeSettings";
+import LlmSettingsPage from "./pages/LlmSettings";
 import { adminFetch } from "./lib/api";
 import { clearSession, getAdmin, getToken } from "./lib/auth";
 import { getProjectId, setProjectId } from "./lib/project";
@@ -169,6 +170,11 @@ function ProtectedLayout() {
                 path: "/settings/subscription-notice",
                 name: "订阅转换",
                 icon: <FileTextOutlined />,
+              },
+              {
+                path: "/settings/llm",
+                name: "大模型",
+                icon: <RobotOutlined />,
               },
               {
                 path: "/settings/audit-logs",
@@ -341,6 +347,7 @@ function ProtectedLayout() {
           path="/settings/subscription-notice"
           element={<SubscriptionNoticeSettingsPage />}
         />
+        <Route path="/settings/llm" element={<LlmSettingsPage />} />
         <Route path="/settings/audit-logs" element={<AuditLogsPage />} />
         <Route path="/sell-plans" element={<SellPlansPage />} />
         <Route path="/sell-plans/groups" element={<PlanGroupsPage />} />

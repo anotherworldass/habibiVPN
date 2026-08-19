@@ -37,6 +37,7 @@ import { adminSettingsRoutes } from "./routes/admin-settings.js";
 import { supportWebRoutes } from "./routes/support-web.js";
 import { supportTelegramForwardRoutes } from "./routes/support-telegram-forward.js";
 import { adminSupportRoutes } from "./routes/admin-support.js";
+import { adminLlmRoutes } from "./routes/admin-llm.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -82,6 +83,7 @@ export async function buildApp() {
   await app.register(adminReferralRoutes);
   await app.register(adminPaymentRoutes);
   await app.register(adminSettingsRoutes);
+  await app.register(adminLlmRoutes);
   await app.register(adminOrderRoutes);
   await app.register(adminEntitlementLedgerRoutes);
   await app.register(adminAuditRoutes);

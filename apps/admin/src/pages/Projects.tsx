@@ -25,9 +25,13 @@ import {
   PlusOutlined,
 } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
-import { APP_COPY_LOCALES } from "@habibi/shared";
 import { adminFetch } from "../lib/api";
 import { getProjectId, setProjectId } from "../lib/project";
+import AppCopyI18nFields from "../components/AppCopyI18nFields";
+import {
+  formValuesToI18n,
+  i18nToFormValues,
+} from "../lib/app-copy-form";
 
 function formatBytes(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n) || n < 0) return "—";
@@ -598,6 +602,7 @@ type AppRelease = {
   artifact_key?: string | null;
   has_managed_artifact?: boolean;
   published_at?: string | null;
+  created_at: string;
   remark?: string | null;
 };
 
@@ -614,21 +619,14 @@ function i18nFromForm(
   values: Record<string, unknown>,
   field: "title" | "changelog",
 ): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    const v = values[`${field}_${loc.code}`];
-    if (typeof v === "string" && v.trim()) out[loc.code] = v.trim();
-  }
-  return out;
+  return formValuesToI18n(values, field, "sparse");
 }
 
 function formFromI18n(release: AppRelease | null) {
-  const fields: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    fields[`title_${loc.code}`] = release?.title_i18n?.[loc.code] || "";
-    fields[`changelog_${loc.code}`] = release?.changelog_i18n?.[loc.code] || "";
-  }
-  return fields;
+  return {
+    ...i18nToFormValues("title", release?.title_i18n),
+    ...i18nToFormValues("changelog", release?.changelog_i18n),
+  };
 }
 
 const CLIENT_OPTS = [
@@ -1593,7 +1591,7 @@ export default function ProjectsPage() {
           setReleases([]);
         }}
         footer={null}
-        width={1100}
+        width={1280}
         destroyOnClose
       >
         {releasePkg ? (
@@ -1677,7 +1675,7 @@ export default function ProjectsPage() {
               size="small"
               dataSource={releases}
               pagination={false}
-              scroll={{ x: 1000 }}
+              scroll={{ x: 1170 }}
               columns={[
                 {
                   title: "版本",
@@ -1726,6 +1724,12 @@ export default function ProjectsPage() {
                   dataIndex: "published_at",
                   width: 170,
                   render: (v) => (v ? new Date(v).toLocaleString() : "—"),
+                },
+                {
+                  title: "添加时间",
+                  dataIndex: "created_at",
+                  width: 170,
+                  render: (v: string) => new Date(v).toLocaleString(),
                 },
                 {
                   title: "操作",
@@ -1961,44 +1965,26 @@ export default function ProjectsPage() {
           >
             <Switch />
           </Form.Item>
-          <div style={{ marginBottom: 8, color: "rgba(0,0,0,0.45)", fontSize: 12 }}>
-            更新文案（按语言填写；客户端按 locale 选取，缺省回退 en → zh）
-          </div>
-          <Tabs
-            size="small"
-            style={{ marginBottom: 16 }}
-            items={APP_COPY_LOCALES.map((loc) => ({
-              key: loc.code,
-              label: loc.label,
-              forceRender: true,
-              children: (
-                <>
-                  <Form.Item
-                    name={`title_${loc.code}`}
-                    label="更新标题"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Input
-                      placeholder={loc.code === "zh" ? "发现新版本" : "What's New"}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    name={`changelog_${loc.code}`}
-                    label="更新说明"
-                    style={{ marginBottom: 0 }}
-                  >
-                    <Input.TextArea
-                      rows={4}
-                      placeholder={
-                        loc.code === "zh"
-                          ? "- 修复连接问题\n- 优化启动速度"
-                          : "- Bug fixes\n- Performance improvements"
-                      }
-                    />
-                  </Form.Item>
-                </>
-              ),
-            }))}
+          <AppCopyI18nFields
+            context="release"
+            label="更新文案（按语言填写；缺省回退 en → zh）"
+            fields={[
+              {
+                key: "title",
+                label: "更新标题",
+                placeholders: { zh: "发现新版本", en: "What's New" },
+              },
+              {
+                key: "changelog",
+                label: "更新说明",
+                input: "textarea",
+                rows: 4,
+                placeholders: {
+                  zh: "- 修复连接问题\n- 优化启动速度",
+                  en: "- Bug fixes\n- Performance improvements",
+                },
+              },
+            ]}
           />
           <Form.Item
             label="上传安装包"

@@ -12,22 +12,21 @@ import {
   ProFormTextArea,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Drawer, Divider, Form, Input, Space, Tabs, Tag } from "antd";
+import { Button, Drawer, Divider, Space, Tag } from "antd";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
-import { APP_COPY_LOCALES } from "@habibi/shared";
 import { adminFetch } from "../lib/api";
+import AppCopyI18nFields from "../components/AppCopyI18nFields";
+import {
+  formValuesToI18n,
+  i18nToFormValues,
+} from "../lib/app-copy-form";
 
 function i18nFromValues(
   values: Record<string, unknown>,
   field: "title" | "subtitle" | "button",
 ): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    const v = values[`${field}_${loc.code}`];
-    if (typeof v === "string" && v.trim()) out[loc.code] = v.trim();
-  }
-  return out;
+  return formValuesToI18n(values, field, "sparse");
 }
 
 function uiFormFieldsFromCampaign(ui?: Record<string, unknown> | null) {
@@ -43,18 +42,11 @@ function uiFormFieldsFromCampaign(ui?: Record<string, unknown> | null) {
     typeof ui?.subtitle === "string" ? ui.subtitle : "";
   const legacyButton =
     typeof ui?.button_text === "string" ? ui.button_text : "";
-  const fields: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    fields[`title_${loc.code}`] =
-      titleI18n[loc.code] || (loc.code === "zh" ? legacyTitle : "") || "";
-    fields[`subtitle_${loc.code}`] =
-      subtitleI18n[loc.code] ||
-      (loc.code === "zh" ? legacySubtitle : "") ||
-      "";
-    fields[`button_${loc.code}`] =
-      buttonI18n[loc.code] || (loc.code === "zh" ? legacyButton : "") || "";
-  }
-  return fields;
+  return {
+    ...i18nToFormValues("title", titleI18n, legacyTitle),
+    ...i18nToFormValues("subtitle", subtitleI18n, legacySubtitle),
+    ...i18nToFormValues("button", buttonI18n, legacyButton),
+  };
 }
 
 /** e.g. camp_20260725_232845 */
@@ -602,58 +594,31 @@ function CampaignForm(props: {
         rules={[{ required: true }]}
         extra="仅后台识别；客户端展示用下方多语言标题"
       />
-      <Form.Item label="客户端文案（多语言）" style={{ marginBottom: 16 }}>
-        <Tabs
-          size="small"
-          items={APP_COPY_LOCALES.map((loc) => ({
-            key: loc.code,
-            label: loc.label,
-            forceRender: true,
-            children: (
-              <>
-                <Form.Item
-                  name={`title_${loc.code}`}
-                  label="标题"
-                  style={{ marginBottom: 12 }}
-                  rules={
-                    loc.code === "zh"
-                      ? [{ required: true, message: "请至少填写中文标题" }]
-                      : undefined
-                  }
-                >
-                  <Input
-                    placeholder={
-                      loc.code === "zh" ? "每日免费加速" : "Daily free boost"
-                    }
-                  />
-                </Form.Item>
-                <Form.Item
-                  name={`subtitle_${loc.code}`}
-                  label="副标题"
-                  style={{ marginBottom: 12 }}
-                >
-                  <Input
-                    placeholder={
-                      loc.code === "zh"
-                        ? "每天可领取 1 小时"
-                        : "Claim 1 hour every day"
-                    }
-                  />
-                </Form.Item>
-                <Form.Item
-                  name={`button_${loc.code}`}
-                  label="按钮文案"
-                  style={{ marginBottom: 0 }}
-                >
-                  <Input
-                    placeholder={loc.code === "zh" ? "立即领取" : "Claim"}
-                  />
-                </Form.Item>
-              </>
-            ),
-          }))}
-        />
-      </Form.Item>
+      <AppCopyI18nFields
+        context="campaign"
+        label="客户端文案（多语言）"
+        fields={[
+          {
+            key: "title",
+            label: "标题",
+            requiredZh: true,
+            placeholders: { zh: "每日免费加速", en: "Daily free boost" },
+          },
+          {
+            key: "subtitle",
+            label: "副标题",
+            placeholders: {
+              zh: "每天可领取 1 小时",
+              en: "Claim 1 hour every day",
+            },
+          },
+          {
+            key: "button",
+            label: "按钮文案",
+            placeholders: { zh: "立即领取", en: "Claim" },
+          },
+        ]}
+      />
       <Space style={{ display: "flex" }} size="middle" wrap>
         <ProFormSelect
           name="type"

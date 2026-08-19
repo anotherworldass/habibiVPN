@@ -21,7 +21,7 @@ import {
   ProFormText,
   ProTable,
 } from "@ant-design/pro-components";
-import { Alert, Button, Collapse, Form, Input, Modal, Space, Tabs, Tag } from "antd";
+import { Alert, Button, Collapse, Form, Input, Modal, Space, Tag } from "antd";
 import { message } from "../lib/antd-message";
 import {
   CopyOutlined,
@@ -48,6 +48,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { APP_COPY_LOCALES } from "@habibi/shared";
 import { adminFetch, unwrapList } from "../lib/api";
+import AppCopyI18nFields from "../components/AppCopyI18nFields";
+import {
+  formValuesToI18n,
+  i18nToFormValues,
+} from "../lib/app-copy-form";
 
 const CLIENTS = [
   { value: "ios_appstore", label: "iOS App Store" },
@@ -367,13 +372,7 @@ function i18nFromValues(
   values: Record<string, unknown>,
   field: "name" | "description",
 ): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    const v = values[`${field}_${loc.code}`];
-    // 始终带上各语言键（空串表示清除），避免漏键被后端当成「未改」或整表覆盖丢文案
-    out[loc.code] = typeof v === "string" ? v.trim() : "";
-  }
-  return out;
+  return formValuesToI18n(values, field, "full");
 }
 
 /** Portable plan config for cross-env copy (no DB ids). */
@@ -623,15 +622,14 @@ function PlanJsonTransferPanel({ groups }: { groups: PlanGroupOption[] }) {
 }
 
 function valuesFromI18n(plan: SellPlan | null) {
-  const fields: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    fields[`name_${loc.code}`] =
-      plan?.nameI18n?.[loc.code] || (loc.code === "zh" ? plan?.name || "" : "");
-    fields[`description_${loc.code}`] =
-      plan?.descriptionI18n?.[loc.code] ||
-      (loc.code === "zh" ? plan?.description || "" : "");
-  }
-  return fields;
+  return {
+    ...i18nToFormValues("name", plan?.nameI18n, plan?.name || ""),
+    ...i18nToFormValues(
+      "description",
+      plan?.descriptionI18n,
+      plan?.description || "",
+    ),
+  };
 }
 
 function formatPrice(cents: number, currency: string) {
@@ -1019,51 +1017,28 @@ export default function SellPlansPage() {
         tooltip="Habibi 内部 SKU 编码，如 monthly_pro"
         disabled={!!editing}
       />
-      <Form.Item label="多语言名称 / 说明" style={{ marginBottom: 8 }} required>
-        <Tabs
-          size="small"
-          items={APP_COPY_LOCALES.map((loc) => ({
-            key: loc.code,
-            label: loc.label,
-            // 未打开过的语言 Tab 默认不挂载，onFinish 会丢字段导致其它语言被覆盖
-            forceRender: true,
-            children: (
-              <>
-                <Form.Item
-                  name={`name_${loc.code}`}
-                  label="展示名称"
-                  rules={
-                    loc.code === "zh"
-                      ? [{ required: true, message: "请填写中文名称" }]
-                      : undefined
-                  }
-                  style={{ marginBottom: 12 }}
-                >
-                  <Input
-                    placeholder={
-                      loc.code === "zh" ? "月度 Pro" : "Monthly Pro"
-                    }
-                  />
-                </Form.Item>
-                <Form.Item
-                  name={`description_${loc.code}`}
-                  label="说明"
-                  style={{ marginBottom: 0 }}
-                >
-                  <Input.TextArea
-                    rows={3}
-                    placeholder={
-                      loc.code === "zh"
-                        ? "适合日常使用…"
-                        : "Best for everyday use…"
-                    }
-                  />
-                </Form.Item>
-              </>
-            ),
-          }))}
-        />
-      </Form.Item>
+      <AppCopyI18nFields
+        context="plan"
+        label="多语言名称 / 说明"
+        fields={[
+          {
+            key: "name",
+            label: "展示名称",
+            requiredZh: true,
+            placeholders: { zh: "月度 Pro", en: "Monthly Pro" },
+          },
+          {
+            key: "description",
+            label: "说明",
+            input: "textarea",
+            rows: 3,
+            placeholders: {
+              zh: "适合日常使用…",
+              en: "Best for everyday use…",
+            },
+          },
+        ]}
+      />
       <ProFormDigit
         name="priceCents"
         label="价格（分）"

@@ -8,11 +8,15 @@ import {
   ProFormText,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Form, Input, Popconfirm, Tabs, Tag } from "antd";
+import { Button, Popconfirm, Tag } from "antd";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
-import { APP_COPY_LOCALES } from "@habibi/shared";
 import { adminFetch } from "../lib/api";
+import AppCopyI18nFields from "../components/AppCopyI18nFields";
+import {
+  formValuesToI18n,
+  i18nToFormValues,
+} from "../lib/app-copy-form";
 
 type PlanGroup = {
   id: string;
@@ -24,21 +28,11 @@ type PlanGroup = {
 };
 
 function i18nFromValues(values: Record<string, unknown>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    const v = values[`name_${loc.code}`];
-    out[loc.code] = typeof v === "string" ? v.trim() : "";
-  }
-  return out;
+  return formValuesToI18n(values, "name", "full");
 }
 
 function valuesFromI18n(g: PlanGroup | null) {
-  const fields: Record<string, string> = {};
-  for (const loc of APP_COPY_LOCALES) {
-    fields[`name_${loc.code}`] =
-      g?.nameI18n?.[loc.code] || (loc.code === "zh" ? g?.name || "" : "");
-  }
-  return fields;
+  return i18nToFormValues("name", g?.nameI18n, g?.name);
 }
 
 export default function PlanGroupsPage() {
@@ -102,31 +96,18 @@ export default function PlanGroupsPage() {
         disabled={!!editing}
         tooltip="项目内唯一，如 duration / traffic"
       />
-      <Form.Item label="名称（多语言）" required>
-        <Tabs
-          items={APP_COPY_LOCALES.map((loc) => ({
-            key: loc.code,
-            label: loc.label,
-            children: (
-              <Form.Item
-                name={`name_${loc.code}`}
-                rules={
-                  loc.code === "zh"
-                    ? [{ required: true, message: "至少填写中文名称" }]
-                    : undefined
-                }
-                style={{ marginBottom: 0 }}
-              >
-                <Input
-                  placeholder={
-                    loc.code === "zh" ? "按时长付费" : "Pay by duration"
-                  }
-                />
-              </Form.Item>
-            ),
-          }))}
-        />
-      </Form.Item>
+      <AppCopyI18nFields
+        context="plan_group"
+        label="名称（多语言）"
+        fields={[
+          {
+            key: "name",
+            label: "名称",
+            requiredZh: true,
+            placeholders: { zh: "按时长付费", en: "Pay by duration" },
+          },
+        ]}
+      />
       <ProFormDigit name="sortOrder" label="排序" initialValue={0} />
       <ProFormSwitch name="enabled" label="启用" initialValue />
     </>
