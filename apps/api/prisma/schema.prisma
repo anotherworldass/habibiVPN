@@ -1333,6 +1333,9 @@ model Plan {
   resetPolicy      PlanResetPolicy @default(no_reset) @map("reset_policy")
   /// Only when resetPolicy=custom; Go duration e.g. "720h"
   customResetInterval String?      @map("custom_reset_interval")
+  /// Fair-use bandwidth ladder: [{ afterBytes, bandwidthPlanRef }, ...]
+  /// null / [] = off. First tier must be afterBytes=0 (full speed).
+  fupTiers         Json?           @map("fup_tiers")
   /// Max concurrent devices for this entitlement (account-level)
   deviceSlots      Int             @default(1) @map("device_slots")
   /// one_time = duration pack; renewable = may map to store auto-renew

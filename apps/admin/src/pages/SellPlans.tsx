@@ -21,13 +21,14 @@ import {
   ProFormText,
   ProTable,
 } from "@ant-design/pro-components";
-import { Alert, Button, Collapse, Form, Input, Modal, Space, Tag } from "antd";
+import { Alert, Button, Collapse, Form, Input, Modal, Space, Tag, Tooltip } from "antd";
 import { message } from "../lib/antd-message";
 import {
   CopyOutlined,
   EyeOutlined,
   FolderOutlined,
   HolderOutlined,
+  MinusCircleOutlined,
   PlusOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
@@ -47,7 +48,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { APP_COPY_LOCALES } from "@habibi/shared";
-import { adminFetch, unwrapList } from "../lib/api";
+import { adminFetch, sortBandwidthPlansBySpeed, unwrapList } from "../lib/api";
 import AppCopyI18nFields from "../components/AppCopyI18nFields";
 import {
   formValuesToI18n,
@@ -55,13 +56,13 @@ import {
 } from "../lib/app-copy-form";
 
 const CLIENTS = [
-  { value: "ios_appstore", label: "iOS App Store" },
-  { value: "ios_alt", label: "iOS 企业签/侧载" },
-  { value: "android_play", label: "Android Google Play" },
-  { value: "android_direct", label: "Android 非商店" },
-  { value: "h5", label: "H5" },
-  { value: "windows", label: "Windows 桌面" },
-  { value: "macos", label: "macOS 桌面" },
+  { value: "ios_appstore", label: "iOS App Store", short: "iOS店" },
+  { value: "ios_alt", label: "iOS 企业签/侧载", short: "iOS签" },
+  { value: "android_play", label: "Android Google Play", short: "Play" },
+  { value: "android_direct", label: "Android 非商店", short: "APK" },
+  { value: "h5", label: "H5", short: "H5" },
+  { value: "windows", label: "Windows 桌面", short: "Win" },
+  { value: "macos", label: "macOS 桌面", short: "Mac" },
 ] as const;
 
 const FILTER_ALL = "__all__";
@@ -353,6 +354,7 @@ type SellPlan = {
   billingType?: string;
   resetPolicy?: string;
   customResetInterval?: string | null;
+  fupTiers?: Array<{ afterBytes?: number; bandwidthPlanRef?: string }> | null;
   enabled: boolean;
   isFreeClaimable?: boolean;
   sortOrder: number;
@@ -651,6 +653,28 @@ function formatDuration(sec?: number | null) {
   return `${sec} 秒`;
 }
 
+function formatValidity(r: {
+  validityCalendarMonths?: number | null;
+  validitySeconds?: number | null;
+}) {
+  if (r.validityCalendarMonths != null && r.validityCalendarMonths > 0) {
+    return `${r.validityCalendarMonths} 月`;
+  }
+  return formatDuration(r.validitySeconds);
+}
+
+function resetPolicyShort(r: SellPlan) {
+  const map: Record<string, string> = {
+    no_reset: "不重置",
+    day: "每日",
+    week: "每周",
+    month: "每月",
+    year: "每年",
+    custom: r.customResetInterval || "自定义",
+  };
+  return map[r.resetPolicy || "no_reset"] || r.resetPolicy || "不重置";
+}
+
 function defaultPaymentMode(client: string) {
   if (client === "ios_appstore" || client === "android_play") return "iap_only";
   return "web_only";
@@ -676,6 +700,9 @@ export default function SellPlansPage() {
   const [dataSource, setDataSource] = useState<SellPlan[]>([]);
   const [orderDirty, setOrderDirty] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [bwPlans, setBwPlans] = useState<
+    Array<{ id?: string; name?: string; max_up_mbps?: number; max_down_mbps?: number }>
+  >([]);
 
   const reload = () => actionRef.current?.reload();
 
@@ -735,6 +762,23 @@ export default function SellPlansPage() {
       setFilterGroupId(FILTER_ALL);
     }
   }, [groups, filterGroupId]);
+
+  useEffect(() => {
+    void adminFetch("/admin/v1/wireraw/bandwidth-plans")
+      .then((data) => {
+        setBwPlans(
+          sortBandwidthPlansBySpeed(
+            unwrapList<{
+              id?: string;
+              name?: string;
+              max_up_mbps?: number;
+              max_down_mbps?: number;
+            }>(data, ["plans", "items"]),
+          ),
+        );
+      })
+      .catch(() => setBwPlans([]));
+  }, [createOpen, editing]);
 
   useEffect(() => {
     void adminFetch<{ groups: PlanGroupOption[] }>("/admin/v1/plan-groups")
@@ -830,118 +874,132 @@ export default function SellPlansPage() {
     {
       title: "",
       dataIndex: "drag",
-      width: 40,
+      width: 52,
       search: false,
-      render: () => <PlanDragHandle />,
+      render: (_, r, index) => (
+        <Space size={4} style={{ color: "#999", fontSize: 12 }}>
+          <PlanDragHandle />
+          {orderDirty ? index : r.sortOrder}
+        </Space>
+      ),
     },
     {
-      title: "排序",
-      dataIndex: "sortOrder",
-      width: 64,
-      search: false,
-      render: (_, r, index) => (orderDirty ? index : r.sortOrder),
+      title: "code",
+      dataIndex: "code",
+      width: 128,
+      ellipsis: true,
+      copyable: true,
     },
-    { title: "code", dataIndex: "code", copyable: true },
     {
       title: "名称",
       dataIndex: "name",
+      ellipsis: true,
+      width: 140,
       render: (_, r) => r.nameI18n?.zh || r.nameI18n?.en || r.name,
     },
     {
       title: "分组",
       dataIndex: "groupId",
-      width: 120,
+      width: 88,
+      ellipsis: true,
       search: false,
       render: (_, r) =>
         r.group ? (
-          <Tag color={r.group.enabled ? "blue" : "default"}>{r.group.name}</Tag>
+          <Tag
+            color={r.group.enabled ? "blue" : "default"}
+            style={{ marginInlineEnd: 0 }}
+          >
+            {r.group.name}
+          </Tag>
         ) : (
-          <Tag>—</Tag>
+          "—"
         ),
     },
     {
       title: "售价",
       dataIndex: "priceCents",
+      width: 128,
       search: false,
-      render: (_, r) => formatPrice(r.priceCents, r.currency),
+      render: (_, r) => (
+        <div style={{ lineHeight: 1.35, fontSize: 12 }}>
+          <div>{formatPrice(r.priceCents, r.currency)}</div>
+          <div style={{ color: "#888" }}>
+            {r.billingType === "renewable" ? "可续订" : "买断"}
+            {" · "}
+            {formatDuration(
+              r.billingPeriodSeconds ?? r.validitySeconds ?? null,
+            )}
+          </div>
+        </div>
+      ),
     },
     {
-      title: "终端数",
-      dataIndex: "deviceSlots",
-      width: 80,
-      search: false,
-      render: (_, r) => r.deviceSlots ?? 1,
-    },
-    {
-      title: "计费",
-      dataIndex: "billingType",
-      width: 90,
-      search: false,
-      render: (_, r) =>
-        r.billingType === "renewable" ? (
-          <Tag color="purple">可续订</Tag>
-        ) : (
-          <Tag>买断</Tag>
-        ),
-    },
-    {
-      title: "流量重置",
-      dataIndex: "resetPolicy",
-      width: 100,
+      title: "权益",
+      dataIndex: "entitlement",
+      width: 168,
       search: false,
       render: (_, r) => {
-        const map: Record<string, string> = {
-          no_reset: "不重置",
-          day: "每日",
-          week: "每周",
-          month: "每月",
-          year: "每年",
-          custom: r.customResetInterval || "自定义",
-        };
-        const key = r.resetPolicy || "no_reset";
-        return <Tag>{map[key] || key}</Tag>;
+        const fupOn = Array.isArray(r.fupTiers) && r.fupTiers.length >= 2;
+        return (
+          <div style={{ lineHeight: 1.35, fontSize: 12 }}>
+            <div>
+              {formatValidity(r)} · {r.deviceSlots ?? 1} 端
+            </div>
+            <div>
+              {formatBytes(r.dataLimitBytes)}
+              {r.resetPolicy && r.resetPolicy !== "no_reset" ? (
+                <span style={{ color: "#888" }}> · {resetPolicyShort(r)}</span>
+              ) : null}
+              {fupOn ? (
+                <Tag
+                  color="orange"
+                  style={{ marginInlineStart: 4, marginInlineEnd: 0 }}
+                >
+                  限速{r.fupTiers!.length}档
+                </Tag>
+              ) : null}
+            </div>
+          </div>
+        );
       },
-    },
-    {
-      title: "计费周期",
-      dataIndex: "billingPeriodSeconds",
-      width: 100,
-      search: false,
-      render: (_, r) =>
-        formatDuration(
-          r.billingPeriodSeconds ?? r.validitySeconds ?? null,
-        ),
     },
     {
       title: "上架端",
       dataIndex: "client",
-      width: 220,
+      width: 168,
       search: false,
       render: (_, r) => {
         const on = (r.catalogOffers || []).filter((o) => o.enabled);
-        if (!on.length) return <Tag>无</Tag>;
+        if (!on.length) return "—";
         return (
-          <Space size={[4, 4]} wrap>
-            {on.map((o) => (
-              <Tag key={o.client}>
-                {CLIENTS.find((c) => c.value === o.client)?.label || o.client}
-              </Tag>
-            ))}
+          <Space size={[2, 2]} wrap>
+            {on.map((o) => {
+              const c = CLIENTS.find((x) => x.value === o.client);
+              return (
+                <Tooltip key={o.client} title={c?.label || o.client}>
+                  <Tag style={{ marginInlineEnd: 0 }}>{c?.short || o.client}</Tag>
+                </Tooltip>
+              );
+            })}
           </Space>
         );
       },
     },
     {
       title: "商店商品",
+      dataIndex: "storeProducts",
       search: false,
       ellipsis: true,
+      hideInTable: true,
       render: (_, r) => {
         const ps = (r.storeProducts || []).filter((p) => p.enabled);
         if (!ps.length) return "—";
         return ps
           .map((p) => {
             const trial =
-              p.trialDays != null && p.trialDays > 0 ? ` (试用${p.trialDays}天)` : "";
+              p.trialDays != null && p.trialDays > 0
+                ? ` (试用${p.trialDays}天)`
+                : "";
             return `${p.store}:${p.productId}${trial}`;
           })
           .join(" · ");
@@ -950,22 +1008,31 @@ export default function SellPlansPage() {
     {
       title: "免费领取",
       dataIndex: "isFreeClaimable",
-      width: 90,
+      width: 80,
       search: false,
+      hideInTable: true,
       render: (_, r) =>
-        r.isFreeClaimable ? <Tag color="processing">可领</Tag> : <Tag>-</Tag>,
+        r.isFreeClaimable ? <Tag color="processing">可领</Tag> : "—",
     },
     {
       title: "状态",
       dataIndex: "enabled",
+      width: 64,
       search: false,
       render: (_, r) =>
-        r.enabled ? <Tag color="success">上架</Tag> : <Tag>下架</Tag>,
+        r.enabled ? (
+          <Tag color="success" style={{ marginInlineEnd: 0 }}>
+            上架
+          </Tag>
+        ) : (
+          <Tag style={{ marginInlineEnd: 0 }}>下架</Tag>
+        ),
     },
     {
       title: "操作",
       valueType: "option",
-      width: 160,
+      width: 128,
+      fixed: "right",
       render: (_, row) => [
         <a key="edit" onClick={() => setEditing(row)}>
           编辑
@@ -992,10 +1059,10 @@ export default function SellPlansPage() {
               content: "若已有订单会改为下架而非物理删除",
               okType: "danger",
               onOk: async () => {
-                const res = await adminFetch<{ soft_disabled?: boolean; message?: string }>(
-                  `/admin/v1/plans/${row.id}`,
-                  { method: "DELETE" },
-                );
+                const res = await adminFetch<{
+                  soft_disabled?: boolean;
+                  message?: string;
+                }>(`/admin/v1/plans/${row.id}`, { method: "DELETE" });
                 message.success(res.message || "已删除");
                 reload();
               },
@@ -1250,6 +1317,73 @@ export default function SellPlansPage() {
           )
         }
       </ProFormDependency>
+      <ProFormSwitch
+        name="fupEnabled"
+        label="公平使用限速"
+        tooltip="无限流量套餐按当月已用切上游限速档。速率数字只在「上游限速档」定义，这里只引用档位。跨月套餐必须开流量重置（推荐每月），下月初已用清零后会恢复全速。"
+      />
+      <ProFormDependency name={["fupEnabled"]}>
+        {({ fupEnabled }) =>
+          fupEnabled ? (
+            <>
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="多级限速阶梯"
+                description="第一档必须是 0 GB（全速）。其后填「超过 N GB 切到哪一档」。先在「上游限速档」建好 Mbps 档，档上不要填流量额度。"
+              />
+              <Form.List name="fupTiers">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map((field, idx) => (
+                      <Space
+                        key={field.key}
+                        align="baseline"
+                        style={{ display: "flex", marginBottom: 8 }}
+                      >
+                        <ProFormDigit
+                          name={[field.name, "afterGb"]}
+                          label={idx === 0 ? "超过 GB" : undefined}
+                          min={0}
+                          width="xs"
+                          disabled={idx === 0}
+                          rules={[{ required: true, message: "填 GB" }]}
+                          fieldProps={{ precision: 3 }}
+                        />
+                        <ProFormSelect
+                          name={[field.name, "bandwidthPlanRef"]}
+                          label={idx === 0 ? "限速档" : undefined}
+                          width="sm"
+                          rules={[{ required: true, message: "选档" }]}
+                          options={bwPlans.map((b) => ({
+                            value: b.id,
+                            label: `${b.name || b.id} · ↑${b.max_up_mbps ?? "-"}/↓${b.max_down_mbps ?? "-"}`,
+                          }))}
+                          placeholder="上游限速档"
+                        />
+                        {idx > 0 ? (
+                          <MinusCircleOutlined
+                            onClick={() => remove(field.name)}
+                          />
+                        ) : null}
+                      </Space>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ afterGb: undefined, bandwidthPlanRef: undefined })}
+                      icon={<PlusOutlined />}
+                      style={{ marginBottom: 12 }}
+                    >
+                      加一档
+                    </Button>
+                  </>
+                )}
+              </Form.List>
+            </>
+          ) : null
+        }
+      </ProFormDependency>
       <ProFormDigit name="sortOrder" label="排序" />
       <ProFormSwitch name="enabled" label="全局上架" />
       <ProFormSwitch
@@ -1354,6 +1488,15 @@ export default function SellPlansPage() {
     } else if (editing) {
       body.dataLimitBytes = null;
     }
+    if (values.fupEnabled) {
+      const rows = Array.isArray(values.fupTiers) ? values.fupTiers : [];
+      body.fupTiers = rows.map((row: Record<string, unknown>) => ({
+        afterGb: Number(row.afterGb ?? 0),
+        bandwidthPlanRef: String(row.bandwidthPlanRef || ""),
+      }));
+    } else {
+      body.fupTiers = null;
+    }
     return body;
   };
 
@@ -1381,6 +1524,17 @@ export default function SellPlansPage() {
       billingType: p.billingType || "one_time",
       resetPolicy: p.resetPolicy || "no_reset",
       customResetInterval: p.customResetInterval || undefined,
+      fupEnabled: Array.isArray(p.fupTiers) && p.fupTiers.length >= 2,
+      fupTiers: (Array.isArray(p.fupTiers) && p.fupTiers.length
+        ? p.fupTiers
+        : [{ afterBytes: 0, bandwidthPlanRef: "" }]
+      ).map((t) => ({
+        afterGb:
+          t.afterBytes != null
+            ? Number((Number(t.afterBytes) / 1024 ** 3).toFixed(6))
+            : 0,
+        bandwidthPlanRef: t.bandwidthPlanRef || undefined,
+      })),
       groupId: p.groupId || "",
       clients: (p.catalogOffers || []).filter((o) => o.enabled).map((o) => o.client),
       appStoreProductId: app?.productId,
@@ -1498,6 +1652,13 @@ export default function SellPlansPage() {
             columns={columns}
             dataSource={dataSource}
             pagination={false}
+            size="small"
+            scroll={{ x: 1080 }}
+            options={{ density: false, setting: true }}
+            columnsState={{
+              persistenceKey: "habibi_sell_plans_columns",
+              persistenceType: "localStorage",
+            }}
             components={{
               body: { row: SortablePlanRow },
             }}
@@ -1580,6 +1741,8 @@ export default function SellPlansPage() {
           deviceSlots: 1,
           billingType: "one_time",
           resetPolicy: "no_reset",
+          fupEnabled: false,
+          fupTiers: [{ afterGb: 0, bandwidthPlanRef: undefined }],
           clients: ["h5", "android_direct", "ios_alt"],
           appStoreProductKind: "auto_renewing",
           playProductKind: "auto_renewing",

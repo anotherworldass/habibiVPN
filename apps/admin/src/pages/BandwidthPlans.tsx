@@ -12,7 +12,7 @@ import {
 import { Button, Modal } from "antd";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
-import { adminFetch, unwrapList } from "../lib/api";
+import { adminFetch, sortBandwidthPlansBySpeed, unwrapList } from "../lib/api";
 
 type BwPlan = {
   id?: string;
@@ -26,9 +26,51 @@ type BwPlan = {
   note?: string;
 };
 
+function toBody(values: Record<string, unknown>, id?: string) {
+  const validityDays = Number(values.validity_days);
+  const dataGb = Number(values.data_limit_gb);
+  return {
+    ...(id ? { id } : {}),
+    name: values.name,
+    max_up_mbps: values.max_up_mbps ?? 0,
+    max_down_mbps: values.max_down_mbps ?? 0,
+    online_ip_limit: values.online_ip_limit || undefined,
+    validity_seconds:
+      Number.isFinite(validityDays) && validityDays > 0
+        ? Math.round(validityDays * 86400)
+        : undefined,
+    data_limit_bytes:
+      Number.isFinite(dataGb) && dataGb > 0
+        ? Math.round(dataGb * 1024 ** 3)
+        : undefined,
+    status: values.status || "active",
+    note: values.note || undefined,
+  };
+}
+
+function toFormValues(row: BwPlan) {
+  return {
+    name: row.name,
+    max_up_mbps: row.max_up_mbps ?? 0,
+    max_down_mbps: row.max_down_mbps ?? 0,
+    online_ip_limit: row.online_ip_limit,
+    validity_days:
+      row.validity_seconds && row.validity_seconds > 0
+        ? Math.round(row.validity_seconds / 86400)
+        : undefined,
+    data_limit_gb:
+      row.data_limit_bytes && row.data_limit_bytes > 0
+        ? Number((row.data_limit_bytes / 1024 ** 3).toFixed(6))
+        : undefined,
+    status: row.status || "active",
+    note: row.note,
+  };
+}
+
 export default function BandwidthPlansPage() {
   const actionRef = useRef<ActionType>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<BwPlan | null>(null);
 
   const columns: ProColumns<BwPlan>[] = [
     { title: "ID", dataIndex: "id", copyable: true, ellipsis: true },
@@ -40,8 +82,11 @@ export default function BandwidthPlansPage() {
     {
       title: "操作",
       valueType: "option",
-      width: 80,
+      width: 120,
       render: (_, row) => [
+        <a key="edit" onClick={() => row.id && setEditing(row)}>
+          编辑
+        </a>,
         <a
           key="del"
           style={{ color: "#cf1322" }}
@@ -67,10 +112,41 @@ export default function BandwidthPlansPage() {
     },
   ];
 
+  const fields = (
+    <>
+      <ProFormText name="name" label="名称" rules={[{ required: true }]} />
+      <ProFormDigit
+        name="max_up_mbps"
+        label="上行 Mbps"
+        min={0}
+        tooltip="0 = 未设，继承商户 cap。改 Mbps 会立刻作用到所有绑了此档的顾客。"
+      />
+      <ProFormDigit name="max_down_mbps" label="下行 Mbps" min={0} />
+      <ProFormDigit name="online_ip_limit" label="同时在线设备" min={1} />
+      <ProFormDigit name="validity_days" label="有效天数（可选）" min={1} />
+      <ProFormDigit
+        name="data_limit_gb"
+        label="流量 GB（可选）"
+        min={0}
+        tooltip="公平使用阶梯用的档不要填流量额度，否则绑档可能把无限流量改成硬顶。"
+      />
+      <ProFormSelect
+        name="status"
+        label="状态"
+        initialValue="active"
+        options={[
+          { value: "active", label: "active" },
+          { value: "disabled", label: "disabled" },
+        ]}
+      />
+      <ProFormTextArea name="note" label="备注" />
+    </>
+  );
+
   return (
     <PageContainer
       title="上游限速套餐"
-      subTitle="WireRaw MerchantBandwidthPlan：控制顾客速率档位，可绑到顾客 current_bandwidth_plan_ref"
+      subTitle="WireRaw MerchantBandwidthPlan：可新建/修改 Mbps。改档后已绑定顾客立即按新速率生效；售卖套餐阶梯仍引用同一 id。"
     >
       <ProTable<BwPlan>
         rowKey={(r) => r.id || Math.random().toString()}
@@ -89,7 +165,9 @@ export default function BandwidthPlansPage() {
         ]}
         request={async () => {
           const data = await adminFetch("/admin/v1/wireraw/bandwidth-plans");
-          const list = unwrapList<BwPlan>(data, ["plans", "items"]);
+          const list = sortBandwidthPlansBySpeed(
+            unwrapList<BwPlan>(data, ["plans", "items"]),
+          );
           return { data: list, success: true };
         }}
       />
@@ -102,42 +180,37 @@ export default function BandwidthPlansPage() {
         onFinish={async (values) => {
           await adminFetch("/admin/v1/wireraw/bandwidth-plans", {
             method: "POST",
-            body: JSON.stringify({
-              name: values.name,
-              max_up_mbps: values.max_up_mbps ?? 0,
-              max_down_mbps: values.max_down_mbps ?? 0,
-              online_ip_limit: values.online_ip_limit || undefined,
-              validity_seconds: values.validity_days
-                ? Number(values.validity_days) * 86400
-                : undefined,
-              data_limit_bytes: values.data_limit_gb
-                ? Math.round(Number(values.data_limit_gb) * 1024 ** 3)
-                : undefined,
-              status: values.status || "active",
-              note: values.note || undefined,
-            }),
+            body: JSON.stringify(toBody(values)),
           });
           message.success("已创建");
           actionRef.current?.reload();
           return true;
         }}
       >
-        <ProFormText name="name" label="名称" rules={[{ required: true }]} />
-        <ProFormDigit name="max_up_mbps" label="上行 Mbps" min={0} />
-        <ProFormDigit name="max_down_mbps" label="下行 Mbps" min={0} />
-        <ProFormDigit name="online_ip_limit" label="同时在线设备" min={1} />
-        <ProFormDigit name="validity_days" label="有效天数（可选）" min={1} />
-        <ProFormDigit name="data_limit_gb" label="流量 GB（可选）" min={0} />
-        <ProFormSelect
-          name="status"
-          label="状态"
-          initialValue="active"
-          options={[
-            { value: "active", label: "active" },
-            { value: "disabled", label: "disabled" },
-          ]}
-        />
-        <ProFormTextArea name="note" label="备注" />
+        {fields}
+      </ModalForm>
+
+      <ModalForm
+        key={editing?.id || "edit-bw"}
+        title={`编辑限速档${editing?.id ? ` · ${editing.id}` : ""}`}
+        open={!!editing}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+        modalProps={{ destroyOnClose: true }}
+        initialValues={editing ? toFormValues(editing) : undefined}
+        onFinish={async (values) => {
+          if (!editing?.id) return false;
+          await adminFetch("/admin/v1/wireraw/bandwidth-plans", {
+            method: "POST",
+            body: JSON.stringify(toBody(values, editing.id)),
+          });
+          message.success("已保存");
+          actionRef.current?.reload();
+          return true;
+        }}
+      >
+        {fields}
       </ModalForm>
     </PageContainer>
   );

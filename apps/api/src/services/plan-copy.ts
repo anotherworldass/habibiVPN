@@ -40,6 +40,7 @@ export async function copyPlansBetweenProjects(
         validitySeconds: plan.validitySeconds,
         billingPeriodSeconds: plan.billingPeriodSeconds,
         dataLimitBytes: plan.dataLimitBytes,
+        fupTiers: plan.fupTiers ?? undefined,
         deviceSlots: plan.deviceSlots,
         billingType: plan.billingType,
         isFreeClaimable: plan.isFreeClaimable,

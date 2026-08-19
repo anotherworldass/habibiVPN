@@ -15,7 +15,7 @@ import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { adminFetch, unwrapList } from "../lib/api";
+import { adminFetch, sortBandwidthPlansBySpeed, unwrapList } from "../lib/api";
 
 type CustomerRow = {
   end_user?: {
@@ -192,7 +192,7 @@ async function loadBandwidthPlanOptions() {
   }>(data, ["plans", "items"]);
   return [
     { label: "（不绑定 / 商户默认）", value: "" },
-    ...plans.map((p) => ({
+    ...sortBandwidthPlansBySpeed(plans).map((p) => ({
       label: `${p.name} (${p.max_up_mbps ?? "?"}/${p.max_down_mbps ?? "?"}Mbps) · ${p.id}`,
       value: p.id,
     })),

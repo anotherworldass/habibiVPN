@@ -12,6 +12,14 @@ import {
   recordEntitlementLedger,
   snapshotFromSlot,
 } from "./entitlement-ledger.js";
+import {
+  buildFupView,
+  fullSpeedBandwidthPlanRef,
+  listFupHistoryBySlotIds,
+  recordFupBandwidthChange,
+  type FupHistoryItem,
+  type FupView,
+} from "./fup.js";
 import { localizePlanCopy } from "./plan-i18n.js";
 import {
   buildClientSubscriptionUrls,
@@ -180,6 +188,8 @@ export type SubscriptionView = {
   last_synced_at: string | null;
   upstream_id: string | null;
   upstream_username: string;
+  fup: FupView | null;
+  fup_history: FupHistoryItem[];
 };
 
 function upstreamUsernameFor(userId: string, slotKey: string, email?: string | null) {
@@ -604,6 +614,8 @@ function buildPlanBody(
   opts?: {
     /** For renew: extend from current expiry if still in the future */
     baseExpiresAt?: Date | null;
+    /** Bind FUP full-speed bandwidth plan (create / plan-change only). */
+    bindFullSpeedBandwidth?: boolean;
   },
 ) {
   const body: Record<string, unknown> = {};
@@ -665,6 +677,11 @@ function buildPlanBody(
   // Concurrent device limit (WireRaw online_ip_limit)
   if (plan?.deviceSlots != null && plan.deviceSlots > 0) {
     body.online_ip_limit = plan.deviceSlots;
+  }
+
+  if (opts?.bindFullSpeedBandwidth !== false) {
+    const bw = fullSpeedBandwidthPlanRef(plan?.fupTiers);
+    if (bw) body.current_bandwidth_plan_ref = bw;
   }
 
   return body;
@@ -826,6 +843,13 @@ function toSubscriptionView(
     last_synced_at: slot.lastSyncedAt?.toISOString() || null,
     upstream_id: end?.id || slot.upstreamId,
     upstream_username: slot.upstreamUsername,
+    fup: buildFupView({
+      fupTiers: slot.plan?.fupTiers,
+      usedBytes: used,
+      currentRef: end?.current_bandwidth_plan_ref || null,
+      nextResetAt,
+    }),
+    fup_history: [],
   };
 }
 
@@ -965,6 +989,18 @@ export async function createUpstreamSlot(input: {
     });
   }
 
+  const provisionBw = fullSpeedBandwidthPlanRef(plan?.fupTiers);
+  if (provisionBw) {
+    await recordFupBandwidthChange({
+      slotId: slot.id,
+      fromRef: null,
+      toRef: provisionBw,
+      usedTrafficBytes: toNum(created.end_user?.used_traffic_bytes) ?? 0,
+      afterBytes: 0,
+      reason: "provision",
+    });
+  }
+
   const createdView = {
     user,
     slot,
@@ -1052,7 +1088,12 @@ export async function updateUpstreamSlot(input: {
     email: slot.user.email || undefined,
     note: input.note || `habibi_user:${input.userId};slot:${slot.id}`,
     status,
-    ...buildPlanBody(plan, planInput, { baseExpiresAt: slot.expiresAt }),
+    ...buildPlanBody(plan, planInput, {
+      baseExpiresAt: slot.expiresAt,
+      bindFullSpeedBandwidth: Boolean(
+        input.planId && input.planId !== slot.planId,
+      ),
+    }),
   };
   if (!keepUsedTraffic) {
     body.used_traffic_bytes = 0;
@@ -1707,6 +1748,18 @@ export type ListSubscriptionsOptions = {
   staleTtlMs?: number;
 };
 
+
+async function attachFupHistory(
+  views: SubscriptionView[],
+): Promise<SubscriptionView[]> {
+  const ids = views.map((v) => v.id);
+  const hist = await listFupHistoryBySlotIds(ids);
+  return views.map((v) => ({
+    ...v,
+    fup_history: hist.get(v.id) || [],
+  }));
+}
+
 export async function listUserSubscriptions(
   userId: string,
   options: ListSubscriptionsOptions | boolean = {},
@@ -1736,7 +1789,7 @@ export async function listUserSubscriptions(
   });
 
   if (mode === "live") {
-    return Promise.all(
+    const views = await Promise.all(
       slots.map(async (slot) => {
         try {
           const synced = await syncUpstreamSlot(userId, slot.id, locale);
@@ -1746,6 +1799,7 @@ export async function listUserSubscriptions(
         }
       }),
     );
+    return attachFupHistory(views);
   }
 
   const staleIds = slots
@@ -1753,9 +1807,10 @@ export async function listUserSubscriptions(
     .map((s) => s.id);
   scheduleBackgroundRefresh(userId, staleIds);
 
-  return Promise.all(
+  const cached = await Promise.all(
     slots.map((s) => toSubscriptionViewAsync(s, null, locale)),
   );
+  return attachFupHistory(cached);
 }
 
 /** @deprecated use createUpstreamSlot / updateUpstreamSlot */

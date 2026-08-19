@@ -65,3 +65,17 @@ export function unwrapList<T>(data: unknown, keys: string[] = ["items", "custome
   }
   return [];
 }
+
+/** Mbps 正序：下行优先，其次上行。0 = 未设/继承 cap，视为最快放最后。 */
+export function sortBandwidthPlansBySpeed<
+  T extends { max_up_mbps?: number | null; max_down_mbps?: number | null },
+>(plans: T[]): T[] {
+  const rank = (n?: number | null) =>
+    n == null || n <= 0 ? Number.POSITIVE_INFINITY : n;
+  return [...plans].sort((a, b) => {
+    const d = rank(a.max_down_mbps) - rank(b.max_down_mbps);
+    if (d !== 0) return d;
+    return rank(a.max_up_mbps) - rank(b.max_up_mbps);
+  });
+}
+

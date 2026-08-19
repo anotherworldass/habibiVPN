@@ -248,6 +248,26 @@ type SubscriptionSlot = {
   available_formats?: string[];
   note?: string | null;
   last_synced_at?: string | null;
+  fup?: {
+    enabled?: boolean;
+    throttled?: boolean;
+    current_after_bytes?: number | null;
+    current_bandwidth_plan_ref?: string | null;
+    next_tier_after_bytes?: number | null;
+    used_traffic_bytes?: number | null;
+    next_reset_at?: string | null;
+    tiers?: Array<{ after_bytes: number; bandwidth_plan_ref: string }>;
+  } | null;
+  fup_history?: Array<{
+    id: string;
+    created_at: string;
+    from_ref?: string | null;
+    to_ref?: string | null;
+    used_traffic_bytes?: number | null;
+    after_bytes?: number | null;
+    reason?: string | null;
+    actor_type?: string;
+  }>;
 };
 
 function formatBytes(n?: number | null) {
@@ -2363,6 +2383,14 @@ export default function ReferralRelationsPage() {
                   >
                     {s.status || "active"}
                   </Tag>
+                  {s.fup?.enabled ? (
+                    <Tag
+                      color={s.fup.throttled ? "warning" : "success"}
+                      style={{ marginInlineEnd: 0, lineHeight: "18px" }}
+                    >
+                      {s.fup.throttled ? "已限速" : "全速"}
+                    </Tag>
+                  ) : null}
                 </Space>
               ),
               children: (
@@ -2385,6 +2413,11 @@ export default function ReferralRelationsPage() {
                                   {s.status || "active"}
                                 </Tag>
                                 {s.plan_code && <Tag>{s.plan_code}</Tag>}
+                                {s.fup?.enabled ? (
+                                  <Tag color={s.fup.throttled ? "warning" : "success"}>
+                                    {s.fup.throttled ? "已限速" : "全速"}
+                                  </Tag>
+                                ) : null}
                                 {s.revoked_at && <Tag color="error">已撤销</Tag>}
                               </Space>
                             </Descriptions.Item>
@@ -2504,10 +2537,60 @@ export default function ReferralRelationsPage() {
                       label: "带宽与节点",
                       children: (
                         <Descriptions size="small" column={2} bordered>
+                          <Descriptions.Item label="公平使用" span={2}>
+                            {s.fup?.enabled ? (
+                              <Space direction="vertical" size={4}>
+                                <Space wrap>
+                                  <Tag color={s.fup.throttled ? "warning" : "success"}>
+                                    {s.fup.throttled ? "已限速" : "全速"}
+                                  </Tag>
+                                  <span>
+                                    当前档阈值{" "}
+                                    {s.fup.current_after_bytes
+                                      ? formatBytes(s.fup.current_after_bytes)
+                                      : "0 GB（全速）"}
+                                  </span>
+                                </Space>
+                                <span>
+                                  当月已用 {(() => {
+                                    const u = s.fup.used_traffic_bytes ?? s.used_traffic_bytes;
+                                    if (u == null) return "—";
+                                    if (u === 0) return "0";
+                                    return formatBytes(u);
+                                  })()}
+                                  {s.fup.next_tier_after_bytes != null
+                                    ? ` · 下一档 ${formatBytes(s.fup.next_tier_after_bytes)}`
+                                    : " · 已是最高档"}
+                                </span>
+                                {s.fup.next_reset_at ? (
+                                  <span>下次流量重置 {formatSubTime(s.fup.next_reset_at)}</span>
+                                ) : null}
+                              </Space>
+                            ) : (
+                              "未配置"
+                            )}
+                          </Descriptions.Item>
                           <Descriptions.Item label="限速" span={2}>
                             {s.bandwidth_policy
                               ? `${s.bandwidth_policy.source || "—"} · ↑ ${s.bandwidth_policy.up_mbps ?? "—"} / ↓ ${s.bandwidth_policy.down_mbps ?? "—"} Mbps${s.bandwidth_policy.editable === false ? " · 只读" : ""}`
                               : "—"}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="切档记录" span={2}>
+                            {(s.fup_history || []).length ? (
+                              <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                {(s.fup_history || []).slice(0, 10).map((h) => (
+                                  <Typography.Text key={h.id} type="secondary" style={{ fontSize: 12 }}>
+                                    {formatSubTime(h.created_at)} · {h.reason || h.actor_type || "—"} ·{" "}
+                                    {h.from_ref || "—"} → {h.to_ref || "—"}
+                                    {h.after_bytes != null
+                                      ? ` · 档 ${h.after_bytes === 0 ? "0 GB" : formatBytes(h.after_bytes)}`
+                                      : ""}
+                                  </Typography.Text>
+                                ))}
+                              </Space>
+                            ) : (
+                              "—"
+                            )}
                           </Descriptions.Item>
                           <Descriptions.Item label="绑定带宽套餐" span={2}>
                             {s.current_bandwidth_plan_ref ? (

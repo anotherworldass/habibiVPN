@@ -16,6 +16,13 @@ import {
   mergePlanCopyPatch,
   resolvePlanCopyInput,
 } from "../services/plan-i18n.js";
+import {
+  assertFupResetPolicy,
+  fupTiersToJson,
+  normalizeFupTiersInput,
+  parseFupTiers,
+  type FupTier,
+} from "../services/fup.js";
 
 const catalogOfferSchema = z.object({
   client: z.enum([
@@ -85,6 +92,7 @@ const planBody = z.object({
   group_id: z.string().min(1).nullable().optional(),
   catalogOffers: z.array(catalogOfferSchema).optional(),
   storeProducts: z.array(storeProductSchema).optional(),
+  fupTiers: z.array(z.record(z.unknown())).nullable().optional(),
 });
 
 const GO_DURATION_RE = /^\d+(\.\d+)?(ns|us|µs|ms|s|m|h)$/;
@@ -107,6 +115,11 @@ function resolveResetFields(data: {
     return { resetPolicy, customResetInterval: interval };
   }
   return { resetPolicy, customResetInterval: null };
+}
+
+function resolveFupTiersField(raw: unknown): FupTier[] | null | undefined {
+  if (raw === undefined) return undefined;
+  return normalizeFupTiersInput(raw);
 }
 
 /** Prefer calendar months when set; clears the other field. */
@@ -378,6 +391,21 @@ export const adminPlansRoutes: FastifyPluginAsync = async (app) => {
         validitySeconds: data.validitySeconds,
         validityCalendarMonths: data.validityCalendarMonths,
       });
+      let fupTiers: FupTier[] | null = null;
+      try {
+        fupTiers = resolveFupTiersField(data.fupTiers) ?? null;
+        assertFupResetPolicy({
+          tiers: fupTiers,
+          resetPolicy: resetFields.resetPolicy ?? "no_reset",
+          validitySeconds: validity.validitySeconds ?? null,
+          validityCalendarMonths: validity.validityCalendarMonths ?? null,
+        });
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode || 400;
+        return reply.code(status).send({
+          error: err instanceof Error ? err.message : "plan.fup_invalid",
+        });
+      }
       const plan = await prisma.plan.create({
         data: {
           projectId,
@@ -403,6 +431,7 @@ export const adminPlansRoutes: FastifyPluginAsync = async (app) => {
             | "year"
             | "custom") ?? "no_reset",
           customResetInterval: resetFields.customResetInterval ?? null,
+          fupTiers: fupTiersToJson(fupTiers),
           enabled: data.enabled ?? true,
           isFreeClaimable: data.isFreeClaimable ?? false,
           sortOrder: data.sortOrder ?? 0,
@@ -477,6 +506,37 @@ export const adminPlansRoutes: FastifyPluginAsync = async (app) => {
           error: err instanceof Error ? err.message : "plan.reset_invalid",
         });
       }
+      let fupPatch: FupTier[] | null | undefined;
+      try {
+        fupPatch = resolveFupTiersField(data.fupTiers);
+        const validity = resolveValidityFields({
+          validitySeconds: data.validitySeconds,
+          validityCalendarMonths: data.validityCalendarMonths,
+        });
+        const mergedReset =
+          resetPatch.resetPolicy ?? existing.resetPolicy ?? "no_reset";
+        const mergedTiers =
+          fupPatch === undefined
+            ? parseFupTiers(existing.fupTiers)
+            : fupPatch;
+        assertFupResetPolicy({
+          tiers: mergedTiers && mergedTiers.length ? mergedTiers : null,
+          resetPolicy: mergedReset,
+          validitySeconds:
+            validity.validitySeconds !== undefined
+              ? validity.validitySeconds
+              : existing.validitySeconds,
+          validityCalendarMonths:
+            validity.validityCalendarMonths !== undefined
+              ? validity.validityCalendarMonths
+              : existing.validityCalendarMonths,
+        });
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode || 400;
+        return reply.code(status).send({
+          error: err instanceof Error ? err.message : "plan.fup_invalid",
+        });
+      }
       await prisma.plan.update({
         where: { id },
         data: {
@@ -531,6 +591,9 @@ export const adminPlansRoutes: FastifyPluginAsync = async (app) => {
             : {}),
           ...(resetPatch.customResetInterval !== undefined
             ? { customResetInterval: resetPatch.customResetInterval }
+            : {}),
+          ...(fupPatch !== undefined
+            ? { fupTiers: fupTiersToJson(fupPatch) }
             : {}),
           ...(data.enabled != null ? { enabled: data.enabled } : {}),
           ...(data.isFreeClaimable != null
