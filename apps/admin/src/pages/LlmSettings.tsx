@@ -32,6 +32,7 @@ type LlmProfile = {
   enabled: boolean;
   remark: string | null;
   hasApiKey: boolean;
+  apiKey?: string;
 };
 
 type ProfilesResponse = {
@@ -76,9 +77,21 @@ export default function LlmSettingsPage() {
     void load();
   }, [load]);
 
-  const showEditor = (profile?: LlmProfile) => {
-    setEditing(profile || null);
-    setOpen(true);
+  const showEditor = async (profile?: LlmProfile) => {
+    if (!profile) {
+      setEditing(null);
+      setOpen(true);
+      return;
+    }
+    try {
+      const result = await adminFetch<{ profile: LlmProfile }>(
+        `/admin/v1/llm/profiles/${profile.id}`,
+      );
+      setEditing(result.profile);
+      setOpen(true);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载模型配置失败");
+    }
   };
 
   const populateEditor = () => {
@@ -91,7 +104,7 @@ export default function LlmSettingsPage() {
             model: editing.model,
             enabled: editing.enabled,
             remark: editing.remark || undefined,
-            apiKey: undefined,
+            apiKey: editing.apiKey,
           }
         : {
             name: "",
@@ -138,7 +151,7 @@ export default function LlmSettingsPage() {
                 key="add"
                 type="primary"
                 icon={<PlusOutlined />}
-                onClick={() => showEditor()}
+                onClick={() => void showEditor()}
               >
                 添加模型
               </Button>,
@@ -260,7 +273,7 @@ export default function LlmSettingsPage() {
                     size="small"
                     icon={<EditOutlined />}
                     disabled={!canWrite}
-                    onClick={() => showEditor(row)}
+                    onClick={() => void showEditor(row)}
                   >
                     编辑
                   </Button>
@@ -331,9 +344,8 @@ export default function LlmSettingsPage() {
             rules={
               editing ? undefined : [{ required: true, message: "请输入 API Key" }]
             }
-            extra={editing ? "留空则保留已加密保存的密钥" : undefined}
           >
-            <Input.Password autoComplete="new-password" />
+            <Input autoComplete="off" />
           </Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch />

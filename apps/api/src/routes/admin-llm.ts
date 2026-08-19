@@ -11,6 +11,7 @@ import {
   createLlmProfile,
   deleteLlmProfile,
   getActiveLlmProfile,
+  getLlmProfileWithApiKey,
   listLlmProfilesPublic,
   llmProfileInputSchema,
   setDefaultLlmProfile,
@@ -70,6 +71,20 @@ export const adminLlmRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, error);
     }
   });
+
+  app.get(
+    `${prefix}/profiles/:id`,
+    { preHandler: [requireSuperadmin] },
+    async (req, reply) => {
+      try {
+        const projectId = await resolveAdminProjectId(req);
+        const { id } = req.params as { id: string };
+        return { profile: await getLlmProfileWithApiKey(projectId, id) };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
 
   app.post(
     `${prefix}/profiles`,

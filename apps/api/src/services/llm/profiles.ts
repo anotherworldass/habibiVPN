@@ -82,6 +82,21 @@ export async function listLlmProfilesPublic(projectId: string) {
   };
 }
 
+export async function getLlmProfileWithApiKey(
+  projectId: string,
+  profileId: string,
+) {
+  const bundle = await getLlmProfileBundle(projectId);
+  const profile = bundle.profiles.find((item) => item.id === profileId);
+  if (!profile) {
+    throw Object.assign(new Error("llm.profile_not_found"), { statusCode: 404 });
+  }
+  return {
+    ...publicProfile(profile),
+    apiKey: decryptSecret(profile.apiKeyEnc),
+  };
+}
+
 async function persistBundle(projectId: string, bundle: LlmProfileBundle) {
   const value = bundleSchema.parse(bundle);
   await upsertProjectSetting({

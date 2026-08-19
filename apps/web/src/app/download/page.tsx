@@ -139,24 +139,6 @@ export default function DownloadPage() {
             </p>
           ) : null}
 
-          <section className="download-notes" aria-labelledby="download-notes-title">
-            <h2 id="download-notes-title">{copy.noteTitle}</h2>
-            <ul>
-              <li>
-                <span>iOS</span>
-                <p>{copy.noteIos}</p>
-              </li>
-              <li>
-                <span>Android</span>
-                <p>{copy.noteAndroid}</p>
-              </li>
-              <li>
-                <span>Windows / macOS</span>
-                <p>{copy.noteDesktop}</p>
-              </li>
-            </ul>
-          </section>
-
           <p className="download-web-hint">
             {copy.webBefore}{" "}
             <Link href="/register">{copy.register}</Link>
