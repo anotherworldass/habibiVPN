@@ -65,6 +65,12 @@ function planLabel(sub: Subscription, fallback: string) {
   return sub.plan_name || sub.plan_code || sub.next_plan_ref || fallback;
 }
 
+function isExpired(sub: Subscription) {
+  if (sub.status === "expired") return true;
+  if (sub.expires_at && new Date(sub.expires_at).getTime() < Date.now()) return true;
+  return false;
+}
+
 function SubscriptionContent() {
   const locale = useLocale();
   const copy = t(locale);
@@ -122,6 +128,7 @@ function SubscriptionContent() {
   );
   const subscriptionUrl =
     selected?.client_urls?.v2ray || selected?.subscription_url || null;
+  const selectedExpired = selected ? isExpired(selected) : false;
 
   async function selectPlan(id: string) {
     if (id === selectedId) return;
@@ -150,7 +157,7 @@ function SubscriptionContent() {
 
 
   async function refreshUrl() {
-    if (!selected) return;
+    if (!selected || isExpired(selected)) return;
     setRefreshing(true);
     setError("");
     setRefreshOk(false);
@@ -350,10 +357,24 @@ function SubscriptionContent() {
                 className="btn btn-secondary btn-block"
                 style={{ marginTop: 16 }}
                 onClick={() => setConfirmRefresh(true)}
-                disabled={refreshing}
+                disabled={refreshing || selectedExpired}
               >
                 {copy.sub.refresh}
               </button>
+              {selectedExpired && (
+                <>
+                  <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+                    {copy.sub.refreshDisabledExpired}
+                  </p>
+                  <Link
+                    href="/plans"
+                    className="btn btn-primary btn-block"
+                    style={{ marginTop: 10 }}
+                  >
+                    {copy.sub.buyCta}
+                  </Link>
+                </>
+              )}
               {refreshOk && (
                 <p className="alert-ok" style={{ marginTop: 10 }}>
                   {copy.sub.refreshed}

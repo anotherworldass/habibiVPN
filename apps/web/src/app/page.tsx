@@ -36,6 +36,7 @@ export default function Home() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [ready, setReady] = useState(false);
   const [trialPlan, setTrialPlan] = useState<string | null>(null);
+  const [leadIndex, setLeadIndex] = useState(0);
 
   useEffect(() => {
     setLoggedIn(!!getToken());
@@ -46,6 +47,18 @@ export default function Home() {
       }
     });
   }, [copy.trialPlanFallback]);
+
+  useEffect(() => {
+    const count = t(locale).home.leadIn.length;
+    setLeadIndex(0);
+    if (count < 2) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) return;
+    const id = window.setInterval(() => {
+      setLeadIndex((i) => (i + 1) % count);
+    }, 2200);
+    return () => window.clearInterval(id);
+  }, [locale]);
 
   return (
     <Shell flush>
@@ -58,13 +71,16 @@ export default function Home() {
             {!loggedIn && trialPlan ? (
               <p className="hero-trial-chip">{copy.trialChip(trialPlan)}</p>
             ) : null}
-            <p className="hero-lead">
-              {loggedIn
-                ? copy.leadIn
-                : trialPlan
-                  ? copy.leadOutTrial(trialPlan)
-                  : copy.leadOut}
+            <p className="hero-lead hero-lead-rotating" aria-live="polite">
+              <span key={leadIndex} className="hero-lead-swap">
+                {copy.leadIn[leadIndex]}
+              </span>
             </p>
+            {!loggedIn ? (
+              <p className="hero-lead">
+                {trialPlan ? copy.leadOutTrial(trialPlan) : copy.leadOut}
+              </p>
+            ) : null}
             <div className="hero-cta">
               {!ready ? null : loggedIn ? (
                 <>

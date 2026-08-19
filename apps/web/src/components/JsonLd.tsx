@@ -48,16 +48,10 @@ export default function JsonLd({
       script("faq", {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        mainEntity: [
-          [copy.guide.faq1Q, copy.guide.faq1A],
-          [copy.guide.faq2Q, copy.guide.faq2A],
-          [copy.guide.faq3Q, copy.guide.faq3A],
-          [copy.guide.faq4Q, copy.guide.faq4A],
-          [copy.guide.faq5Q, copy.guide.faq5A],
-        ].map(([q, a]) => ({
+        mainEntity: copy.guide.faqs.map((item) => ({
           "@type": "Question",
-          name: q,
-          acceptedAnswer: { "@type": "Answer", text: a },
+          name: item.q,
+          acceptedAnswer: { "@type": "Answer", text: item.a },
         })),
       }),
     );

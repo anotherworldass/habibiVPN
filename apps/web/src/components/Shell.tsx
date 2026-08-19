@@ -6,6 +6,7 @@ import { t } from "../lib/copy";
 import { getToken } from "../lib/auth";
 import { isInvitePath, stripLocale } from "../lib/locale";
 import { site } from "../lib/site";
+import AccountMenu from "./AccountMenu";
 import LanguageSwitch from "./LanguageSwitch";
 import Link from "./LocaleLink";
 import { useLocale } from "./LocaleProvider";
@@ -73,17 +74,22 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
   const guestTabs = [
     { href: "/", label: copy.nav.home, icon: homeIcon },
     { href: "/plans", label: copy.nav.plans, icon: plansIcon },
-    { href: "/account", label: copy.nav.account, icon: accountIcon },
   ];
 
   const appTabs = [
     { href: "/", label: copy.nav.home, icon: homeIcon },
     { href: "/subscription", label: copy.nav.connect, icon: connectIcon },
     { href: "/plans", label: copy.nav.plans, icon: plansIcon },
-    { href: "/account", label: copy.nav.account, icon: accountIcon },
   ];
 
-  const tabs = loggedIn ? appTabs : guestTabs;
+  const accountTab = {
+    href: "/account",
+    label: copy.nav.account,
+    icon: accountIcon,
+  };
+
+  const desktopTabs = loggedIn ? appTabs : guestTabs;
+  const mobileTabs = [...desktopTabs, accountTab];
   const showBrandBar = !flush && !isInvitePath(pathname);
 
   const shellClass = [
@@ -133,12 +139,17 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
       {!hideNavigation && (
         <header className="habibi-topbar">
           <div className="habibi-topbar-inner">
-            <Link href="/" className="habibi-topbar-brand">
-              {site.brand}
-            </Link>
+            <div className="habibi-topbar-start">
+              <Link href="/" className="habibi-topbar-brand">
+                {site.brand}
+              </Link>
+              <Suspense fallback={null}>
+                <LanguageSwitch variant="topbar" />
+              </Suspense>
+            </div>
             <div className="habibi-topbar-tools">
               <nav className="habibi-topbar-nav" aria-label={copy.common.navAria}>
-                {tabs.map((tab) => {
+                {desktopTabs.map((tab) => {
                   const active = isTabActive(pathname, tab.href);
                   const href = resolveHref(tab.href, loggedIn);
                   return (
@@ -154,9 +165,7 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
                   );
                 })}
               </nav>
-              <Suspense fallback={null}>
-                <LanguageSwitch variant="topbar" />
-              </Suspense>
+              <AccountMenu loggedIn={loggedIn} />
             </div>
           </div>
         </header>
@@ -165,9 +174,17 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
       {showBrandBar && (
         <header className="habibi-brandbar">
           <div className="habibi-brandbar-inner">
-            <Link href="/" className="habibi-brandbar-brand">
-              {site.brand}
-            </Link>
+            <div className="habibi-brandbar-row">
+              <div className="habibi-brandbar-start">
+                <Link href="/" className="habibi-brandbar-brand">
+                  {site.brand}
+                </Link>
+                <Suspense fallback={null}>
+                  <LanguageSwitch variant="topbar" />
+                </Suspense>
+              </div>
+              {!hideNavigation ? <AccountMenu loggedIn={loggedIn} /> : null}
+            </div>
             {site.slogan ? (
               <p className="habibi-brandbar-slogan">
                 {locale === "en" ? copy.home.slogan : site.slogan}
@@ -185,9 +202,9 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
       {!hideNavigation && (
         <nav className="habibi-tabbar" aria-label={copy.common.navAria}>
           <div
-            className={`habibi-tabbar-inner habibi-tabbar-inner--${tabs.length}`}
+            className={`habibi-tabbar-inner habibi-tabbar-inner--${mobileTabs.length}`}
           >
-            {tabs.map((tab) => {
+            {mobileTabs.map((tab) => {
               const active = isTabActive(pathname, tab.href);
               const href = resolveHref(tab.href, loggedIn);
               return (

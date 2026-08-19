@@ -53,11 +53,11 @@ const pages: Record<PublicSeoPath, Record<SiteLocale, PageSeo>> = {
   "/guide": {
     zh: {
       title: `使用教程 · ${site.brand}`,
-      description: "从注册、领取套餐到导入 Hiddify 等客户端，三步连上网络。含常见问题。",
+      description: "注册开通套餐后，用官方 App 一键连接，或把订阅导入第三方客户端。含平台说明与常见问题。",
     },
     en: {
       title: `Setup guide · ${site.brand}`,
-      description: `Register, claim a plan, and import your subscription into Hiddify or another client. Includes FAQ.`,
+      description: `After signup, connect with the official app or import your subscription into a third-party client. Includes platform notes and FAQ.`,
     },
   },
   "/download": {

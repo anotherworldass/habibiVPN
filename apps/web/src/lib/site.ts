@@ -61,7 +61,7 @@ export const downloadPlatforms = [
 /** Actionable help (教程 / 客服) — used by HelpLinks */
 export const helpActionLinks = [
   { href: "/download", label: "下载 App", desc: "iOS / Android / Windows / macOS" },
-  { href: "/guide", label: "使用教程", desc: "注册、领取套餐、导入客户端" },
+  { href: "/guide", label: "使用教程", desc: "官方 App 一键连接，或导入第三方客户端" },
   { href: "/support", label: "联系客服", desc: "账号与订阅问题咨询" },
 ] as const;
 
