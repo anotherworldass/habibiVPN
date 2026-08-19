@@ -3931,12 +3931,13 @@ input {
   }
 
   .habibi-shell--no-nav .habibi-brandbar-inner {
-    max-width: 440px;
+    max-width: var(--content-max);
     padding: 22px 32px 18px;
   }
 
   .habibi-shell--no-nav .habibi-brandbar-brand {
-    font-size: 1.45rem;
+    font-size: 2.25rem;
+    letter-spacing: -0.01em;
   }
 
   .habibi-shell--no-nav .habibi-brandbar-slogan {
@@ -4080,9 +4081,16 @@ input {
     padding-top: 32px;
   }
 
-  /* Auth pages: brandbar and form share the same 440px column */
-  .habibi-shell--no-nav .habibi-main--narrow {
+  /* Auth: logo + footer use the desktop column; form stays a narrower card */
+  .habibi-shell--no-nav .habibi-main--narrow:not(:has(.invite-plain)) {
+    max-width: var(--content-max);
+  }
+
+  .habibi-shell--no-nav .habibi-main--narrow:not(:has(.invite-plain)) > :not(.footer-mini) {
     max-width: 440px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   /* Invite: full-viewport center, no clipped glow band inside narrow column */
@@ -5044,6 +5052,10 @@ input {
   .habibi-shell--no-nav .habibi-brandbar-inner {
     padding-left: 40px;
     padding-right: 40px;
+  }
+
+  .habibi-shell--no-nav .habibi-brandbar-brand {
+    font-size: 2.55rem;
   }
 
   .habibi-pad {

@@ -1410,6 +1410,15 @@ export default function SellPlansPage() {
           {(
             [
               {
+                title: "上架端",
+                value: filterClient,
+                onChange: setFilterClient,
+                options: [
+                  { label: "全部", value: FILTER_ALL },
+                  ...CLIENTS.map((c) => ({ label: c.label, value: c.value })),
+                ],
+              },
+              {
                 title: "分组",
                 value: filterGroupId,
                 onChange: setFilterGroupId,
@@ -1420,15 +1429,6 @@ export default function SellPlansPage() {
                     label: `${g.nameI18n?.zh || g.nameI18n?.en || g.name}${g.enabled ? "" : "（禁）"}`,
                     value: g.id,
                   })),
-                ],
-              },
-              {
-                title: "上架端",
-                value: filterClient,
-                onChange: setFilterClient,
-                options: [
-                  { label: "全部", value: FILTER_ALL },
-                  ...CLIENTS.map((c) => ({ label: c.label, value: c.value })),
                 ],
               },
               {
