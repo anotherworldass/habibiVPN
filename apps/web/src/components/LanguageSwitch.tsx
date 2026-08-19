@@ -25,9 +25,45 @@ export default function LanguageSwitch({
     return query ? `${path}?${query}` : path;
   }
 
+  if (variant === "topbar") {
+    const nextLocale: SiteLocale = locale === "zh" ? "en" : "zh";
+    const nextLabel = nextLocale === "zh" ? copy.nav.zh : copy.nav.en;
+    const compactLabel = nextLocale === "zh" ? "中" : "EN";
+    const commonProps = {
+      className: "lang-switch-toggle",
+      "aria-label": `${copy.nav.langAria}: ${nextLabel}`,
+      title: nextLabel,
+    };
+    const control = invite ? (
+      <button
+        type="button"
+        {...commonProps}
+        onClick={() => setLocale(nextLocale)}
+      >
+        <LanguageIcon />
+        <span>{compactLabel}</span>
+      </button>
+    ) : (
+      <a
+        {...commonProps}
+        href={hrefFor(nextLocale)}
+        hrefLang={nextLocale === "zh" ? "zh-CN" : "en"}
+      >
+        <LanguageIcon />
+        <span>{compactLabel}</span>
+      </a>
+    );
+
+    return (
+      <div className="lang-switch lang-switch--topbar legal-lang-switch">
+        {control}
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`lang-switch lang-switch--${variant}${variant === "topbar" ? " legal-lang-switch" : ""}`}
+      className={`lang-switch lang-switch--${variant}`}
       role="group"
       aria-label={copy.nav.langAria}
     >
@@ -68,5 +104,24 @@ export default function LanguageSwitch({
         return control;
       })}
     </div>
+  );
+}
+
+function LanguageIcon() {
+  return (
+    <svg
+      className="lang-switch-icon"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="10" cy="10" r="7.5" stroke="currentColor" />
+      <path
+        d="M2.75 10h14.5M10 2.5c2 2.05 3 4.55 3 7.5s-1 5.45-3 7.5c-2-2.05-3-4.55-3-7.5s1-5.45 3-7.5Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

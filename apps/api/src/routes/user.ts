@@ -58,11 +58,19 @@ const clientMetaBody = z
   })
   .optional();
 
+function headerLocale(req: FastifyRequest): string | null {
+  const raw = req.headers["x-habibi-locale"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
 function localeFromRequest(req: FastifyRequest): string | null {
   const q = req.query as { locale?: string; lang?: string };
   return (
     q.locale ||
     q.lang ||
+    headerLocale(req) ||
     (Array.isArray(req.headers["accept-language"])
       ? req.headers["accept-language"][0]
       : req.headers["accept-language"]) ||

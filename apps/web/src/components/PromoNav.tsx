@@ -24,6 +24,11 @@ export default function PromoNav() {
       label: copy.withdraw,
       match: (p: string) => p === "/promo/withdraw",
     },
+    {
+      href: "/promo/redeem",
+      label: copy.redeem,
+      match: (p: string) => p === "/promo/redeem",
+    },
   ] as const;
 
   return (

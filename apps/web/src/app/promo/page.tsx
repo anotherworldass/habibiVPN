@@ -293,6 +293,13 @@ export default function PromoPage() {
                         {copy.promo.goWithdraw}
                       </Link>
                       <Link
+                        href="/promo/redeem"
+                        className="btn btn-secondary"
+                        style={{ minHeight: 44 }}
+                      >
+                        {copy.promo.goRedeem}
+                      </Link>
+                      <Link
                         href="/promo/team?tab=commissions"
                         className="btn btn-secondary"
                         style={{ minHeight: 44 }}
@@ -405,7 +412,11 @@ export default function PromoPage() {
                         .
                       </li>
                       {rules.catalog_spend_enabled ? (
-                        <li>{copy.promo.catalog}</li>
+                        <li>
+                          <Link className="promo-inline-link" href="/promo/redeem">
+                            {copy.promo.catalog}
+                          </Link>
+                        </li>
                       ) : null}
                       <li>
                         {copy.promo.kol}

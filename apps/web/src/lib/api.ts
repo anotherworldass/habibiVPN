@@ -1,4 +1,5 @@
 import { clearToken, getToken } from "./auth";
+import { resolveSiteLocale } from "./locale";
 
 function clientHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -10,9 +11,7 @@ function clientHeaders(): Record<string, string> {
   } catch {
     /* ignore */
   }
-  if (typeof navigator !== "undefined" && navigator.language) {
-    headers["x-habibi-locale"] = navigator.language;
-  }
+  headers["x-habibi-locale"] = resolveSiteLocale();
   if (typeof window !== "undefined" && window.location.hostname) {
     headers["x-habibi-site-host"] = window.location.hostname;
   }

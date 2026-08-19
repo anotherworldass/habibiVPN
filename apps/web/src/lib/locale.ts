@@ -101,6 +101,28 @@ export function resolveSiteLocale(search?: string): SiteLocale {
   return DEFAULT_LOCALE;
 }
 
+/** Pick CMS copy for the site locale (requested → en → zh → first non-empty). */
+export function pickSiteCopy(
+  map: Record<string, string> | null | undefined,
+  locale: SiteLocale,
+  fallback = "",
+): string {
+  if (!map) return fallback;
+  const order = [locale, "en", "zh"];
+  const seen = new Set<string>();
+  for (const code of order) {
+    if (seen.has(code)) continue;
+    seen.add(code);
+    const v = map[code]?.trim();
+    if (v) return v;
+  }
+  for (const v of Object.values(map)) {
+    const t = v?.trim();
+    if (t) return t;
+  }
+  return fallback;
+}
+
 export function persistSiteLocale(locale: SiteLocale) {
   if (typeof window === "undefined") return;
   try {

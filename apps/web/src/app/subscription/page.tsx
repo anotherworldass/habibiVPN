@@ -3,19 +3,12 @@
 import Link from "../../components/LocaleLink";
 import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { QRCodeCanvas } from "qrcode.react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Shell from "../../components/Shell";
 import { TrafficUsage } from "../../components/TrafficUsage";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
-import {
-  prefFromUsageMode,
-  saveConnectPreference,
-  usageModeFromPref,
-} from "../../lib/preferences";
-import { site } from "../../lib/site";
 import { useLocale } from "../../components/LocaleProvider";
 import { t } from "../../lib/copy";
 
@@ -44,6 +37,17 @@ type Subscription = {
   upstream_username?: string;
 };
 
+const THIRD_PARTY_CLIENTS: Array<{
+  key: keyof ClientUrls;
+  label: string;
+}> = [
+  { key: "shadowrocket", label: "Shadowrocket" },
+  { key: "clash_meta", label: "Clash" },
+  { key: "hiddify", label: "Hiddify" },
+  { key: "quantumult_x", label: "Quantumult X" },
+  { key: "surge", label: "Surge" },
+];
+
 function statusLabel(status: string, copy: ReturnType<typeof t>["sub"]) {
   if (status === "active") return copy.statusActive;
   if (status === "expired") return copy.statusExpired;
@@ -54,14 +58,6 @@ function statusLabel(status: string, copy: ReturnType<typeof t>["sub"]) {
 
 function planLabel(sub: Subscription, fallback: string) {
   return sub.plan_name || sub.plan_code || sub.next_plan_ref || fallback;
-}
-
-function clashImportUrl(url: string) {
-  return `clash://install-config?url=${encodeURIComponent(url)}&name=${encodeURIComponent(site.brand)}`;
-}
-
-function shadowrocketImportUrl(url: string) {
-  return `sub://${btoa(url)}#${encodeURIComponent(site.brand)}`;
 }
 
 function SubscriptionContent() {
@@ -75,32 +71,21 @@ function SubscriptionContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedClient, setCopiedClient] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [confirmRefresh, setConfirmRefresh] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshOk, setRefreshOk] = useState(false);
-  const [linkView, setLinkView] = useState<"link" | "qr">("link");
   const [usageMode, setUsageMode] = useState<"official" | "third-party">("official");
-  const [qrSaved, setQrSaved] = useState(false);
-  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
       router.replace("/login");
       return;
     }
-    Promise.all([
-      apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions"),
-      apiFetch<{
-        user: {
-          preferences?: {
-            connect_mode: "unset" | "official_app" | "subscription_client";
-          };
-        };
-      }>("/api/v1/me").catch(() => null),
-    ])
-      .then(([subRes, meRes]) => {
+    apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions")
+      .then((subRes) => {
         const list = subRes.subscriptions || [];
         setSubs(list);
         const preferred =
@@ -109,24 +94,10 @@ function SubscriptionContent() {
           list[0]?.id ||
           null;
         setSelectedId(preferred);
-        const mode = meRes?.user?.preferences?.connect_mode;
-        if (mode && mode !== "unset") {
-          setUsageMode(usageModeFromPref(mode));
-        }
       })
       .catch((e) => setError(friendlyError(e, copy.sub.loadFailed)))
       .finally(() => setLoading(false));
-  }, [router, queryId]);
-
-  function selectUsageMode(next: "official" | "third-party") {
-    setUsageMode(next);
-    void saveConnectPreference({
-      connect_mode: prefFromUsageMode(next),
-      source: "connect_page",
-    }).catch(() => {
-      /* keep local UI even if sync fails */
-    });
-  }
+  }, [router, queryId, copy.sub.loadFailed]);
 
   const selected = useMemo(
     () => subs.find((s) => s.id === selectedId) || null,
@@ -134,16 +105,12 @@ function SubscriptionContent() {
   );
   const subscriptionUrl =
     selected?.client_urls?.v2ray || selected?.subscription_url || null;
-  const clashSubscriptionUrl =
-    selected?.client_urls?.clash_meta || subscriptionUrl;
-  const shadowrocketSubscriptionUrl =
-    selected?.client_urls?.shadowrocket || subscriptionUrl;
 
   async function selectPlan(id: string) {
     if (id === selectedId) return;
     setSelectedId(id);
     setCopied(false);
-    setLinkView("link");
+    setCopiedClient(null);
     setRefreshOk(false);
     setSyncing(true);
     setError("");
@@ -199,25 +166,22 @@ function SubscriptionContent() {
     if (!subscriptionUrl) return;
     await navigator.clipboard.writeText(subscriptionUrl);
     setCopied(true);
+    setCopiedClient(null);
     setTimeout(() => setCopied(false), 1600);
   }
 
-  function saveQr() {
-    const canvas = qrCanvasRef.current;
-    if (!canvas || !selected) return;
-    const name = (selected.plan_code || selected.plan_name || "subscription")
-      .replace(/[^\w\u4e00-\u9fff-]+/g, "_")
-      .slice(0, 40);
-    const link = document.createElement("a");
-    link.download = `habibi-${name}-qr.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-    setQrSaved(true);
-    setTimeout(() => setQrSaved(false), 1600);
+  async function copyClientUrl(key: keyof ClientUrls) {
+    const url = selected?.client_urls?.[key] || subscriptionUrl;
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopied(false);
+    setCopiedClient(key);
+    setTimeout(() => setCopiedClient(null), 1600);
   }
 
   return (
     <Shell>
+      <div className="subscription-page">
       <div className="page-head">
         <h1>{copy.sub.title}</h1>
         <p>{copy.sub.lead}</p>
@@ -254,7 +218,8 @@ function SubscriptionContent() {
 
       {!loading && subs.length > 0 && (
         <>
-          <div style={{ marginTop: 16 }}>
+          {subs.length > 1 && (
+          <div className="sub-plan-switcher-block">
             <div
               style={{
                 fontSize: 12,
@@ -290,10 +255,11 @@ function SubscriptionContent() {
               })}
             </div>
           </div>
+          )}
 
-          <div className="sub-desktop-grid">
+          <div className="sub-desktop-layout">
           {selected && (
-            <div className="panel" style={{ marginTop: 14 }}>
+            <aside className="panel sub-plan-card">
               <div
                 style={{
                   display: "flex",
@@ -353,153 +319,29 @@ function SubscriptionContent() {
                 limitBytes={selected.data_limit_bytes}
               />
 
-              {subscriptionUrl ? (
-                <div style={{ marginTop: 16 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                      {copy.sub.linkTitle}
-                    </div>
-                    <div className="view-toggle" role="tablist" aria-label={copy.sub.viewAria}>
-                      <button
-                        type="button"
-                        role="tab"
-                        data-active={linkView === "link"}
-                        aria-selected={linkView === "link"}
-                        onClick={() => setLinkView("link")}
-                      >
-                        {copy.sub.linkTab}
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        data-active={linkView === "qr"}
-                        aria-selected={linkView === "qr"}
-                        onClick={() => setLinkView("qr")}
-                      >
-                        {copy.sub.qrTab}
-                      </button>
-                    </div>
-                  </div>
-
-                  {linkView === "link" ? (
-                    <code className="sub-url">{subscriptionUrl}</code>
-                  ) : (
-                    <div className="sub-qr-wrap">
-                      <div className="sub-qr-card">
-                        <QRCodeCanvas
-                          value={subscriptionUrl}
-                          size={196}
-                          level="M"
-                          includeMargin
-                          bgColor="#ffffff"
-                          fgColor="#0a1628"
-                          ref={qrCanvasRef}
-                        />
-                      </div>
-                      <p className="sub-qr-hint">{copy.sub.qrHint}</p>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ minWidth: 140 }}
-                        onClick={saveQr}
-                      >
-                        {qrSaved ? copy.sub.qrSaved : copy.sub.saveQr}
-                      </button>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-block"
-                    style={{ marginTop: 12 }}
-                    onClick={copyUrl}
-                  >
-                    {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
-                  </button>
-                  <div className="client-import">
-                    <div className="client-import-head">
-                      <strong>{copy.sub.importTitle}</strong>
-                      <span>{copy.sub.importNeedApp}</span>
-                    </div>
-                    <div className="client-import-grid">
-                      <a
-                        href={clashImportUrl(clashSubscriptionUrl || subscriptionUrl)}
-                        className="client-import-button"
-                      >
-                        <span className="client-import-logo client-import-logo--clash" aria-hidden>
-                          C
-                        </span>
-                        <span>
-                          <strong>{copy.sub.importClash}</strong>
-                          <small>{copy.sub.importClashHint}</small>
-                        </span>
-                      </a>
-                      <a
-                        href={shadowrocketImportUrl(
-                          shadowrocketSubscriptionUrl || subscriptionUrl,
-                        )}
-                        className="client-import-button"
-                      >
-                        <span className="client-import-logo client-import-logo--rocket" aria-hidden>
-                          S
-                        </span>
-                        <span>
-                          <strong>{copy.sub.importSr}</strong>
-                          <small>iPhone / iPad</small>
-                        </span>
-                      </a>
-                    </div>
-                    <p className="client-import-note">
-                      {copy.sub.importNote}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-block"
-                    style={{ marginTop: 10 }}
-                    onClick={() => setConfirmRefresh(true)}
-                    disabled={refreshing}
-                  >
-                    {copy.sub.refresh}
-                  </button>
-                  {refreshOk && (
-                    <p className="alert-ok" style={{ marginTop: 10 }}>
-                      {copy.sub.refreshed}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div style={{ marginTop: 14 }}>
-                  <p style={{ fontSize: 13, color: "var(--amber)", margin: 0 }}>
-                    {copy.sub.noLink}
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-block"
-                    style={{ marginTop: 10 }}
-                    onClick={() => setConfirmRefresh(true)}
-                    disabled={refreshing}
-                  >
-                    {copy.sub.refresh}
-                  </button>
-                </div>
+              {!subscriptionUrl && (
+                <p style={{ margin: "14px 0 0", fontSize: 13, color: "var(--amber)" }}>
+                  {copy.sub.noLink}
+                </p>
               )}
-            </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-block"
+                style={{ marginTop: 16 }}
+                onClick={() => setConfirmRefresh(true)}
+                disabled={refreshing}
+              >
+                {copy.sub.refresh}
+              </button>
+              {refreshOk && (
+                <p className="alert-ok" style={{ marginTop: 10 }}>
+                  {copy.sub.refreshed}
+                </p>
+              )}
+            </aside>
           )}
 
-          <section className="section sub-import-panel" style={{ paddingTop: 28 }}>
-            <h2 className="section-title" style={{ fontSize: "1.1rem" }}>
-              {copy.sub.howTitle}
-            </h2>
-            <p className="section-lead">{copy.sub.howLead}</p>
+          <section className="section sub-guide-section">
             <div className="usage-tabs" role="tablist" aria-label={copy.sub.howAria}>
               <button
                 type="button"
@@ -507,7 +349,7 @@ function SubscriptionContent() {
                 aria-selected={usageMode === "official"}
                 className="usage-tab"
                 data-active={usageMode === "official"}
-                onClick={() => selectUsageMode("official")}
+                onClick={() => setUsageMode("official")}
               >
                 {copy.sub.appTab}
               </button>
@@ -517,7 +359,7 @@ function SubscriptionContent() {
                 aria-selected={usageMode === "third-party"}
                 className="usage-tab"
                 data-active={usageMode === "third-party"}
-                onClick={() => selectUsageMode("third-party")}
+                onClick={() => setUsageMode("third-party")}
               >
                 {copy.sub.thirdTab}
               </button>
@@ -539,18 +381,7 @@ function SubscriptionContent() {
                   <Link href="/download" className="btn btn-primary usage-download-btn">
                     {copy.sub.appDownload}
                   </Link>
-                  <div className="usage-platform-links" aria-label={copy.sub.platformAria}>
-                    <Link href="/download">iOS</Link>
-                    <Link href="/download">Android</Link>
-                    <Link href="/download">Windows</Link>
-                    <Link href="/download">macOS</Link>
-                  </div>
                 </div>
-                <ol className="usage-mini-steps">
-                  <li><span>1</span>{copy.sub.appStep1}</li>
-                  <li><span>2</span>{copy.sub.appStep2}</li>
-                  <li><span>3</span>{copy.sub.appStep3}</li>
-                </ol>
                 <Link href="/guide" className="usage-card-link">
                   {copy.sub.fullGuide}
                   <span aria-hidden>→</span>
@@ -574,10 +405,47 @@ function SubscriptionContent() {
                   <li><span>4</span>{copy.sub.thirdStep4}</li>
                 </ol>
                 <p className="usage-card-note">{copy.sub.thirdNote}</p>
-                <Link href="/download" className="usage-card-link">
-                  {copy.sub.alsoApp}
-                  <span aria-hidden>→</span>
-                </Link>
+                {subscriptionUrl ? (
+                  <>
+                    <p className="client-copy-label">{copy.sub.clientCopyTitle}</p>
+                    <div
+                      className="client-copy-grid"
+                      role="group"
+                      aria-label={copy.sub.clientCopyTitle}
+                    >
+                      {THIRD_PARTY_CLIENTS.map(({ key, label }) => {
+                        const justCopied = copiedClient === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className="client-copy-btn"
+                            data-copied={justCopied}
+                            onClick={() => void copyClientUrl(key)}
+                          >
+                            <strong>{label}</strong>
+                            <span>{justCopied ? copy.sub.copiedShort : copy.sub.copyShort}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <code className="sub-url client-copy-generic-url">
+                      {subscriptionUrl}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      style={{ marginTop: 10 }}
+                      onClick={() => void copyUrl()}
+                    >
+                      {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
+                    </button>
+                  </>
+                ) : (
+                  <p style={{ margin: "14px 0 0", fontSize: 13, color: "var(--amber)" }}>
+                    {copy.sub.noLink}
+                  </p>
+                )}
               </article>
               )}
             </div>
@@ -617,6 +485,7 @@ function SubscriptionContent() {
         </div>
       )}
 
+      </div>
     </Shell>
   );
 }

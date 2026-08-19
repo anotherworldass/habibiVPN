@@ -10,12 +10,15 @@ import { getToken } from "../../../lib/auth";
 import { friendlyError } from "../../../lib/errors";
 import { useLocale } from "../../../components/LocaleProvider";
 import { t } from "../../../lib/copy";
+import { pickSiteCopy } from "../../../lib/locale";
 
 type Plan = {
   id: string;
   code: string;
   name: string;
   description?: string | null;
+  name_i18n?: Record<string, string>;
+  description_i18n?: Record<string, string>;
   price_cents: number;
   currency: string;
   validity_seconds?: number | null;
@@ -58,7 +61,8 @@ function formatTraffic(bytes: number | null | undefined, unlimited: string) {
 }
 
 export default function CheckoutPage() {
-  const copy = t(useLocale());
+  const locale = useLocale();
+  const copy = t(locale);
   const params = useParams<{ planId: string }>();
   const router = useLocaleRouter();
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -74,7 +78,7 @@ export default function CheckoutPage() {
       return;
     }
     Promise.all([
-      apiFetch<{ plans: Plan[] }>("/api/v1/plans"),
+      apiFetch<{ plans: Plan[] }>(`/api/v1/plans?locale=${encodeURIComponent(locale)}`),
       apiFetch<{ channels: PaymentChannel[] }>(
         `/api/v1/payment-channels?plan_id=${encodeURIComponent(params.planId)}`,
       ),
@@ -85,13 +89,19 @@ export default function CheckoutPage() {
         );
         if (!current) throw new Error("plan.not_found");
         const available = channelResult.channels || [];
-        setPlan(current);
+        setPlan({
+          ...current,
+          name: pickSiteCopy(current.name_i18n, locale, current.name),
+          description:
+            pickSiteCopy(current.description_i18n, locale, current.description ?? "") ||
+            null,
+        });
         setChannels(available);
         setSelectedChannelId(available[0]?.id || "");
       })
       .catch((reason) => setError(friendlyError(reason, copy.checkout.loadFailed)))
       .finally(() => setLoading(false));
-  }, [params.planId, router]);
+  }, [params.planId, router, locale, copy.checkout.loadFailed]);
 
   async function submitOrder() {
     if (!plan || !selectedChannelId) return;

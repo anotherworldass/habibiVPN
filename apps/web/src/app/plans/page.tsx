@@ -5,6 +5,7 @@ import Link from "../../components/LocaleLink";
 import { useLocale } from "../../components/LocaleProvider";
 import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { t } from "../../lib/copy";
+import { pickSiteCopy } from "../../lib/locale";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
@@ -16,6 +17,8 @@ type Plan = {
   code: string;
   name: string;
   description?: string | null;
+  name_i18n?: Record<string, string>;
+  description_i18n?: Record<string, string>;
   price_cents: number;
   currency: string;
   validity_seconds?: number | null;
@@ -29,6 +32,7 @@ type PlanGroup = {
   id: string;
   code: string;
   name: string;
+  name_i18n?: Record<string, string>;
   sort_order?: number;
 };
 
@@ -260,7 +264,8 @@ function PaidPlanCards({
 }
 
 function PlansContent() {
-  const messages = t(useLocale());
+  const locale = useLocale();
+  const messages = t(locale);
   const plansCopy = messages.plans;
   const router = useLocaleRouter();
   const search = useSearchParams();
@@ -276,18 +281,24 @@ function PlansContent() {
   useEffect(() => {
     setLoggedIn(!!getToken());
     setLoading(true);
-    apiFetch<{ plans: Plan[]; groups?: PlanGroup[] }>("/api/v1/plans?client=h5")
+    apiFetch<{ plans: Plan[]; groups?: PlanGroup[] }>(
+      `/api/v1/plans?client=h5&locale=${encodeURIComponent(locale)}`,
+    )
       .then((res) => {
         const list = res.plans || [];
         const gs = res.groups || [];
         setPlans(list);
         setGroups(gs);
         const visible = gs.filter((g) => list.some((p) => p.group_id === g.id));
-        if (visible.length) setActiveGroup(visible[0]!.id);
+        setActiveGroup((prev) =>
+          prev && visible.some((g) => g.id === prev)
+            ? prev
+            : visible[0]?.id || (list.some((p) => !p.group_id) ? "__ungrouped__" : ""),
+        );
       })
       .catch((e) => setError(friendlyError(e, messages.common.loadFailed)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [locale, messages.common.loadFailed]);
 
   async function claim(planId: string) {
     if (!getToken()) {
@@ -334,12 +345,25 @@ function PlansContent() {
     return plans.filter((p) => p.group_id === activeGroup);
   }, [showGroups, plans, activeGroup, ungrouped]);
 
-  const freePlans = displayPlans.filter((p) => p.is_free_claimable);
-  const paidPlans = displayPlans.filter((p) => !p.is_free_claimable);
+  const localizedDisplay = useMemo(
+    () =>
+      displayPlans.map((p) => ({
+        ...p,
+        name: pickSiteCopy(p.name_i18n, locale, p.name),
+        description:
+          pickSiteCopy(p.description_i18n, locale, p.description ?? "") || null,
+      })),
+    [displayPlans, locale],
+  );
+  const freePlans = localizedDisplay.filter((p) => p.is_free_claimable);
+  const paidPlans = localizedDisplay.filter((p) => !p.is_free_claimable);
 
   const tabItems = showGroups
     ? [
-        ...visibleGroups.map((g) => ({ id: g.id, name: g.name })),
+        ...visibleGroups.map((g) => ({
+          id: g.id,
+          name: pickSiteCopy(g.name_i18n, locale, g.name),
+        })),
         ...(ungrouped.length
           ? [{ id: "__ungrouped__", name: plansCopy.other }]
           : []),

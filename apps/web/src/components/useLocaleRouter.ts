@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { localePath } from "../lib/locale";
 import { useLocale } from "./LocaleProvider";
 
@@ -19,5 +19,5 @@ export function useLocaleRouter() {
     [locale, router],
   );
 
-  return { push, replace };
+  return useMemo(() => ({ push, replace }), [push, replace]);
 }
