@@ -4,7 +4,9 @@ export const site = {
   slogan: "随时连上，快速访问",
   supportEmail:
     process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@tizi.work",
-  supportTelegram: process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM || "",
+  supportTelegram:
+    process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM || "https://t.me/titivpn_app_bot",
+  twitterUrl: process.env.NEXT_PUBLIC_TWITTER_URL || "https://x.com/titivpn_com",
   website: process.env.NEXT_PUBLIC_WEBSITE_URL || "",
   /** App downloads — placeholder until store / installer URLs are ready */
   appStoreUrl: process.env.NEXT_PUBLIC_APP_STORE_URL || "#",
