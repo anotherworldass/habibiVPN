@@ -241,9 +241,12 @@ function formatShortSecondsLabel(sec: number): string {
   return `${sec} 秒（自定义）`;
 }
 
-/** Select value: `d:30` = fixed days, `s:3600` = fixed seconds, `m:12` = calendar months */
+const VALIDITY_PRESET_LIFETIME = "lifetime";
+
+/** Select value: `lifetime` | `d:30` = fixed days, `s:3600` = fixed seconds, `m:12` = calendar months */
 function secondsToValidityPreset(sec: number): string | undefined {
-  if (!Number.isFinite(sec) || sec <= 0) return undefined;
+  if (!Number.isFinite(sec) || sec < 0) return undefined;
+  if (sec === 0) return VALIDITY_PRESET_LIFETIME;
   if (sec % 86400 === 0) return `d:${sec / 86400}`;
   return `s:${sec}`;
 }
@@ -281,6 +284,10 @@ function buildValidityPresetOptions(
     .map(([seconds, label]) => ({ value: `s:${seconds}`, label }));
 
   return [
+    {
+      label: "不限时",
+      options: [{ value: VALIDITY_PRESET_LIFETIME, label: "永久" }],
+    },
     {
       label: "自然月 / 年（开通按日历同日到期，推荐年卡）",
       options: monthOpts,
@@ -400,7 +407,7 @@ type PlanTransferJson = {
   priceCents?: number;
   currency?: string;
   upstreamPlanRef?: string | null;
-  /** `d:30` | `s:3600` | `m:12` */
+  /** `lifetime` | `d:30` | `s:3600` | `m:12` */
   validityPreset?: string | null;
   validityCalendarMonths?: number | null;
   validitySeconds?: number | null;
@@ -495,7 +502,7 @@ function transferJsonToFormValues(
     typeof data.validityPreset === "string" ? data.validityPreset : undefined;
   if (!validityPreset && data.validityCalendarMonths) {
     validityPreset = `m:${Number(data.validityCalendarMonths)}`;
-  } else if (!validityPreset && data.validitySeconds) {
+  } else if (!validityPreset && data.validitySeconds != null) {
     validityPreset = secondsToValidityPreset(Number(data.validitySeconds));
   }
 
@@ -660,6 +667,7 @@ function formatBytes(n?: number | null) {
 
 function formatDuration(sec?: number | null) {
   if (sec == null) return "-";
+  if (sec === 0) return "永久";
   if (sec % 86400 === 0) return `${sec / 86400} 天`;
   if (sec % 3600 === 0) return `${sec / 3600} 小时`;
   return `${sec} 秒`;
@@ -1232,10 +1240,10 @@ export default function SellPlansPage() {
         name="validityPreset"
         label="开通时长（可选）"
         options={validityPresetOptions}
-        placeholder="自然月/年 或 固定时长"
+        placeholder="永久 / 自然月/年 / 固定时长"
         allowClear
         showSearch
-        tooltip="自然月/年：开通按日历同日算到期（3/15 买 12 自然月 → 次年 3/15）。固定时长：分钟/小时/天按秒数累加。本地开通时长优先于「映射上游套餐」的时长。年卡+每月清空请选自然年 + 流量重置「每月」。"
+        tooltip="永久：开户不限到期时间。自然月/年：开通按日历同日算到期（3/15 买 12 自然月 → 次年 3/15）。固定时长：分钟/小时/天按秒数累加。本地开通时长优先于「映射上游套餐」的时长。年卡+每月清空请选自然年 + 流量重置「每月」。"
         extra="未填开通时长且未映射上游时，开户会默认只给 1 天。年卡月流量：自然年 + 每月清空（勿用自定义 720h）。"
         fieldProps={{
           optionFilterProp: "label",
@@ -1475,7 +1483,10 @@ export default function SellPlansPage() {
       storeProducts,
     };
     const preset = String(values.validityPreset || "").trim();
-    if (preset.startsWith("m:")) {
+    if (preset === VALIDITY_PRESET_LIFETIME) {
+      body.validitySeconds = 0;
+      body.validityCalendarMonths = null;
+    } else if (preset.startsWith("m:")) {
       const months = Number(preset.slice(2));
       body.validityCalendarMonths =
         Number.isInteger(months) && months > 0 ? months : null;
@@ -1524,7 +1535,7 @@ export default function SellPlansPage() {
       ...valuesFromI18n(p),
       validityPreset: p.validityCalendarMonths
         ? `m:${p.validityCalendarMonths}`
-        : p.validitySeconds
+        : p.validitySeconds != null
           ? secondsToValidityPreset(p.validitySeconds)
           : undefined,
       billingPeriodDays: p.billingPeriodSeconds

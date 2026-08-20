@@ -60,6 +60,7 @@ function money(cents: number, currency: string) {
 
 function formatDays(sec?: number | null) {
   if (sec == null) return "—";
+  if (sec === 0) return "永久";
   if (sec % 86400 === 0) return `${sec / 86400} 天`;
   if (sec % 3600 === 0) return `${sec / 3600} 小时`;
   return `${sec} 秒`;

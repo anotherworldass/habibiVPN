@@ -49,7 +49,13 @@ function methodLabel(method: string, labels: { wechat: string; alipay: string; o
   return labels.online;
 }
 
-function formatDays(seconds: number | null | undefined, days: (n: number) => string) {
+function formatDays(
+  seconds: number | null | undefined,
+  days: (n: number) => string,
+  lifetime: string,
+) {
+  if (seconds == null) return null;
+  if (seconds === 0) return lifetime;
   if (!seconds) return null;
   return seconds % 86400 === 0 ? days(seconds / 86400) : null;
 }
@@ -160,7 +166,11 @@ export default function CheckoutPage() {
               <h2>{plan.name}</h2>
               {(() => {
                 const meta = [
-                  formatDays(plan.validity_seconds, copy.checkout.days),
+                  formatDays(
+                    plan.validity_seconds,
+                    copy.checkout.days,
+                    copy.checkout.lifetime,
+                  ),
                   formatTraffic(plan.data_limit_bytes, copy.checkout.unlimited),
                 ]
                   .filter(Boolean)

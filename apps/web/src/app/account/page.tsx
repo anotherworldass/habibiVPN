@@ -11,7 +11,7 @@ import { friendlyError } from "../../lib/errors";
 import { useLocale } from "../../components/LocaleProvider";
 import {
   fetchPublicInviteCampaign,
-  inviteCampaignSummary,
+  inviteCampaignTeaser,
   type InviteCampaignPublic,
 } from "../../lib/campaigns";
 import { t } from "../../lib/copy";
@@ -107,7 +107,7 @@ export default function AccountPage() {
                         {activity.ui?.title?.trim() || copy.activity.fallbackTitle}
                       </div>
                       <div className="promo-entry-desc">
-                        {inviteCampaignSummary(copy.activity, activity)}
+                        {inviteCampaignTeaser(copy.activity, activity)}
                       </div>
                     </div>
                     <span className="account-chevron" aria-hidden>

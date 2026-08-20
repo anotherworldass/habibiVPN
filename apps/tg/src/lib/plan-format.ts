@@ -101,6 +101,7 @@ export function formatResetAt(iso?: string | null): string | null {
 
 export function formatDays(sec?: number | null): string | null {
   if (sec == null) return null;
+  if (sec === 0) return "永久";
   if (sec % 86400 === 0) return `${sec / 86400} 天`;
   if (sec % 3600 === 0) return `${sec / 3600} 小时`;
   return null;

@@ -57,8 +57,10 @@ function formatDays(
   sec: number | null | undefined,
   days: string,
   hours: string,
+  lifetime: string,
 ): { value: string; unit: string } | null {
   if (sec == null) return null;
+  if (sec === 0) return { value: lifetime, unit: "" };
   if (sec % 86400 === 0) return { value: String(sec / 86400), unit: days };
   if (sec % 3600 === 0) return { value: String(sec / 3600), unit: hours };
   return null;
@@ -83,7 +85,7 @@ function PlanSpecs({
           {durationLabel}{" "}
           <strong>
             {days.value}
-            <small>{days.unit}</small>
+            {days.unit ? <small>{days.unit}</small> : null}
           </strong>
         </span>
       ) : null}
@@ -132,6 +134,7 @@ function FreePlanCards({
             p.validity_seconds,
             messages.common.days,
             messages.common.hours,
+            messages.common.lifetime,
           );
           return (
             <article key={p.id} className="plan-card plan-card--free">
@@ -215,6 +218,7 @@ function PaidPlanCards({
             p.validity_seconds,
             messages.common.days,
             messages.common.hours,
+            messages.common.lifetime,
           );
           const dailyPrice =
             p.validity_seconds && p.validity_seconds > 0

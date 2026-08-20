@@ -67,7 +67,8 @@ const planBody = z.object({
   priceCents: z.number().int().min(0),
   currency: z.string().min(1).max(8).default("USD"),
   upstreamPlanRef: z.string().max(128).optional().nullable(),
-  validitySeconds: z.number().int().positive().optional().nullable(),
+  /** Relative seconds; 0 = lifetime (WireRaw unlimited). Mutually exclusive with calendar months. */
+  validitySeconds: z.number().int().min(0).optional().nullable(),
   /** Calendar months for expire_at; mutually exclusive with validitySeconds */
   validityCalendarMonths: z.number().int().positive().max(120).optional().nullable(),
   /** Catalog billing cycle (seconds); not used for WireRaw provision */
@@ -144,6 +145,9 @@ function resolveValidityFields(data: {
       validityCalendarMonths: data.validityCalendarMonths,
       validitySeconds: null,
     };
+  }
+  if (data.validitySeconds === 0) {
+    return { validityCalendarMonths: null, validitySeconds: 0 };
   }
   return {
     validityCalendarMonths: null,

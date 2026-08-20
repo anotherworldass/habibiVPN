@@ -580,6 +580,8 @@ export function resolveExpireAtIso(
     return null;
   }
   if (input.expireAt) return new Date(input.expireAt).toISOString();
+  // 0 = lifetime (WireRaw validity_seconds unlimited); no absolute expire_at
+  if (input.validitySeconds === 0) return null;
   if (input.validitySeconds) {
     const base = resolveProvisionBase(opts?.baseExpiresAt);
     return new Date(base.getTime() + input.validitySeconds * 1000).toISOString();
@@ -590,6 +592,7 @@ export function resolveExpireAtIso(
       plan.validityCalendarMonths,
     ).toISOString();
   }
+  if (plan?.validitySeconds === 0) return null;
   if (plan?.validitySeconds != null && plan.validitySeconds > 0) {
     const base = resolveProvisionBase(opts?.baseExpiresAt);
     return new Date(base.getTime() + plan.validitySeconds * 1000).toISOString();
@@ -620,7 +623,7 @@ function buildPlanBody(
 ) {
   const body: Record<string, unknown> = {};
   // Duration priority:
-  // 1) keepExpiresAt / explicit expireAt / validitySeconds
+  // 1) keepExpiresAt / explicit expireAt / validitySeconds (>0 expire_at, 0 = lifetime)
   // 2) local plan calendar months / fixed seconds (both stack on renew via expire_at)
   // 3) upstream next_plan_ref
   // 4) fallback 1 day
@@ -632,8 +635,10 @@ function buildPlanBody(
     else if (input.upstreamPlanRef) body.next_plan_ref = input.upstreamPlanRef;
   } else if (input.expireAt) {
     body.expire_at = expireAt;
-  } else if (input.validitySeconds) {
+  } else if (input.validitySeconds != null && input.validitySeconds > 0) {
     body.expire_at = expireAt;
+  } else if (input.validitySeconds === 0) {
+    body.validity_seconds = 0;
   } else if (
     plan?.validityCalendarMonths != null &&
     plan.validityCalendarMonths > 0
@@ -641,6 +646,8 @@ function buildPlanBody(
     body.expire_at = expireAt;
   } else if (plan?.validitySeconds != null && plan.validitySeconds > 0) {
     body.expire_at = expireAt;
+  } else if (plan?.validitySeconds === 0) {
+    body.validity_seconds = 0;
   } else if (plan?.upstreamPlanRef) {
     body.next_plan_ref = plan.upstreamPlanRef;
   } else if (input.upstreamPlanRef) {
@@ -1294,10 +1301,10 @@ export async function previewUpstreamSlotUpdate(input: {
   }
   if (
     !keepExpiresAt &&
-    !input.validitySeconds &&
+    input.validitySeconds == null &&
     !input.expireAt &&
     plan &&
-    !plan.validitySeconds &&
+    plan.validitySeconds == null &&
     !plan.validityCalendarMonths &&
     (plan.upstreamPlanRef || input.upstreamPlanRef)
   ) {

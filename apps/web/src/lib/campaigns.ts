@@ -8,6 +8,7 @@ export type CampaignPlanBrief = {
 
 export type CampaignUi = {
   title?: string | null;
+  teaser?: string | null;
   subtitle?: string | null;
   button_text?: string | null;
 };
@@ -80,6 +81,14 @@ export function inviteCampaignSummary(
   if (milestone) return copy.summaryMilestone(n, milestone);
   if (per) return copy.summaryPerInvite(per);
   return campaign.ui?.subtitle?.trim() || copy.fallbackLead;
+}
+
+/** Homepage / account entry line. Prefer campaign teaser copy. */
+export function inviteCampaignTeaser(
+  copy: ReturnType<typeof t>["activity"],
+  campaign: Parameters<typeof inviteCampaignSummary>[1],
+): string {
+  return campaign.ui?.teaser?.trim() || inviteCampaignSummary(copy, campaign);
 }
 
 export async function fetchPublicInviteCampaign(): Promise<InviteCampaignPublic | null> {

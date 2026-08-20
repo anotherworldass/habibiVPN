@@ -8,7 +8,7 @@ import Shell from "../components/Shell";
 import { getToken } from "../lib/auth";
 import {
   fetchPublicInviteCampaign,
-  inviteCampaignSummary,
+  inviteCampaignTeaser,
   type InviteCampaignPublic,
 } from "../lib/campaigns";
 import { t } from "../lib/copy";
@@ -157,7 +157,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h3>{activity.ui?.title?.trim() || all.activity.fallbackTitle}</h3>
-                  <p>{inviteCampaignSummary(all.activity, activity)}</p>
+                  <p>{inviteCampaignTeaser(all.activity, activity)}</p>
                 </div>
               </Link>
             ) : null}

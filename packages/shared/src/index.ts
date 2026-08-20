@@ -136,7 +136,7 @@ export type PlanView = {
   currency: string;
   /** Upstream WireRaw customer plan code, if mapped */
   upstream_plan_ref?: string | null;
-  /** Entitlement grant seconds for provision */
+  /** Entitlement grant seconds for provision; `0` = lifetime (unlimited) */
   validity_seconds?: number | null;
   /**
    * Calendar months for provision expire_at (same day-of-month; mutually exclusive

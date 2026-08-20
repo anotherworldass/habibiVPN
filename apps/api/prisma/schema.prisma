@@ -1324,7 +1324,8 @@ model Plan {
   priceCents       Int             @map("price_cents")
   currency         String          @default("USD")
   upstreamPlanRef  String?         @map("upstream_plan_ref")
-  /// Entitlement grant duration for WireRaw provision (relative seconds)
+  /// Entitlement grant duration for WireRaw provision (relative seconds).
+  /// 0 = lifetime (unlimited); null = unset (fallback 1 day unless upstream mapped).
   validitySeconds  Int?            @map("validity_seconds")
   /// Calendar months for provision expire_at (mutually exclusive with validitySeconds).
   /// e.g. 12 = same day next year; handles month-end (Jan 31 → Feb 28/29).

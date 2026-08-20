@@ -296,6 +296,7 @@ const zh = {
     copied: "已复制",
     navAria: "主导航",
     unlimited: "不限",
+    lifetime: "永久",
     traffic: "流量",
     days: "天",
     hours: "小时",
@@ -442,6 +443,7 @@ const zh = {
     alipay: "支付宝",
     online: "在线支付",
     unlimited: "不限流量",
+    lifetime: "永久",
     days: (n: number) => `${n} 天`,
   },
   payment: {
@@ -1093,6 +1095,7 @@ const en = {
     copied: "Copied",
     navAria: "Main navigation",
     unlimited: "Unlimited",
+    lifetime: "Lifetime",
     traffic: "data",
     days: "days",
     hours: "hours",
@@ -1239,6 +1242,7 @@ const en = {
     alipay: "Alipay",
     online: "Online payment",
     unlimited: "Unlimited data",
+    lifetime: "Lifetime",
     days: (n: number) => `${n} days`,
   },
   payment: {

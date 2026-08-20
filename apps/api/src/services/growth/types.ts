@@ -119,9 +119,11 @@ export function normalizeInviteFromRules(
 export type CampaignUi = {
   /** Resolved display strings (legacy + zh convenience) */
   title?: string;
+  teaser?: string;
   subtitle?: string;
   button_text?: string;
   title_i18n?: AppCopyI18n;
+  teaser_i18n?: AppCopyI18n;
   subtitle_i18n?: AppCopyI18n;
   button_text_i18n?: AppCopyI18n;
   [key: string]: unknown;
@@ -164,6 +166,7 @@ export function normalizeCampaignUi(
 ): CampaignUi {
   const ui = asUi(raw);
   let titleI18n = normalizeAppCopyI18n(ui.title_i18n, 200);
+  let teaserI18n = normalizeAppCopyI18n(ui.teaser_i18n, 200);
   let subtitleI18n = normalizeAppCopyI18n(ui.subtitle_i18n, 500);
   let buttonI18n = normalizeAppCopyI18n(
     ui.button_text_i18n ?? ui.buttonText_i18n,
@@ -171,6 +174,7 @@ export function normalizeCampaignUi(
   );
 
   titleI18n = migrateFlatToI18n(titleI18n, ui.title);
+  teaserI18n = migrateFlatToI18n(teaserI18n, ui.teaser);
   subtitleI18n = migrateFlatToI18n(subtitleI18n, ui.subtitle);
   buttonI18n = migrateFlatToI18n(
     buttonI18n,
@@ -186,6 +190,10 @@ export function normalizeCampaignUi(
     pickAppCopy(titleI18n, "en").text ||
     fallbackTitle?.trim() ||
     undefined;
+  const teaser =
+    pickAppCopy(teaserI18n, "zh").text ||
+    pickAppCopy(teaserI18n, "en").text ||
+    undefined;
   const subtitle =
     pickAppCopy(subtitleI18n, "zh").text ||
     pickAppCopy(subtitleI18n, "en").text ||
@@ -197,9 +205,11 @@ export function normalizeCampaignUi(
 
   return {
     ...(title ? { title } : {}),
+    ...(teaser ? { teaser } : {}),
     ...(subtitle ? { subtitle } : {}),
     ...(buttonText ? { button_text: buttonText } : {}),
     title_i18n: titleI18n,
+    teaser_i18n: teaserI18n,
     subtitle_i18n: subtitleI18n,
     button_text_i18n: buttonI18n,
   };
@@ -211,21 +221,26 @@ export function resolveCampaignUiPublic(
   locale: string | null | undefined,
 ): {
   title: string | null;
+  teaser: string | null;
   subtitle: string | null;
   button_text: string | null;
   title_i18n: Record<string, string>;
+  teaser_i18n: Record<string, string>;
   subtitle_i18n: Record<string, string>;
   button_text_i18n: Record<string, string>;
 } {
   const normalized = normalizeCampaignUi(raw);
   const titleI18n = normalizeAppCopyI18n(normalized.title_i18n, 200);
+  const teaserI18n = normalizeAppCopyI18n(normalized.teaser_i18n, 200);
   const subtitleI18n = normalizeAppCopyI18n(normalized.subtitle_i18n, 500);
   const buttonI18n = normalizeAppCopyI18n(normalized.button_text_i18n, 80);
   return {
     title: pickAppCopy(titleI18n, locale).text,
+    teaser: pickAppCopy(teaserI18n, locale).text,
     subtitle: pickAppCopy(subtitleI18n, locale).text,
     button_text: pickAppCopy(buttonI18n, locale).text,
     title_i18n: titleI18n,
+    teaser_i18n: teaserI18n,
     subtitle_i18n: subtitleI18n,
     button_text_i18n: buttonI18n,
   };

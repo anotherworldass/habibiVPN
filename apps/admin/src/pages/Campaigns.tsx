@@ -12,9 +12,9 @@ import {
   ProFormTextArea,
   ProTable,
 } from "@ant-design/pro-components";
-import { Button, Drawer, Divider, Space, Tag } from "antd";
+import { Alert, Button, Collapse, Drawer, Divider, Form, Input, Space, Tag } from "antd";
 import { message } from "../lib/antd-message";
-import { PlusOutlined } from "@ant-design/icons";
+import { CopyOutlined, PlusOutlined } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
 import AppCopyI18nFields from "../components/AppCopyI18nFields";
 import {
@@ -24,7 +24,7 @@ import {
 
 function i18nFromValues(
   values: Record<string, unknown>,
-  field: "title" | "subtitle" | "button",
+  field: "title" | "teaser" | "subtitle" | "button",
 ): Record<string, string> {
   return formValuesToI18n(values, field, "sparse");
 }
@@ -32,18 +32,23 @@ function i18nFromValues(
 function uiFormFieldsFromCampaign(ui?: Record<string, unknown> | null) {
   const titleI18n =
     (ui?.title_i18n as Record<string, string> | undefined) || {};
+  const teaserI18n =
+    (ui?.teaser_i18n as Record<string, string> | undefined) || {};
   const subtitleI18n =
     (ui?.subtitle_i18n as Record<string, string> | undefined) || {};
   const buttonI18n =
     (ui?.button_text_i18n as Record<string, string> | undefined) || {};
   const legacyTitle =
     typeof ui?.title === "string" ? ui.title : "";
+  const legacyTeaser =
+    typeof ui?.teaser === "string" ? ui.teaser : "";
   const legacySubtitle =
     typeof ui?.subtitle === "string" ? ui.subtitle : "";
   const legacyButton =
     typeof ui?.button_text === "string" ? ui.button_text : "";
   return {
     ...i18nToFormValues("title", titleI18n, legacyTitle),
+    ...i18nToFormValues("teaser", teaserI18n, legacyTeaser),
     ...i18nToFormValues("subtitle", subtitleI18n, legacySubtitle),
     ...i18nToFormValues("button", buttonI18n, legacyButton),
   };
@@ -161,6 +166,352 @@ function hoursFromSeconds(sec?: number | null) {
 function toFormTime(iso?: string | null) {
   if (!iso) return undefined;
   return iso.slice(0, 19).replace("T", " ");
+}
+
+function formTimeToExport(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (
+    typeof v === "object" &&
+    v &&
+    typeof (v as { toISOString?: () => string }).toISOString === "function"
+  ) {
+    return (v as { toISOString: () => string }).toISOString();
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+    const d = new Date(s.replace(" ", "T"));
+    return Number.isNaN(d.getTime()) ? s : d.toISOString();
+  }
+  return s;
+}
+
+function exportTimeToForm(v: unknown): string | undefined {
+  if (v == null || v === "") return undefined;
+  const s = String(v).trim();
+  if (!s) return undefined;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s) && !s.includes("T")) {
+    return s.slice(0, 19);
+  }
+  return s.slice(0, 19).replace("T", " ");
+}
+
+function optionalNumber(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function pickI18n(
+  data: Record<string, unknown>,
+  camel: string,
+  snake: string,
+): Record<string, string> {
+  return (
+    (data[camel] as Record<string, string> | undefined) ||
+    (data[snake] as Record<string, string> | undefined) ||
+    {}
+  );
+}
+
+/** Portable campaign config for cross-env copy (no DB ids). */
+const CAMPAIGN_TRANSFER_VERSION = 1;
+
+type CampaignPackageRef = { packageName: string; client: string };
+
+type CampaignTransferJson = {
+  version: number;
+  code?: string;
+  name?: string;
+  type?: "daily_claim" | "lottery" | "invite_milestone";
+  status?: "draft" | "active" | "paused" | "ended";
+  startAt?: string | null;
+  endAt?: string | null;
+  timezone?: string;
+  sortOrder?: number;
+  remark?: string | null;
+  titleI18n?: Record<string, string>;
+  teaserI18n?: Record<string, string>;
+  subtitleI18n?: Record<string, string>;
+  buttonI18n?: Record<string, string>;
+  clients?: string[];
+  packages?: CampaignPackageRef[];
+  unpaidOnly?: boolean;
+  minRegisterDays?: number | null;
+  maxRegisterDays?: number | null;
+  requireNoActiveSubscription?: boolean;
+  requireExpiredOrNone?: boolean;
+  requireActiveSubscription?: boolean;
+  audiencePlanCodes?: string[];
+  rewardHours?: number;
+  winRatePercent?: number;
+  maxWinsPerDayGlobal?: number | null;
+  limitPerUserPerDay?: number;
+  limitPerUserTotal?: number | null;
+  stackMode?: string;
+  inviteRequiredCount?: number;
+  inviteGrantMode?: "auto" | "claim";
+  rewardPlanCode?: string | null;
+  invitePerInvitePlanCode?: string | null;
+  inviteReqPaid?: boolean;
+  inviteReqSubscription?: boolean;
+  inviteReqTraffic?: boolean;
+  inviteMinTrafficBytes?: number | null;
+};
+
+function formValuesToTransferJson(
+  values: Record<string, unknown>,
+  plans: MetaPlan[],
+  packages: MetaPackage[],
+): CampaignTransferJson {
+  const planCode = (id: unknown) => {
+    if (id == null || id === "") return null;
+    return plans.find((p) => p.id === String(id))?.code ?? null;
+  };
+  const selectedIds = Array.isArray(values.packageIds)
+    ? (values.packageIds as string[])
+    : [];
+  return {
+    version: CAMPAIGN_TRANSFER_VERSION,
+    code: values.code ? String(values.code) : undefined,
+    name: values.name ? String(values.name) : undefined,
+    type: values.type as CampaignTransferJson["type"],
+    status: values.status as CampaignTransferJson["status"],
+    startAt: formTimeToExport(values.startAt),
+    endAt: formTimeToExport(values.endAt),
+    timezone: String(values.timezone || "Asia/Shanghai"),
+    sortOrder: Number(values.sortOrder ?? 0),
+    remark: values.remark ? String(values.remark) : null,
+    titleI18n: i18nFromValues(values, "title"),
+    teaserI18n: i18nFromValues(values, "teaser"),
+    subtitleI18n: i18nFromValues(values, "subtitle"),
+    buttonI18n: i18nFromValues(values, "button"),
+    clients: Array.isArray(values.clients) ? (values.clients as string[]) : [],
+    packages: selectedIds
+      .map((id) => packages.find((p) => p.id === id))
+      .filter((p): p is MetaPackage => !!p)
+      .map((p) => ({ packageName: p.packageName, client: p.client })),
+    unpaidOnly: !!values.unpaidOnly,
+    minRegisterDays: optionalNumber(values.minRegisterDays) ?? null,
+    maxRegisterDays: optionalNumber(values.maxRegisterDays) ?? null,
+    requireNoActiveSubscription: !!values.requireNoActiveSubscription,
+    requireExpiredOrNone: !!values.requireExpiredOrNone,
+    requireActiveSubscription: !!values.requireActiveSubscription,
+    audiencePlanCodes: (Array.isArray(values.audiencePlanIds)
+      ? (values.audiencePlanIds as string[])
+      : []
+    )
+      .map((id) => plans.find((p) => p.id === id)?.code)
+      .filter((c): c is string => !!c),
+    rewardHours: optionalNumber(values.rewardHours),
+    winRatePercent: optionalNumber(values.winRatePercent),
+    maxWinsPerDayGlobal: optionalNumber(values.maxWinsPerDayGlobal) ?? null,
+    limitPerUserPerDay: optionalNumber(values.limitPerUserPerDay),
+    limitPerUserTotal: optionalNumber(values.limitPerUserTotal) ?? null,
+    stackMode: values.stackMode ? String(values.stackMode) : undefined,
+    inviteRequiredCount: optionalNumber(values.inviteRequiredCount),
+    inviteGrantMode:
+      values.inviteGrantMode === "claim" ? "claim" : "auto",
+    rewardPlanCode: planCode(values.rewardPlanId),
+    invitePerInvitePlanCode: planCode(values.invitePerInvitePlanId),
+    inviteReqPaid: !!values.inviteReqPaid,
+    inviteReqSubscription: !!values.inviteReqSubscription,
+    inviteReqTraffic: !!values.inviteReqTraffic,
+    inviteMinTrafficBytes: optionalNumber(values.inviteMinTrafficBytes) ?? null,
+  };
+}
+
+function transferJsonToFormValues(
+  raw: unknown,
+  plans: MetaPlan[],
+  packages: MetaPackage[],
+  options?: { lockCode?: boolean },
+): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("JSON 必须是对象");
+  }
+  const data = raw as CampaignTransferJson & Record<string, unknown>;
+  const warnings: string[] = [];
+
+  const resolvePlanId = (code: unknown) => {
+    if (code == null || code === "") return undefined;
+    const row = plans.find((p) => p.code === String(code));
+    if (!row) {
+      warnings.push(`目标环境没有套餐 code=${code}`);
+      return undefined;
+    }
+    return row.id;
+  };
+
+  const audienceCodes = Array.isArray(data.audiencePlanCodes)
+    ? data.audiencePlanCodes.map(String)
+    : [];
+  const audiencePlanIds: string[] = [];
+  for (const code of audienceCodes) {
+    const id = resolvePlanId(code);
+    if (id) audiencePlanIds.push(id);
+  }
+
+  const packageRefs = Array.isArray(data.packages) ? data.packages : [];
+  const packageIds: string[] = [];
+  for (const ref of packageRefs) {
+    if (!ref || typeof ref !== "object") continue;
+    const packageName = String(
+      (ref as CampaignPackageRef).packageName || "",
+    ).trim();
+    const client = String((ref as CampaignPackageRef).client || "").trim();
+    const row = packages.find(
+      (p) => p.packageName === packageName && p.client === client,
+    );
+    if (!row) {
+      warnings.push(
+        `目标环境没有马甲包 ${packageName || "?"} (${client || "?"})`,
+      );
+      continue;
+    }
+    packageIds.push(row.id);
+  }
+
+  const fields: Record<string, unknown> = {
+    name: data.name,
+    type: data.type || "daily_claim",
+    status: data.status || "draft",
+    startAt: exportTimeToForm(data.startAt),
+    endAt: exportTimeToForm(data.endAt),
+    timezone: data.timezone || "Asia/Shanghai",
+    sortOrder: data.sortOrder ?? 0,
+    remark: data.remark ?? undefined,
+    clients: Array.isArray(data.clients) ? data.clients : [],
+    packageIds,
+    unpaidOnly: !!data.unpaidOnly,
+    minRegisterDays: optionalNumber(data.minRegisterDays),
+    maxRegisterDays: optionalNumber(data.maxRegisterDays),
+    requireNoActiveSubscription: !!data.requireNoActiveSubscription,
+    requireExpiredOrNone: !!data.requireExpiredOrNone,
+    requireActiveSubscription: !!data.requireActiveSubscription,
+    audiencePlanIds,
+    rewardHours: optionalNumber(data.rewardHours) ?? 2,
+    winRatePercent: optionalNumber(data.winRatePercent) ?? 30,
+    maxWinsPerDayGlobal: optionalNumber(data.maxWinsPerDayGlobal),
+    limitPerUserPerDay: optionalNumber(data.limitPerUserPerDay) ?? 1,
+    limitPerUserTotal: optionalNumber(data.limitPerUserTotal),
+    stackMode: data.stackMode || "create_campaign_slot",
+    inviteRequiredCount: optionalNumber(data.inviteRequiredCount) ?? 3,
+    inviteGrantMode: data.inviteGrantMode === "claim" ? "claim" : "auto",
+    rewardPlanId: resolvePlanId(data.rewardPlanCode),
+    invitePerInvitePlanId: resolvePlanId(data.invitePerInvitePlanCode),
+    inviteReqPaid: !!data.inviteReqPaid,
+    inviteReqSubscription: !!data.inviteReqSubscription,
+    inviteReqTraffic: !!data.inviteReqTraffic,
+    inviteMinTrafficBytes: optionalNumber(data.inviteMinTrafficBytes),
+    ...i18nToFormValues("title", pickI18n(data, "titleI18n", "title_i18n")),
+    ...i18nToFormValues("teaser", pickI18n(data, "teaserI18n", "teaser_i18n")),
+    ...i18nToFormValues(
+      "subtitle",
+      pickI18n(data, "subtitleI18n", "subtitle_i18n"),
+    ),
+    ...i18nToFormValues("button", pickI18n(data, "buttonI18n", "button_i18n")),
+  };
+  if (!options?.lockCode && data.code) {
+    fields.code = data.code;
+  }
+  if (warnings.length) {
+    message.warning(warnings.join("；"));
+  }
+  return fields;
+}
+
+function CampaignJsonTransferPanel({
+  plans,
+  packages,
+  lockCode,
+}: {
+  plans: MetaPlan[];
+  packages: MetaPackage[];
+  lockCode?: boolean;
+}) {
+  const form = Form.useFormInstance();
+  const [text, setText] = useState("");
+
+  const pullFromForm = () => {
+    const values = form.getFieldsValue(true);
+    setText(
+      JSON.stringify(formValuesToTransferJson(values, plans, packages), null, 2),
+    );
+    message.success("已从表单生成 JSON");
+  };
+
+  const applyToForm = () => {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      const values = transferJsonToFormValues(parsed, plans, packages, {
+        lockCode,
+      });
+      form.setFieldsValue(values);
+      message.success("已应用到表单，请核对后保存");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "JSON 无效");
+    }
+  };
+
+  const copyText = async () => {
+    const payload =
+      text.trim() ||
+      JSON.stringify(
+        formValuesToTransferJson(form.getFieldsValue(true), plans, packages),
+        null,
+        2,
+      );
+    if (!text.trim()) setText(payload);
+    try {
+      await navigator.clipboard.writeText(payload);
+      message.success("已复制到剪贴板");
+    } catch {
+      message.error("复制失败，请手动全选复制");
+    }
+  };
+
+  return (
+    <Collapse
+      style={{ marginBottom: 16 }}
+      items={[
+        {
+          key: "json",
+          label: "JSON 导入 / 导出（跨环境复制配置）",
+          children: (
+            <Space direction="vertical" style={{ width: "100%" }} size={12}>
+              <Alert
+                type="info"
+                showIcon
+                message="粘贴 JSON →「应用到表单」→ 核对 → 提交；或填完表单后「从表单生成」再复制到另一环境。"
+                description="套餐用 code、马甲包用 packageName+client（不含活动 id）。导入后请核对奖励套餐、人群套餐和马甲包。编辑时不覆盖活动 code。"
+              />
+              <Input.TextArea
+                rows={14}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder='粘贴活动 JSON，例如 { "version": 1, "code": "camp_...", ... }'
+                style={{
+                  fontFamily:
+                    "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  fontSize: 12,
+                }}
+              />
+              <Space wrap>
+                <Button onClick={pullFromForm}>从表单生成</Button>
+                <Button type="primary" onClick={applyToForm}>
+                  应用到表单
+                </Button>
+                <Button icon={<CopyOutlined />} onClick={() => void copyText()}>
+                  复制
+                </Button>
+              </Space>
+            </Space>
+          ),
+        },
+      ]}
+    />
+  );
 }
 
 export default function CampaignsPage() {
@@ -407,7 +758,7 @@ function CampaignForm(props: {
       title={initial ? "编辑活动" : "新建活动"}
       open={props.open}
       onOpenChange={props.onOpenChange}
-      modalProps={{ destroyOnClose: true, width: 720 }}
+      modalProps={{ destroyOnClose: true, width: 800 }}
       initialValues={{
         code: initial?.code || (!initial ? generateCampaignCode() : undefined),
         name: initial?.name,
@@ -491,6 +842,7 @@ function CampaignForm(props: {
           remark: raw.remark || null,
           ui: {
             title_i18n: i18nFromValues(raw, "title"),
+            teaser_i18n: i18nFromValues(raw, "teaser"),
             subtitle_i18n: i18nFromValues(raw, "subtitle"),
             button_text_i18n: i18nFromValues(raw, "button"),
           },
@@ -572,6 +924,11 @@ function CampaignForm(props: {
         return props.onFinish(body);
       }}
     >
+      <CampaignJsonTransferPanel
+        plans={plans}
+        packages={packages}
+        lockCode={!!initial}
+      />
       <ProFormText
         name="code"
         label="活动 code"
@@ -610,6 +967,14 @@ function CampaignForm(props: {
             label: "标题",
             requiredZh: true,
             placeholders: { zh: "每日免费加速", en: "Daily free boost" },
+          },
+          {
+            key: "teaser",
+            label: "入口文案（首页 / 我的）",
+            placeholders: {
+              zh: "邀请用户得永久免费会员",
+              en: "Invite friends for lifetime membership",
+            },
           },
           {
             key: "subtitle",
