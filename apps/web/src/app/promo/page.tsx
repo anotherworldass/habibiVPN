@@ -5,9 +5,14 @@ import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
 import PromoNav from "../../components/PromoNav";
+import InviteCrossCard from "../../components/InviteCrossCard";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
+import {
+  fetchAuthInviteCampaign,
+  type InviteCampaignAuth,
+} from "../../lib/campaigns";
 import { friendlyError } from "../../lib/errors";
 import { formatCents } from "../../lib/money";
 import { site, supportTelegramUrl } from "../../lib/site";
@@ -83,6 +88,7 @@ export default function PromoPage() {
   const [qrOpen, setQrOpen] = useState(false);
   const [openLevel, setOpenLevel] = useState<number | null>(1);
   const [loading, setLoading] = useState(true);
+  const [activity, setActivity] = useState<InviteCampaignAuth | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -94,12 +100,14 @@ export default function PromoPage() {
       apiFetch<Overview>("/api/v1/promo/overview"),
       apiFetch<Tools>("/api/v1/promo/tools"),
       apiFetch<PromoRules>("/api/v1/promo/rules"),
+      fetchAuthInviteCampaign(),
     ])
-      .then(([o, t, r]) => {
+      .then(([o, t, r, campaign]) => {
         if (cancelled) return;
         setOverview(o);
         setTools(t);
         setRules(r);
+        setActivity(campaign);
         const first = (r.levels || []).find((l) => l.rate_bps > 0)?.level;
         if (first != null) setOpenLevel(first);
       })
@@ -184,12 +192,16 @@ export default function PromoPage() {
               </div>
             </section>
 
+            {activity ? <InviteCrossCard to="activity" campaign={activity} /> : null}
+
             <div className="promo-overview-layout">
               {tools && (
                 <aside className="promo-section panel promo-tools-panel">
                   <div className="promo-section-head">
                     <h2 className="promo-section-title">{copy.promo.tools}</h2>
-                    <span className="promo-section-hint">{copy.promo.toolsHint}</span>
+                    <span className="promo-section-hint">
+                      {activity ? copy.promo.extraSameLink : copy.promo.toolsHint}
+                    </span>
                   </div>
 
                   <div className="promo-tools-content">

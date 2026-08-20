@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "../../components/LocaleLink";
 import { useLocale } from "../../components/LocaleProvider";
 import Shell from "../../components/Shell";
+import InviteCrossCard from "../../components/InviteCrossCard";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import {
@@ -147,149 +148,166 @@ export default function ActivityPage() {
 
   return (
     <Shell>
-      <div className="page-head">
-        <p className="activity-kicker">{a.kicker}</p>
-        <h1>{loading ? a.loading : title}</h1>
-        {campaign ? <p className="section-lead">{subtitle}</p> : null}
-      </div>
-
+      <div className="activity-page">
       {error ? (
-        <p className="alert-error" style={{ marginTop: 12 }}>
+        <p className="alert-error" style={{ marginBottom: 12 }}>
           {error}
         </p>
       ) : null}
 
       {loading ? (
-        <p className="section-lead" style={{ marginTop: 16 }}>
-          {a.loading}
-        </p>
+        <article className="activity-panel">
+          <header className="activity-hero">
+            <p className="activity-kicker">{a.kicker}</p>
+            <h1>{a.loading}</h1>
+          </header>
+        </article>
       ) : !campaign ? (
-        <p className="section-lead" style={{ marginTop: 16 }}>
-          {a.empty}
-        </p>
+        <article className="activity-panel">
+          <header className="activity-hero">
+            <p className="activity-kicker">{a.kicker}</p>
+            <h1>{title}</h1>
+            <p className="activity-lead">{a.empty}</p>
+          </header>
+          <InviteCrossCard to="promo" className="invite-cross-card--inset" />
+        </article>
       ) : (
-        <>
-          <section className="activity-card" aria-label={a.progressAria}>
-            <div className="activity-progress-meta">
-              <strong>
-                {current}/{required}
-              </strong>
-              <span>{a.qualified}</span>
-            </div>
-            <div className="activity-progress-track">
-              <div className="activity-progress-fill" style={{ width: `${pct}%` }} />
-            </div>
-            {!loggedIn ? <p className="activity-hint">{a.loginForProgress}</p> : null}
-          </section>
+        <article className="activity-panel">
+          <header className="activity-hero">
+            <p className="activity-kicker">{a.kicker}</p>
+            <h1>{title}</h1>
+            <p className="activity-lead">{subtitle}</p>
+            <section className="activity-progress" aria-label={a.progressAria}>
+              <div className="activity-progress-meta">
+                <div>
+                  <strong>
+                    {current}/{required}
+                  </strong>
+                  <span>{a.qualified}</span>
+                </div>
+                <div className="activity-progress-pct">{pct}%</div>
+              </div>
+              <div className="activity-progress-track">
+                <div className="activity-progress-fill" style={{ width: `${pct}%` }} />
+              </div>
+              {!loggedIn ? <p className="activity-hint">{a.loginForProgress}</p> : null}
+            </section>
+          </header>
 
-          <div className="activity-rewards">
-            {perPlan ? (
-              <div className="activity-reward">
-                <div className="activity-reward-kicker">{a.perInviteKicker}</div>
-                <h2>{a.perInviteTitle(perPlan.name)}</h2>
-                <p>
-                  {loggedIn ? a.perInviteGranted(granted, perCap) : a.perInviteHint(perCap)}
-                </p>
+          <div className="activity-body">
+            {perPlan || milestonePlan ? (
+              <div className="activity-rewards">
+                {perPlan ? (
+                  <div className="activity-reward">
+                    <div className="activity-reward-kicker">{a.perInviteKicker}</div>
+                    <h2>{a.perInviteTitle(perPlan.name)}</h2>
+                    <p>
+                      {loggedIn ? a.perInviteGranted(granted, perCap) : a.perInviteHint(perCap)}
+                    </p>
+                  </div>
+                ) : null}
+                {milestonePlan ? (
+                  <div className="activity-reward">
+                    <div className="activity-reward-kicker">{a.milestoneKicker}</div>
+                    <h2>{a.milestoneTitle(required, milestonePlan.name)}</h2>
+                    <p>
+                      {authCampaign?.already_participated || claimedOk
+                        ? a.milestoneDone
+                        : grantMode === "claim"
+                          ? a.milestoneClaim
+                          : a.milestoneAuto}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
-            {milestonePlan ? (
-              <div className="activity-reward">
-                <div className="activity-reward-kicker">{a.milestoneKicker}</div>
-                <h2>{a.milestoneTitle(required, milestonePlan.name)}</h2>
-                <p>
-                  {authCampaign?.already_participated || claimedOk
-                    ? a.milestoneDone
-                    : grantMode === "claim"
-                      ? a.milestoneClaim
-                      : a.milestoneAuto}
-                </p>
+
+            <section className="activity-section">
+              <h2 className="activity-block-title">{a.reqTitle}</h2>
+              <ul className="activity-req-list">
+                {reqLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </section>
+
+            {loggedIn && grantMode === "claim" && authCampaign?.can_participate ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                disabled={claiming}
+                onClick={() => void onClaim()}
+              >
+                {claiming
+                  ? copy.common.claiming
+                  : campaign.ui?.button_text?.trim() || copy.common.claim}
+              </button>
+            ) : null}
+
+            {loggedIn && tools ? (
+              <section className="activity-section">
+                <h2 className="activity-block-title">{a.shareTitle}</h2>
+                <p className="activity-hint">{a.shareHint}</p>
+                <div className="promo-field-label">{copy.promo.inviteCode}</div>
+                <div className="promo-code-box">
+                  <div className="font-display">{tools.invite_code}</div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ minHeight: 36, padding: "0 12px", fontSize: 13 }}
+                    onClick={() => void copyText(tools.invite_code, "code")}
+                  >
+                    {copied === "code" ? copy.common.copied : copy.common.copy}
+                  </button>
+                </div>
+                <div className="promo-link-block" style={{ marginTop: 12 }}>
+                  <div className="promo-link-head">
+                    <span className="promo-field-label">{copy.promo.inviteLink}</span>
+                    <button
+                      type="button"
+                      className="promo-link-copy"
+                      onClick={() => void copyText(inviteUrl, "web")}
+                    >
+                      {copied === "web" ? copy.common.copied : copy.common.copy}
+                    </button>
+                  </div>
+                  <div className="promo-link-box">{inviteUrl}</div>
+                </div>
+                <div className="promo-channel-actions" style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    onClick={() => void copyText(inviteUrl, "web")}
+                  >
+                    {copied === "web" ? copy.promo.copiedLink : copy.promo.copyLink}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-block"
+                    onClick={() => setQrOpen(true)}
+                  >
+                    {copy.promo.showQr}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {!loggedIn ? (
+              <div className="hero-cta">
+                <Link href="/register" className="btn btn-primary">
+                  {a.ctaRegister}
+                </Link>
+                <Link href="/login?next=/activity" className="btn btn-secondary">
+                  {a.ctaLogin}
+                </Link>
               </div>
             ) : null}
           </div>
 
-          <section className="activity-card">
-            <h2 className="activity-block-title">{a.reqTitle}</h2>
-            <ul className="activity-req-list">
-              {reqLines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </section>
-
-          {loggedIn && grantMode === "claim" && authCampaign?.can_participate ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              style={{ marginTop: 16 }}
-              disabled={claiming}
-              onClick={() => void onClaim()}
-            >
-              {claiming
-                ? copy.common.claiming
-                : campaign.ui?.button_text?.trim() || copy.common.claim}
-            </button>
-          ) : null}
-
-          {loggedIn && tools ? (
-            <section className="activity-card" style={{ marginTop: 16 }}>
-              <h2 className="activity-block-title">{a.shareTitle}</h2>
-              <p className="activity-hint">{a.shareHint}</p>
-              <div className="promo-field-label">{copy.promo.inviteCode}</div>
-              <div className="promo-code-box">
-                <div className="font-display">{tools.invite_code}</div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ minHeight: 36, padding: "0 12px", fontSize: 13 }}
-                  onClick={() => void copyText(tools.invite_code, "code")}
-                >
-                  {copied === "code" ? copy.common.copied : copy.common.copy}
-                </button>
-              </div>
-              <div className="promo-link-block" style={{ marginTop: 12 }}>
-                <div className="promo-link-head">
-                  <span className="promo-field-label">{copy.promo.inviteLink}</span>
-                  <button
-                    type="button"
-                    className="promo-link-copy"
-                    onClick={() => void copyText(inviteUrl, "web")}
-                  >
-                    {copied === "web" ? copy.common.copied : copy.common.copy}
-                  </button>
-                </div>
-                <div className="promo-link-box">{inviteUrl}</div>
-              </div>
-              <div className="promo-channel-actions" style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-block"
-                  onClick={() => void copyText(inviteUrl, "web")}
-                >
-                  {copied === "web" ? copy.promo.copiedLink : copy.promo.copyLink}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-block"
-                  onClick={() => setQrOpen(true)}
-                >
-                  {copy.promo.showQr}
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          {!loggedIn ? (
-            <div className="hero-cta" style={{ marginTop: 20 }}>
-              <Link href="/register" className="btn btn-primary">
-                {a.ctaRegister}
-              </Link>
-              <Link href="/login?next=/activity" className="btn btn-secondary">
-                {a.ctaLogin}
-              </Link>
-            </div>
-          ) : null}
-        </>
+          <InviteCrossCard to="promo" className="invite-cross-card--inset" />
+        </article>
       )}
+      </div>
 
       {qrOpen && inviteUrl ? (
         <div
