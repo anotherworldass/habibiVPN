@@ -78,7 +78,8 @@ function levelExplain(level: number, copy: ReturnType<typeof t>["promo"]): { tit
 }
 
 export default function PromoPage() {
-  const copy = t(useLocale());
+  const locale = useLocale();
+  const copy = t(locale);
   const router = useLocaleRouter();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tools, setTools] = useState<Tools | null>(null);
@@ -100,7 +101,7 @@ export default function PromoPage() {
       apiFetch<Overview>("/api/v1/promo/overview"),
       apiFetch<Tools>("/api/v1/promo/tools"),
       apiFetch<PromoRules>("/api/v1/promo/rules"),
-      fetchAuthInviteCampaign(),
+      fetchAuthInviteCampaign(locale),
     ])
       .then(([o, t, r, campaign]) => {
         if (cancelled) return;
@@ -120,7 +121,7 @@ export default function PromoPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, locale]);
 
   useEffect(() => {
     if (!qrOpen) return;

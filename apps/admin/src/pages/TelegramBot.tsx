@@ -26,6 +26,7 @@ type BotConfig = {
   mini_app_direct_link: string | null;
   welcome_text: string | null;
   channel_url: string | null;
+  invite_share_text: string | null;
   updated_at: string;
 };
 
@@ -109,6 +110,7 @@ export default function TelegramBotPage() {
     mini_app_direct_link?: string;
     welcome_text?: string;
     channel_url?: string;
+    invite_share_text?: string;
     webhook_origin?: string;
   }) {
     setSaving(true);
@@ -120,6 +122,7 @@ export default function TelegramBotPage() {
         mini_app_direct_link: values.mini_app_direct_link || null,
         welcome_text: values.welcome_text || null,
         channel_url: values.channel_url || null,
+        invite_share_text: values.invite_share_text || null,
         webhook_origin: values.webhook_origin?.trim() || null,
         register_webhook: true,
       };
@@ -182,6 +185,7 @@ export default function TelegramBotPage() {
                 mini_app_direct_link: bot.mini_app_direct_link || "",
                 welcome_text: bot.welcome_text || "",
                 channel_url: bot.channel_url || "",
+                invite_share_text: bot.invite_share_text || "",
                 webhook_origin: bot.webhook_origin || "",
               }}
               onFinish={async (v) => {
@@ -200,6 +204,10 @@ export default function TelegramBotPage() {
                     typeof v.welcome_text === "string" ? v.welcome_text : undefined,
                   channel_url:
                     typeof v.channel_url === "string" ? v.channel_url : undefined,
+                  invite_share_text:
+                    typeof v.invite_share_text === "string"
+                      ? v.invite_share_text
+                      : undefined,
                   webhook_origin:
                     typeof v.webhook_origin === "string" ? v.webhook_origin : undefined,
                 });
@@ -248,6 +256,12 @@ export default function TelegramBotPage() {
                 name="welcome_text"
                 label="/start 欢迎语"
                 fieldProps={{ rows: 3 }}
+              />
+              <ProFormTextArea
+                name="invite_share_text"
+                label="邀请分享文案"
+                fieldProps={{ rows: 4, maxLength: 2000, showCount: true }}
+                extra="小程序「分享到 Telegram」的附带文字（链接仍自动带上）。留空则用默认句。可用占位符：{brand} {l1_rate} {trial_plan}"
               />
               <ProFormText
                 name="webhook_origin"

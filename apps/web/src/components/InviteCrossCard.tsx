@@ -3,6 +3,7 @@
 import Link from "./LocaleLink";
 import {
   inviteCampaignTeaser,
+  resolvedCampaignUi,
   type InviteCampaignAuth,
   type InviteCampaignPublic,
 } from "../lib/campaigns";
@@ -18,11 +19,13 @@ function cx(...parts: Array<string | undefined>) {
 }
 
 export default function InviteCrossCard(props: Props) {
-  const copy = t(useLocale());
+  const locale = useLocale();
+  const copy = t(locale);
 
   if (props.to === "activity") {
     const campaign = props.campaign;
     const a = copy.activity;
+    const ui = resolvedCampaignUi(campaign.ui, locale);
     const progress = "invite_progress" in campaign ? campaign.invite_progress : null;
     const required = progress?.required_count ?? campaign.required_count ?? 0;
     const current = progress?.current_count ?? 0;
@@ -33,11 +36,9 @@ export default function InviteCrossCard(props: Props) {
       >
         <div className="invite-cross-body">
           <div className="invite-cross-kicker">{copy.promo.extraKicker}</div>
-          <div className="invite-cross-title">
-            {campaign.ui?.title?.trim() || a.fallbackTitle}
-          </div>
+          <div className="invite-cross-title">{ui.title || a.fallbackTitle}</div>
           <p className="invite-cross-desc">
-            {inviteCampaignTeaser(a, campaign)}
+            {inviteCampaignTeaser(a, campaign, locale)}
             {required > 0 ? ` · ${current}/${required}` : ""}
           </p>
         </div>

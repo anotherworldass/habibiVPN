@@ -18,6 +18,7 @@ import {
   normalizeAppCopyI18n,
   resolveAppCopyLocale,
 } from "@habibi/shared";
+import { localizePlanCopy } from "../plan-i18n.js";
 import {
   asRules,
   emptyInviteeRequirements,
@@ -34,7 +35,11 @@ function httpError(message: string, statusCode: number) {
   return Object.assign(new Error(message), { statusCode });
 }
 
-type PlanBrief = { id: string; name: string };
+type PlanBrief = {
+  id: string;
+  name: string;
+  name_i18n?: Record<string, string>;
+};
 
 function primaryReward(
   rewards: CampaignRewardWithPlan[],
@@ -44,15 +49,36 @@ function primaryReward(
 }
 
 function planBrief(
-  plan: { id: string; name: string } | null | undefined,
+  plan:
+    | {
+        id: string;
+        name: string;
+        nameI18n?: unknown;
+        description?: string | null;
+      }
+    | null
+    | undefined,
+  locale?: string | null,
 ): PlanBrief | null {
   if (!plan?.id) return null;
-  const name = plan.name?.trim();
-  return { id: plan.id, name: name || plan.id };
+  const copy = localizePlanCopy(
+    {
+      name: plan.name,
+      description: plan.description ?? null,
+      nameI18n: plan.nameI18n,
+    },
+    locale,
+  );
+  return {
+    id: plan.id,
+    name: copy.name || plan.name || plan.id,
+    name_i18n: copy.name_i18n as Record<string, string>,
+  };
 }
 
 async function loadPlanBriefs(
   ids: Array<string | null | undefined>,
+  locale?: string | null,
 ): Promise<Map<string, PlanBrief>> {
   const unique = [
     ...new Set(ids.filter((id): id is string => Boolean(id && id.trim()))),
@@ -60,17 +86,20 @@ async function loadPlanBriefs(
   if (!unique.length) return new Map();
   const rows = await prisma.plan.findMany({
     where: { id: { in: unique } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, nameI18n: true, description: true },
   });
-  return new Map(rows.map((p) => [p.id, { id: p.id, name: p.name }]));
+  return new Map(rows.map((p) => [p.id, planBrief(p, locale)!]));
 }
 
-function serializePublicReward(reward: CampaignRewardWithPlan | null) {
+function serializePublicReward(
+  reward: CampaignRewardWithPlan | null,
+  locale?: string | null,
+) {
   if (!reward) return null;
   return {
     kind: reward.kind,
     plan_id: reward.planId,
-    plan: planBrief(reward.plan),
+    plan: planBrief(reward.plan, locale),
     validity_seconds: reward.validitySeconds,
     data_limit_bytes:
       reward.dataLimitBytes == null ? null : Number(reward.dataLimitBytes),
@@ -92,7 +121,9 @@ const campaignInclude = {
   packages: { orderBy: { createdAt: "asc" as const } },
   rewards: {
     orderBy: { sortOrder: "asc" as const },
-    include: { plan: { select: { id: true, name: true, code: true } } },
+    include: {
+      plan: { select: { id: true, name: true, code: true, nameI18n: true } },
+    },
   },
 };
 
@@ -144,7 +175,7 @@ export function serializeCampaignPublic(
 ) {
   const reward = primaryReward(c.rewards);
   const ui = resolveCampaignUiPublic(c.uiJson, locale);
-  const title = ui.title || c.name;
+  const title = ui.title;
   const perInviteId = elig.inviteProgress?.perInvitePlanId ?? null;
   const perInvitePlan = perInviteId
     ? planBriefs?.get(perInviteId) ?? null
@@ -163,7 +194,7 @@ export function serializeCampaignPublic(
       ...ui,
       title,
     },
-    reward: serializePublicReward(reward),
+    reward: serializePublicReward(reward, locale),
     period_key: elig.periodKey,
     today_count: elig.todayCount,
     already_participated:
@@ -202,7 +233,7 @@ export function serializeInviteCampaignTeaser(
   const invite = normalizeInviteFromRules(asRules(c.rulesJson));
   const reward = primaryReward(c.rewards);
   const ui = resolveCampaignUiPublic(c.uiJson, locale);
-  const title = ui.title || c.name;
+  const title = ui.title;
   const perInviteId = invite?.perInvitePlanId ?? null;
   return {
     id: c.id,
@@ -218,7 +249,7 @@ export function serializeInviteCampaignTeaser(
     },
     required_count: invite?.requiredCount ?? 0,
     grant_mode: invite?.grantMode ?? "auto",
-    reward: serializePublicReward(reward),
+    reward: serializePublicReward(reward, locale),
     per_invite_plan: perInviteId ? planBriefs.get(perInviteId) ?? null : null,
     requirements: serializeRequirements(invite),
   };
@@ -285,7 +316,7 @@ export async function listActiveCampaignsForUser(input: {
     primaryReward(c.rewards)?.planId,
     elig.inviteProgress?.perInvitePlanId,
   ]);
-  const briefs = await loadPlanBriefs(planIds);
+  const briefs = await loadPlanBriefs(planIds, input.locale);
   return pending.map(({ campaign, elig }) =>
     serializeCampaignPublic(campaign, elig, input.locale, briefs),
   );
@@ -315,7 +346,7 @@ export async function listPublicInviteMilestoneCampaigns(input: {
     primaryReward(c.rewards)?.planId,
     normalizeInviteFromRules(asRules(c.rulesJson))?.perInvitePlanId,
   ]);
-  const briefs = await loadPlanBriefs(planIds);
+  const briefs = await loadPlanBriefs(planIds, input.locale);
   return visible
     .filter((c) => normalizeInviteFromRules(asRules(c.rulesJson)))
     .map((c) => serializeInviteCampaignTeaser(c, input.locale, briefs));

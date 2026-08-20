@@ -934,32 +934,26 @@ input {
 
 .bind-card {
   margin-top: 14px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--accent) 12%, var(--surface-raised)) 0%,
-    var(--surface-raised) 58%
-  );
-  box-shadow: 0 10px 24px var(--shadow-tint);
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
 }
 
 .bind-card-kicker {
   margin: 0;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--accent-deep);
+  color: var(--ink-soft);
 }
 
 .bind-card-title {
   margin: 6px 0 0;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
 }
 
 .bind-card-lead {

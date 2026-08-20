@@ -431,7 +431,7 @@ export default function TgAccountPage() {
                   <div className="stack" style={{ marginTop: 14 }}>
                     <button
                       type="button"
-                      className="btn btn-primary btn-block"
+                      className="btn btn-ghost btn-block"
                       onClick={() => {
                         haptic("light");
                         setBindOpen(true);

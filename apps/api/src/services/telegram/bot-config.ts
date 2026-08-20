@@ -23,6 +23,7 @@ export type TelegramBotPublicView = {
   mini_app_direct_link: string | null;
   welcome_text: string | null;
   channel_url: string | null;
+  invite_share_text: string | null;
   updated_at: Date;
 };
 
@@ -141,6 +142,7 @@ export async function getBotPublicView(projectId: string): Promise<TelegramBotPu
     mini_app_direct_link: bot.miniAppDirectLink,
     welcome_text: bot.welcomeText,
     channel_url: bot.channelUrl,
+    invite_share_text: bot.inviteShareText,
     updated_at: bot.updatedAt,
   };
 }
@@ -161,6 +163,7 @@ export async function updateBotConfig(
     mini_app_direct_link?: string | null;
     welcome_text?: string | null;
     channel_url?: string | null;
+    invite_share_text?: string | null;
     /** null / "" clears override and falls back to env */
     webhook_origin?: string | null;
     rotate_webhook_secret?: boolean;
@@ -181,6 +184,7 @@ export async function updateBotConfig(
     miniAppDirectLink?: string | null;
     welcomeText?: string | null;
     channelUrl?: string | null;
+    inviteShareText?: string | null;
     webhookSecret?: string;
   } = {};
 
@@ -199,6 +203,9 @@ export async function updateBotConfig(
   }
   if (input.channel_url !== undefined) {
     data.channelUrl = normalizeChannelUrl(input.channel_url);
+  }
+  if (input.invite_share_text !== undefined) {
+    data.inviteShareText = input.invite_share_text?.trim() || null;
   }
   if (input.rotate_webhook_secret) {
     data.webhookSecret = newWebhookSecret();

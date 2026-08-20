@@ -9,9 +9,11 @@ import InviteCrossCard from "../../components/InviteCrossCard";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import {
+  campaignPlanName,
   fetchAuthInviteCampaign,
   fetchPublicInviteCampaign,
   inviteCampaignSummary,
+  resolvedCampaignUi,
   type InviteCampaignAuth,
   type InviteCampaignPublic,
   type InviteRequirements,
@@ -61,7 +63,7 @@ export default function ActivityPage() {
   async function load() {
     const token = !!getToken();
     setLoggedIn(token);
-    const pub = await fetchPublicInviteCampaign();
+    const pub = await fetchPublicInviteCampaign(locale);
     setPublicCampaign(pub);
     if (!token) {
       setAuthCampaign(null);
@@ -69,7 +71,7 @@ export default function ActivityPage() {
       return;
     }
     const [auth, promoTools] = await Promise.all([
-      fetchAuthInviteCampaign(),
+      fetchAuthInviteCampaign(locale),
       apiFetch<Tools>("/api/v1/promo/tools").catch(() => null),
     ]);
     setAuthCampaign(auth);
@@ -112,8 +114,9 @@ export default function ActivityPage() {
   const granted = progress?.per_invite_granted_count ?? 0;
   const reqs = progress?.requirements || campaign?.requirements;
   const pct = required > 0 ? Math.min(100, Math.round((current / required) * 100)) : 0;
-  const title = campaign?.ui?.title?.trim() || a.fallbackTitle;
-  const subtitle = campaign?.ui?.subtitle?.trim() || inviteCampaignSummary(a, campaign || {});
+  const ui = resolvedCampaignUi(campaign?.ui, locale);
+  const title = ui.title || a.fallbackTitle;
+  const subtitle = ui.subtitle || inviteCampaignSummary(a, campaign || {}, locale);
   const inviteUrl = tools ? webInviteUrl(tools) : "";
   const reqLines = useMemo(() => requirementLines(a, reqs), [a, reqs]);
 
@@ -163,15 +166,18 @@ export default function ActivityPage() {
           </header>
         </article>
       ) : !campaign ? (
-        <article className="activity-panel">
-          <header className="activity-hero">
-            <p className="activity-kicker">{a.kicker}</p>
-            <h1>{title}</h1>
-            <p className="activity-lead">{a.empty}</p>
-          </header>
-          <InviteCrossCard to="promo" className="invite-cross-card--inset" />
-        </article>
+        <>
+          <article className="activity-panel">
+            <header className="activity-hero">
+              <p className="activity-kicker">{a.kicker}</p>
+              <h1>{title}</h1>
+              <p className="activity-lead">{a.empty}</p>
+            </header>
+          </article>
+          <InviteCrossCard to="promo" />
+        </>
       ) : (
+        <>
         <article className="activity-panel">
           <header className="activity-hero">
             <p className="activity-kicker">{a.kicker}</p>
@@ -200,7 +206,7 @@ export default function ActivityPage() {
                 {perPlan ? (
                   <div className="activity-reward">
                     <div className="activity-reward-kicker">{a.perInviteKicker}</div>
-                    <h2>{a.perInviteTitle(perPlan.name)}</h2>
+                    <h2>{a.perInviteTitle(campaignPlanName(locale, perPlan) || perPlan.name)}</h2>
                     <p>
                       {loggedIn ? a.perInviteGranted(granted, perCap) : a.perInviteHint(perCap)}
                     </p>
@@ -209,7 +215,7 @@ export default function ActivityPage() {
                 {milestonePlan ? (
                   <div className="activity-reward">
                     <div className="activity-reward-kicker">{a.milestoneKicker}</div>
-                    <h2>{a.milestoneTitle(required, milestonePlan.name)}</h2>
+                    <h2>{a.milestoneTitle(required, campaignPlanName(locale, milestonePlan) || milestonePlan.name)}</h2>
                     <p>
                       {authCampaign?.already_participated || claimedOk
                         ? a.milestoneDone
@@ -240,7 +246,7 @@ export default function ActivityPage() {
               >
                 {claiming
                   ? copy.common.claiming
-                  : campaign.ui?.button_text?.trim() || copy.common.claim}
+                  : ui.button_text || copy.common.claim}
               </button>
             ) : null}
 
@@ -303,9 +309,9 @@ export default function ActivityPage() {
               </div>
             ) : null}
           </div>
-
-          <InviteCrossCard to="promo" className="invite-cross-card--inset" />
         </article>
+        <InviteCrossCard to="promo" />
+      </>
       )}
       </div>
 

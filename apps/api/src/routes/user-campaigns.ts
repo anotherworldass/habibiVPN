@@ -113,13 +113,7 @@ export const userCampaignRoutes: FastifyPluginAsync = async (app) => {
             "h5",
         );
         const packageId = await resolvePackageId(req, user);
-        const locale =
-          q.locale ||
-          q.lang ||
-          (Array.isArray(req.headers["accept-language"])
-            ? req.headers["accept-language"][0]
-            : req.headers["accept-language"]) ||
-          null;
+        const locale = localeFromCampaignReq(req);
         const campaigns = await listActiveCampaignsForUser({
           projectId: user.projectId,
           userId: user.id,

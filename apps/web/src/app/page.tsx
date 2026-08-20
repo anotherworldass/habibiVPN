@@ -9,6 +9,7 @@ import { getToken } from "../lib/auth";
 import {
   fetchPublicInviteCampaign,
   inviteCampaignTeaser,
+  resolvedCampaignUi,
   type InviteCampaignPublic,
 } from "../lib/campaigns";
 import { t } from "../lib/copy";
@@ -59,8 +60,8 @@ export default function Home() {
         setTrialPlan(promo.plan?.name?.trim() || copy.trialPlanFallback);
       }
     });
-    void fetchPublicInviteCampaign().then(setActivity);
-  }, [copy.trialPlanFallback]);
+    void fetchPublicInviteCampaign(locale).then(setActivity);
+  }, [copy.trialPlanFallback, locale]);
 
   useEffect(() => {
     const count = t(locale).home.leadIn.length;
@@ -156,8 +157,8 @@ export default function Home() {
                   {extraIcons.gift}
                 </div>
                 <div>
-                  <h3>{activity.ui?.title?.trim() || all.activity.fallbackTitle}</h3>
-                  <p>{inviteCampaignTeaser(all.activity, activity)}</p>
+                  <h3>{resolvedCampaignUi(activity.ui, locale).title || all.activity.fallbackTitle}</h3>
+                  <p>{inviteCampaignTeaser(all.activity, activity, locale)}</p>
                 </div>
               </Link>
             ) : null}

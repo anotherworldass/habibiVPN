@@ -6,7 +6,7 @@ import { apiFetch } from "../../lib/api";
 import { friendlyError } from "../../lib/errors";
 import { formatCents } from "../../lib/plan-format";
 import { ensureSession } from "../../lib/session";
-import { site, supportTelegramUrl } from "../../lib/site";
+import { site, supportTelegramUrl, fetchTelegramPublicConfig } from "../../lib/site";
 import {
   fetchSignupTrialPromo,
   telegramSignupTrialPlan,
@@ -101,23 +101,26 @@ export default function TgInvitePage() {
   const [loading, setLoading] = useState(true);
   const [openLevel, setOpenLevel] = useState<number | null>(null);
   const [trialPlan, setTrialPlan] = useState<string | null>(null);
+  const [shareTemplate, setShareTemplate] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await ensureSession();
       try {
-        const [o, t, r, promo] = await Promise.all([
+        const [o, t, r, promo, tgCfg] = await Promise.all([
           apiFetch<Overview>("/api/v1/promo/overview"),
           apiFetch<Tools>("/api/v1/promo/tools"),
           apiFetch<PromoRules>("/api/v1/promo/rules"),
           fetchSignupTrialPromo(),
+          fetchTelegramPublicConfig(),
         ]);
         if (cancelled) return;
         setOverview(o);
         setTools(t);
         setRules(r);
         setTrialPlan(telegramSignupTrialPlan(promo)?.name ?? null);
+        setShareTemplate(tgCfg.invite_share_text);
       } catch (e) {
         if (!cancelled) setError(friendlyError(e, "加载失败"));
       } finally {
@@ -149,6 +152,12 @@ export default function TgInvitePage() {
       : trialPlan
         ? `新用户注册即送「${trialPlan}」`
         : `一起用 ${site.brand}`;
+    if (shareTemplate) {
+      return shareTemplate
+        .replaceAll("{brand}", site.brand)
+        .replaceAll("{l1_rate}", l1 ? formatRate(l1.rate_bps) : "")
+        .replaceAll("{trial_plan}", trialPlan || "");
+    }
     return `我在用 ${site.brand}，${tip}，点链接：`;
   }
 

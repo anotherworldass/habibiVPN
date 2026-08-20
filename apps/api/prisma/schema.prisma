@@ -282,6 +282,8 @@ model ProjectTelegramBot {
   welcomeText   String?  @map("welcome_text") @db.Text
   /// Official channel invite / public link for Mini App join guide (https://t.me/...)
   channelUrl    String?  @map("channel_url") @db.Text
+  /// Mini App “分享到 Telegram” text (url is appended separately). Null = client default.
+  inviteShareText String? @map("invite_share_text") @db.Text
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

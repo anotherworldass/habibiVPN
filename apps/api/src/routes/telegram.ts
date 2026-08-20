@@ -22,6 +22,7 @@ export const telegramRoutes: FastifyPluginAsync = async (app) => {
         enabled: bot.enabled,
         bot_username: bot.bot_username,
         channel_url: bot.channel_url,
+        invite_share_text: bot.invite_share_text,
       };
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode || 500;

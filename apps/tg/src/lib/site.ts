@@ -75,24 +75,45 @@ function cacheChannelUrl(url: string | null | undefined) {
   }
 }
 
-/** Fetch public telegram config; returns channel_url (empty if unset). */
-export async function fetchTelegramChannelUrl(): Promise<string> {
+export type TelegramPublicConfig = {
+  channel_url: string;
+  invite_share_text: string;
+  bot_username: string;
+};
+
+/** Fetch public telegram config for Mini App (channel, invite share copy). */
+export async function fetchTelegramPublicConfig(): Promise<TelegramPublicConfig> {
+  const empty: TelegramPublicConfig = {
+    channel_url: getCachedChannelUrl(),
+    invite_share_text: "",
+    bot_username: "",
+  };
   try {
     const res = await fetch("/api/v1/telegram/config", {
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) return getCachedChannelUrl();
+    if (!res.ok) return empty;
     const data = (await res.json()) as {
       channel_url?: string | null;
+      invite_share_text?: string | null;
       bot_username?: string | null;
     };
     if (data.bot_username) saveBotUsername(data.bot_username);
     const url = (data.channel_url || "").trim();
     cacheChannelUrl(url || null);
-    return url;
+    return {
+      channel_url: url,
+      invite_share_text: (data.invite_share_text || "").trim(),
+      bot_username: (data.bot_username || "").trim(),
+    };
   } catch {
-    return getCachedChannelUrl();
+    return empty;
   }
+}
+
+export async function fetchTelegramChannelUrl(): Promise<string> {
+  const cfg = await fetchTelegramPublicConfig();
+  return cfg.channel_url;
 }
 
 /** Single download entry for Mini App — prefer dedicated URL, else website /download */

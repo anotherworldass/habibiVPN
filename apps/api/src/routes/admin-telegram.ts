@@ -52,6 +52,7 @@ export const adminTelegramRoutes: FastifyPluginAsync = async (app) => {
         mini_app_direct_link: z.string().max(500).nullable().optional(),
         welcome_text: z.string().max(2000).nullable().optional(),
         channel_url: z.string().max(500).nullable().optional(),
+        invite_share_text: z.string().max(2000).nullable().optional(),
         /** null / "" clears override → env.API_PUBLIC_ORIGIN */
         webhook_origin: z.string().max(500).nullable().optional(),
         rotate_webhook_secret: z.boolean().optional(),

@@ -22,7 +22,12 @@ import {
 } from "./types.js";
 
 export type CampaignRewardWithPlan = CampaignReward & {
-  plan?: { id: string; name: string; code: string } | null;
+  plan?: {
+    id: string;
+    name: string;
+    code: string;
+    nameI18n?: unknown;
+  } | null;
 };
 
 export type CampaignWithRelations = Campaign & {

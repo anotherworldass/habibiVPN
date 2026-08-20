@@ -12,6 +12,7 @@ import { useLocale } from "../../components/LocaleProvider";
 import {
   fetchPublicInviteCampaign,
   inviteCampaignTeaser,
+  resolvedCampaignUi,
   type InviteCampaignPublic,
 } from "../../lib/campaigns";
 import { t } from "../../lib/copy";
@@ -25,7 +26,8 @@ type Me = {
 };
 
 export default function AccountPage() {
-  const copy = t(useLocale());
+  const locale = useLocale();
+  const copy = t(locale);
   const router = useLocaleRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
@@ -41,8 +43,8 @@ export default function AccountPage() {
       .then((res) => setMe(res.user))
       .catch((e) => setError(friendlyError(e, copy.common.loadFailed)))
       .finally(() => setReady(true));
-    void fetchPublicInviteCampaign().then(setActivity);
-  }, [router]);
+    void fetchPublicInviteCampaign(locale).then(setActivity);
+  }, [router, locale]);
 
   const uidText = ready ? (me?.uid != null ? String(me.uid) : "—") : "…";
   const emailText = ready ? me?.email || "—" : copy.account.loadingEmail;
@@ -104,10 +106,10 @@ export default function AccountPage() {
                     <div className="promo-entry-body">
                       <div className="promo-entry-kicker">{copy.account.activityKicker}</div>
                       <div className="promo-entry-title">
-                        {activity.ui?.title?.trim() || copy.activity.fallbackTitle}
+                        {resolvedCampaignUi(activity.ui, locale).title || copy.activity.fallbackTitle}
                       </div>
                       <div className="promo-entry-desc">
-                        {inviteCampaignTeaser(copy.activity, activity)}
+                        {inviteCampaignTeaser(copy.activity, activity, locale)}
                       </div>
                     </div>
                     <span className="account-chevron" aria-hidden>
