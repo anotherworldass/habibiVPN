@@ -1497,6 +1497,34 @@ input {
   text-wrap: pretty;
 }
 
+.invite-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.invite-tab {
+  min-height: 40px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.invite-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface-raised));
+  color: var(--accent-deep);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .invite-trial-chip {
   display: inline-flex;
   margin: 12px 0 0;
@@ -1650,6 +1678,145 @@ input {
 
 .invite-link-block .invite-link {
   margin-top: 8px;
+}
+
+.invite-campaign {
+  margin-top: 16px;
+  padding: 18px 16px 16px;
+  border-radius: 20px;
+  background: var(--surface-raised);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  box-shadow: 0 10px 24px var(--shadow-tint);
+  animation: tg-rise 0.45s ease 0.08s both;
+}
+
+.invite-campaign-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-deep);
+}
+
+.invite-campaign-head h2 {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.invite-campaign-lead {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.invite-campaign-progress {
+  margin-top: 16px;
+}
+
+.invite-campaign-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.invite-campaign-progress-meta strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.invite-campaign-progress-meta span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.invite-campaign-pct {
+  flex: 0 0 auto;
+  min-width: 52px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  color: var(--accent-deep);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.invite-campaign-track {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  overflow: hidden;
+}
+
+.invite-campaign-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 55%, #fff) 100%);
+}
+
+.invite-campaign-rewards {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.invite-campaign-reward {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.invite-campaign-reward-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-deep);
+}
+
+.invite-campaign-reward h3 {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.invite-campaign-reward p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.invite-campaign-reqs {
+  margin-top: 14px;
+}
+
+.invite-campaign-reqs h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.invite-campaign-reqs ul {
+  margin: 8px 0 0;
+  padding-left: 1.15em;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .invite-rules {

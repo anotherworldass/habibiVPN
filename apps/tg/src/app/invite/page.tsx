@@ -8,6 +8,12 @@ import { formatCents } from "../../lib/plan-format";
 import { ensureSession } from "../../lib/session";
 import { site, supportTelegramUrl, fetchTelegramPublicConfig } from "../../lib/site";
 import {
+  campaignSummary,
+  fetchAuthInviteCampaign,
+  requirementLines,
+  type InviteCampaign,
+} from "../../lib/campaigns";
+import {
   fetchSignupTrialPromo,
   telegramSignupTrialPlan,
 } from "../../lib/signup-trial";
@@ -102,18 +108,23 @@ export default function TgInvitePage() {
   const [openLevel, setOpenLevel] = useState<number | null>(null);
   const [trialPlan, setTrialPlan] = useState<string | null>(null);
   const [shareTemplate, setShareTemplate] = useState("");
+  const [campaign, setCampaign] = useState<InviteCampaign | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [claimedOk, setClaimedOk] = useState(false);
+  const [tab, setTab] = useState<"reward" | "promo">("reward");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await ensureSession();
       try {
-        const [o, t, r, promo, tgCfg] = await Promise.all([
+        const [o, t, r, promo, tgCfg, inviteCampaign] = await Promise.all([
           apiFetch<Overview>("/api/v1/promo/overview"),
           apiFetch<Tools>("/api/v1/promo/tools"),
           apiFetch<PromoRules>("/api/v1/promo/rules"),
           fetchSignupTrialPromo(),
           fetchTelegramPublicConfig(),
+          fetchAuthInviteCampaign(),
         ]);
         if (cancelled) return;
         setOverview(o);
@@ -121,6 +132,7 @@ export default function TgInvitePage() {
         setRules(r);
         setTrialPlan(telegramSignupTrialPlan(promo)?.name ?? null);
         setShareTemplate(tgCfg.invite_share_text);
+        setCampaign(inviteCampaign);
       } catch (e) {
         if (!cancelled) setError(friendlyError(e, "加载失败"));
       } finally {
@@ -169,6 +181,27 @@ export default function TgInvitePage() {
     return t.tg_invite_url || null;
   }
 
+  async function onClaimCampaign() {
+    if (!campaign?.id) return;
+    haptic("medium");
+    setClaiming(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/campaigns/${campaign.id}/participate`, {
+        method: "POST",
+        body: JSON.stringify({ client: "h5" }),
+      });
+      setClaimedOk(true);
+      const next = await fetchAuthInviteCampaign();
+      setCampaign(next);
+      hapticSuccess();
+    } catch (e) {
+      setError(friendlyError(e, "领取失败"));
+    } finally {
+      setClaiming(false);
+    }
+  }
+
   function onShareTelegram() {
     if (!tools) return;
     const url = tgInviteUrl(tools) || webInviteUrl(tools);
@@ -179,6 +212,25 @@ export default function TgInvitePage() {
 
   const l1Rate = rules?.levels.find((l) => l.level === 1)?.rate_bps;
   const activeLevels = (rules?.levels || []).filter((l) => l.rate_bps > 0);
+  const progress = campaign?.invite_progress;
+  const required = progress?.required_count ?? campaign?.required_count ?? 0;
+  const current = progress?.current_count ?? 0;
+  const pct = required > 0 ? Math.min(100, Math.round((current / required) * 100)) : 0;
+  const perPlan = progress?.per_invite_plan || campaign?.per_invite_plan || null;
+  const milestonePlan = campaign?.reward?.plan || null;
+  const grantMode = progress?.grant_mode || campaign?.grant_mode || "auto";
+  const perCap = Math.max(0, required - 1);
+  const granted = progress?.per_invite_granted_count ?? 0;
+  const reqs = progress?.requirements || campaign?.requirements;
+  const reqLines = requirementLines(reqs);
+  const campaignTitle = campaign?.ui.title?.trim() || "邀请达标";
+  const campaignLead =
+    campaign?.ui.subtitle?.trim() ||
+    campaign?.ui.teaser?.trim() ||
+    (campaign ? campaignSummary(campaign) : "");
+  const showTabs = !loading && !!campaign;
+  const showReward = !showTabs || tab === "reward";
+  const showPromo = !showTabs || tab === "promo";
 
   return (
     <TgShell>
@@ -189,15 +241,16 @@ export default function TgInvitePage() {
             {site.brand}
           </h1>
           <p className="invite-lead">
-            邀请好友，享永久绑定的分佣
-            {trialPlan ? `。新用户注册即送「${trialPlan}」。` : ""}
+            {campaign
+              ? "限时邀请奖励与长期返佣，同一邀请码。"
+              : "邀请好友，享永久绑定的分佣"}
           </p>
           {trialPlan ? (
             <p className="invite-trial-chip">
               限时活动 · 注册即送「{trialPlan}」
             </p>
           ) : null}
-          {l1Rate != null && l1Rate > 0 ? (
+          {!campaign && l1Rate != null && l1Rate > 0 ? (
             <div className="invite-hero-rate">
               <span>邀请回馈</span>
               <strong>{formatRate(l1Rate)}</strong>
@@ -217,6 +270,115 @@ export default function TgInvitePage() {
       {!loading && overview && !overview.promo_enabled && (
         <p className="alert-error">推广资格已停用，请联系客服。</p>
       )}
+
+      {showTabs ? (
+        <div className="invite-tabs" role="tablist" aria-label="邀请内容">
+          <button
+            type="button"
+            className="invite-tab"
+            role="tab"
+            aria-selected={tab === "reward"}
+            data-active={tab === "reward"}
+            onClick={() => {
+              haptic("light");
+              setTab("reward");
+            }}
+          >
+            邀请奖励
+          </button>
+          <button
+            type="button"
+            className="invite-tab"
+            role="tab"
+            aria-selected={tab === "promo"}
+            data-active={tab === "promo"}
+            onClick={() => {
+              haptic("light");
+              setTab("promo");
+            }}
+          >
+            邀请返佣
+          </button>
+        </div>
+      ) : null}
+
+      {showReward && !loading && campaign ? (
+        <section className="invite-campaign" aria-labelledby="invite-campaign-title">
+          <div className="invite-campaign-head">
+            <p className="invite-campaign-kicker">邀请达标</p>
+            <h2 id="invite-campaign-title">{campaignTitle}</h2>
+            {campaignLead ? <p className="invite-campaign-lead">{campaignLead}</p> : null}
+          </div>
+
+          <div className="invite-campaign-progress" aria-label="邀请进度">
+            <div className="invite-campaign-progress-meta">
+              <div>
+                <strong>
+                  {current}/{required}
+                </strong>
+                <span>合格邀请</span>
+              </div>
+              <div className="invite-campaign-pct">{pct}%</div>
+            </div>
+            <div className="invite-campaign-track">
+              <div className="invite-campaign-fill" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          {perPlan || milestonePlan ? (
+            <div className="invite-campaign-rewards">
+              {perPlan ? (
+                <div className="invite-campaign-reward">
+                  <div className="invite-campaign-reward-kicker">每邀奖励</div>
+                  <h3>每邀请 1 人送「{perPlan.name}」</h3>
+                  <p>
+                    已发放 {granted} / {perCap}
+                    {perCap > 0 ? "（达标前）" : ""}
+                  </p>
+                </div>
+              ) : null}
+              {milestonePlan ? (
+                <div className="invite-campaign-reward">
+                  <div className="invite-campaign-reward-kicker">达标奖励</div>
+                  <h3>
+                    满 {required} 人送「{milestonePlan.name}」
+                  </h3>
+                  <p>
+                    {campaign.already_participated || claimedOk
+                      ? "已领取"
+                      : grantMode === "claim"
+                        ? "达标后可在本页领取"
+                        : "达标后自动到账"}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="invite-campaign-reqs">
+            <h3>怎样算合格邀请</h3>
+            <ul>
+              {reqLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </div>
+
+          {grantMode === "claim" && campaign.can_participate ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              style={{ marginTop: 14 }}
+              disabled={claiming}
+              onClick={() => void onClaimCampaign()}
+            >
+              {claiming
+                ? "领取中…"
+                : campaign.ui.button_text?.trim() || "领取奖励"}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
       {!loading && tools && (
         <section className="invite-share" aria-label="分享工具">
@@ -310,10 +472,10 @@ export default function TgInvitePage() {
         </section>
       )}
 
-      {!loading && rules && activeLevels.length > 0 && (
+      {showPromo && !loading && rules && activeLevels.length > 0 && (
         <section className="invite-rules" aria-labelledby="rules-title">
           <div className="invite-rules-head">
-            <h2 id="rules-title">邀请规则</h2>
+            <h2 id="rules-title">邀请返佣规则</h2>
             <span>最高 {rules.max_level} 级</span>
           </div>
 
@@ -422,7 +584,7 @@ export default function TgInvitePage() {
         </section>
       )}
 
-      {!loading && overview && (
+      {showPromo && !loading && overview && (
         <section className="invite-earn" aria-label="收益概览">
           <div className="invite-earn-head">
             <h2>我的收益</h2>

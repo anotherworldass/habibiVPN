@@ -9,6 +9,7 @@ import { buildTgClientMeta } from "../../lib/client-meta";
 import { friendlyError } from "../../lib/errors";
 import { type UserPreferences } from "../../lib/preferences";
 import { ensureSession, getOrCreateDeviceId } from "../../lib/session";
+import { copyText } from "../../lib/clipboard";
 import {
   appDownloadUrl,
   fetchTelegramChannelUrl,
@@ -124,20 +125,18 @@ export default function TgAccountPage() {
 
   async function copyDownloadLink() {
     haptic("light");
+    setError("");
     const url = appDownloadUrl();
     if (isPlaceholderUrl(url)) {
       setToast("下载页即将上线");
       window.setTimeout(() => setToast(""), 2200);
       return;
     }
-    try {
-      await navigator.clipboard.writeText(url);
-      hapticSuccess();
-      setToast("下载链接已经复制，请在浏览器打开");
-      window.setTimeout(() => setToast(""), 2800);
-    } catch {
-      setError("复制失败，请长按选择链接");
-    }
+    const ok = await copyText(url);
+    openExternal(url);
+    hapticSuccess();
+    setToast(ok ? "下载链接已复制，请在浏览器打开" : "已尝试在浏览器打开下载页");
+    window.setTimeout(() => setToast(""), 2800);
   }
 
   useEffect(() => {
