@@ -52,6 +52,10 @@ const MAP_ZH: Record<string, string> = {
     "消息包含不安全内容（如脚本或注入代码），请删除后重发",
   "support.rate_limited": "发送过于频繁，请稍后再试",
   "support.empty_message": "消息不能为空",
+  "campaign.invite_progress": "邀请人数尚未达标",
+  "campaign.not_eligible": "暂时不能领取该活动",
+  "campaign.not_found": "活动不存在或已结束",
+  "campaign.not_active": "活动未开始或已结束",
 };
 
 const MAP_EN: Record<string, string> = {
@@ -110,6 +114,10 @@ const MAP_EN: Record<string, string> = {
     "Message contains unsafe content. Remove it and send again.",
   "support.rate_limited": "Sending too fast. Try again later.",
   "support.empty_message": "Message cannot be empty",
+  "campaign.invite_progress": "Invite goal not reached yet",
+  "campaign.not_eligible": "You can't claim this campaign right now",
+  "campaign.not_found": "Campaign not found or ended",
+  "campaign.not_active": "This campaign is not active",
 };
 
 export function friendlyError(err: unknown, fallback?: string) {

@@ -6,6 +6,11 @@ import Link from "../components/LocaleLink";
 import { useLocale } from "../components/LocaleProvider";
 import Shell from "../components/Shell";
 import { getToken } from "../lib/auth";
+import {
+  fetchPublicInviteCampaign,
+  inviteCampaignSummary,
+  type InviteCampaignPublic,
+} from "../lib/campaigns";
 import { t } from "../lib/copy";
 import { fetchSignupTrialPromo } from "../lib/signup-trial";
 
@@ -28,15 +33,23 @@ const extraIcons = {
       <path d="M3.5 9h17M8 17h8" />
     </svg>
   ),
+  gift: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <rect x="4" y="11" width="16" height="9" rx="1.6" />
+      <path d="M4 11h16M12 11v9M12 11c0-3-1.2-5-3.4-5S6 9.2 8.2 11H12c2.2-1.8 3.2-5 1.4-5S12 8 12 11Z" />
+    </svg>
+  ),
 };
 
 export default function Home() {
   const locale = useLocale();
-  const copy = t(locale).home;
+  const all = t(locale);
+  const copy = all.home;
   const [loggedIn, setLoggedIn] = useState(false);
   const [ready, setReady] = useState(false);
   const [trialPlan, setTrialPlan] = useState<string | null>(null);
   const [leadIndex, setLeadIndex] = useState(0);
+  const [activity, setActivity] = useState<InviteCampaignPublic | null>(null);
 
   useEffect(() => {
     setLoggedIn(!!getToken());
@@ -46,6 +59,7 @@ export default function Home() {
         setTrialPlan(promo.plan?.name?.trim() || copy.trialPlanFallback);
       }
     });
+    void fetchPublicInviteCampaign().then(setActivity);
   }, [copy.trialPlanFallback]);
 
   useEffect(() => {
@@ -136,6 +150,17 @@ export default function Home() {
         <section className="section" style={{ marginTop: 28 }}>
           <h2 className="section-title">{copy.extraTitle}</h2>
           <div className="steps">
+            {activity ? (
+              <Link href="/activity" className="step home-activity-step">
+                <div className="step-num" aria-hidden>
+                  {extraIcons.gift}
+                </div>
+                <div>
+                  <h3>{activity.ui?.title?.trim() || all.activity.fallbackTitle}</h3>
+                  <p>{inviteCampaignSummary(all.activity, activity)}</p>
+                </div>
+              </Link>
+            ) : null}
             <div className="step">
               <div className="step-num" aria-hidden>
                 {extraIcons.nodes}

@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { parseClientChannel } from "../services/catalog.js";
 import {
   listActiveCampaignsForUser,
+  listPublicInviteMilestoneCampaigns,
   participateCampaign,
 } from "../services/growth/campaigns.js";
 import { resolveSource, sourceHintsFromRequest } from "../services/project.js";
@@ -45,8 +46,56 @@ async function resolvePackageId(
   return user.sourcePackageId;
 }
 
+function localeFromCampaignReq(req: FastifyRequest): string | null {
+  const q = req.query as { locale?: string; lang?: string };
+  return (
+    q.locale ||
+    q.lang ||
+    (typeof req.headers["x-habibi-locale"] === "string"
+      ? req.headers["x-habibi-locale"]
+      : null) ||
+    (Array.isArray(req.headers["accept-language"])
+      ? req.headers["accept-language"][0]
+      : req.headers["accept-language"]) ||
+    null
+  );
+}
+
+function clientFromCampaignReq(
+  req: FastifyRequest,
+  fallback = "h5",
+) {
+  const q = req.query as { client?: string };
+  const raw =
+    q.client ||
+    (req.headers["x-habibi-client"] as string | undefined) ||
+    fallback;
+  try {
+    return parseClientChannel(raw);
+  } catch {
+    return parseClientChannel("h5");
+  }
+}
+
 export const userCampaignRoutes: FastifyPluginAsync = async (app) => {
   const prefix = `${USER_API_PREFIX}/campaigns`;
+
+  app.get(`${prefix}/public`, async (req, reply) => {
+    try {
+      const source = await resolveSource(sourceHintsFromRequest(req));
+      const client = clientFromCampaignReq(req);
+      const locale = localeFromCampaignReq(req);
+      const campaigns = await listPublicInviteMilestoneCampaigns({
+        projectId: source.projectId,
+        client,
+        packageId: source.sourcePackageId,
+        locale,
+      });
+      return { campaigns, client, locale };
+    } catch (err) {
+      return mapErr(err, reply);
+    }
+  });
 
   app.get(
     prefix,

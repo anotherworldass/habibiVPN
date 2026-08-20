@@ -92,14 +92,6 @@ function defaultGuide(mode: ConnectMode): GuideMode {
   return "vpn";
 }
 
-/** Show usage block when limit is known (incl. unlimited = 0). */
-function hasTrafficUsage(sub: Subscription): boolean {
-  return (
-    typeof sub.data_limit_bytes === "number" &&
-    Number.isFinite(sub.data_limit_bytes)
-  );
-}
-
 function trafficResetInfo(
   sub: Subscription,
 ): { policy: string; when: string | null } | null {
@@ -172,7 +164,6 @@ function ConnectContent() {
   );
 
   const selectedReset = selected ? trafficResetInfo(selected) : null;
-  const showTraffic = selected ? hasTrafficUsage(selected) : false;
   const mode: ConnectMode = prefs?.connect_mode ?? "unset";
 
   async function pickPref(next: ConnectMode) {
@@ -400,35 +391,23 @@ function ConnectContent() {
               {selected.expires_at && (
                 <p>到期：{new Date(selected.expires_at).toLocaleString()}</p>
               )}
-              {showTraffic ? (
-                <TrafficUsage
-                  usedBytes={selected!.used_traffic_bytes}
-                  limitBytes={selected!.data_limit_bytes}
-                  footer={
-                    selectedReset ? (
-                      <span className="traffic-usage-reset">
-                        {selectedReset.policy}
-                        {selectedReset.when ? (
-                          <>
-                            <i aria-hidden>·</i>
-                            {selectedReset.when}
-                          </>
-                        ) : null}
-                      </span>
-                    ) : null
-                  }
-                />
-              ) : selectedReset ? (
-                <p className="traffic-usage-reset" style={{ marginTop: 10 }}>
-                  {selectedReset.policy}
-                  {selectedReset.when ? (
-                    <>
-                      <i aria-hidden>·</i>
-                      {selectedReset.when}
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
+              <TrafficUsage
+                usedBytes={selected.used_traffic_bytes ?? 0}
+                limitBytes={selected.data_limit_bytes}
+                footer={
+                  selectedReset ? (
+                    <span className="traffic-usage-reset">
+                      {selectedReset.policy}
+                      {selectedReset.when ? (
+                        <>
+                          <i aria-hidden>·</i>
+                          {selectedReset.when}
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null
+                }
+              />
               {!selected.subscription_url ? (
                 <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
                   订阅链接生成中，请稍后刷新。

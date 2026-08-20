@@ -9,6 +9,11 @@ import { apiFetch } from "../../lib/api";
 import { clearToken, getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { useLocale } from "../../components/LocaleProvider";
+import {
+  fetchPublicInviteCampaign,
+  inviteCampaignSummary,
+  type InviteCampaignPublic,
+} from "../../lib/campaigns";
 import { t } from "../../lib/copy";
 
 type Me = {
@@ -25,6 +30,7 @@ export default function AccountPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
+  const [activity, setActivity] = useState<InviteCampaignPublic | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -35,6 +41,7 @@ export default function AccountPage() {
       .then((res) => setMe(res.user))
       .catch((e) => setError(friendlyError(e, copy.common.loadFailed)))
       .finally(() => setReady(true));
+    void fetchPublicInviteCampaign().then(setActivity);
   }, [router]);
 
   const uidText = ready ? (me?.uid != null ? String(me.uid) : "—") : "…";
@@ -86,7 +93,29 @@ export default function AccountPage() {
           <div className="account-desktop-body">
             <div className="account-desktop-main">
               <div className="account-link-stack">
-                <Link href="/promo" className="account-promo-card account-promo-card--featured">
+                {activity ? (
+                  <Link href="/activity" className="account-promo-card account-promo-card--featured">
+                    <span className="account-promo-icon" aria-hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <rect x="4" y="11" width="16" height="9" rx="1.6" />
+                        <path d="M4 11h16M12 11v9M12 11c0-3-1.2-5-3.4-5S6 9.2 8.2 11H12c2.2-1.8 3.2-5 1.4-5S12 8 12 11Z" />
+                      </svg>
+                    </span>
+                    <div className="promo-entry-body">
+                      <div className="promo-entry-kicker">{copy.account.activityKicker}</div>
+                      <div className="promo-entry-title">
+                        {activity.ui?.title?.trim() || copy.activity.fallbackTitle}
+                      </div>
+                      <div className="promo-entry-desc">
+                        {inviteCampaignSummary(copy.activity, activity)}
+                      </div>
+                    </div>
+                    <span className="account-chevron" aria-hidden>
+                      ›
+                    </span>
+                  </Link>
+                ) : null}
+                <Link href="/promo" className={activity ? "account-promo-card" : "account-promo-card account-promo-card--featured"}>
                   <span className="account-promo-icon" aria-hidden>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                       <path d="M4 12h16M12 4v16" />

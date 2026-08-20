@@ -330,7 +330,16 @@ function SubscriptionContent() {
                   <div style={{ color: "var(--muted)" }}>{copy.sub.expires}</div>
                   <div style={{ marginTop: 4, fontWeight: 600 }}>
                     {selected.expires_at
-                      ? new Date(selected.expires_at).toLocaleDateString()
+                      ? new Date(selected.expires_at).toLocaleString(
+                          locale === "zh" ? "zh-CN" : "en-US",
+                          {
+                            year: "numeric",
+                            month: "numeric",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          },
+                        )
                       : "-"}
                   </div>
                 </div>

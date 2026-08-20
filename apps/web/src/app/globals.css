@@ -942,6 +942,105 @@ input {
   line-height: 1.45;
 }
 
+a.home-activity-step {
+  text-decoration: none;
+  color: inherit;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--teal) 8%, white);
+}
+
+.activity-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.activity-card,
+.activity-reward {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--teal) 6%, white);
+}
+
+.activity-progress-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activity-progress-meta strong {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+}
+
+.activity-progress-meta span,
+.activity-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.activity-progress-track {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--teal) 16%, white);
+  overflow: hidden;
+}
+
+.activity-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+}
+
+.activity-hint {
+  margin: 8px 0 0;
+}
+
+.activity-rewards {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-reward-kicker,
+.activity-block-title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.activity-reward h2,
+.activity-block-title + ul,
+.activity-card h2.activity-block-title {
+  margin: 6px 0 0;
+}
+
+.activity-reward h2 {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.activity-reward p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.activity-req-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 .page-head {
   padding: 20px 0 8px;
 }

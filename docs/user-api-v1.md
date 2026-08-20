@@ -467,6 +467,7 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
+| GET | `/campaigns/public` | 否 | 当前 H5 邀请达标活动摘要（无个人进度） |
 | GET | `/campaigns` | 是 | 当前可参与活动 |
 | POST | `/campaigns/:id/participate` | 是 | 领取 / 抽奖 / 邀请达标补领 |
 | POST | `/redeem` | 是 | 兑换码 |
@@ -506,7 +507,7 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 ```json
 {
   "type": "invite_milestone",
-  "reward": { "kind": "vpn_plan", "plan_id": "..." },
+  "reward": { "kind": "vpn_plan", "plan_id": "...", "plan": { "id": "...", "name": "永久 VIP" } },
   "already_participated": false,
   "can_participate": false,
   "ineligible_reasons": ["campaign.invite_progress"],
@@ -516,6 +517,7 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
     "grant_mode": "auto",
     "plan_id": "...",
     "per_invite_plan_id": "...",
+    "per_invite_plan": { "id": "...", "name": "新用户免费 1 天" },
     "per_invite_granted_count": 2,
     "requirements": {
       "paid": false,
@@ -530,6 +532,12 @@ TiTiVPN iOS：StoreKit 2 购买后上传 `verificationData.serverVerificationDat
 只统计活动开始后新注册的直邀。`grant_mode=auto` 时达标后后台自动开通套餐；`claim` 时需 `POST /campaigns/:id/participate`。流量条件看订阅同步缓存（`usedTrafficBytes`），不是秒级实时。未达标 reason 为 `campaign.invite_progress`。
 
 若配置了 `per_invite_plan_id`，达标前按注册时间排序的前 N-1 个合格直邀各开通一次该套餐（绑定邀请 / 被邀人开通订阅后自动发放）；第 N 个只发达标套餐。未配置则为 `null`。`already_participated` / 每人一次上限只看达标领取，不含每邀账本。
+
+`reward.plan` / `invite_progress.per_invite_plan` 为套餐展示名，以后台当前配置为准。
+
+### `GET /campaigns/public`
+
+无需登录。按站点解析项目，返回当前窗口内、该 `client`（默认 h5）已启用的 `invite_milestone` 摘要：`ui`、`required_count`、`grant_mode`、`reward.plan`、`per_invite_plan`、`requirements`。不含 `current_count`。个人进度请用登录后的 `GET /campaigns`。
 
 客户端应展示 `ui.*`，勿用后台 `name`。
 

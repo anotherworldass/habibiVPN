@@ -1,6 +1,5 @@
 import type {
   CampaignClaim,
-  CampaignReward,
   ClientChannel,
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
@@ -9,6 +8,8 @@ import { grantVpnDuration } from "../provision.js";
 import {
   eligibilityHttpError,
   evaluateEligibility,
+  packageAllowed,
+  type CampaignRewardWithPlan,
   type CampaignWithRelations,
 } from "./eligibility.js";
 import { tryGrantInviteMilestone } from "./invite-milestone.js";
@@ -19,8 +20,11 @@ import {
 } from "@habibi/shared";
 import {
   asRules,
+  emptyInviteeRequirements,
   normalizeCampaignUi,
+  normalizeInviteFromRules,
   resolveCampaignUiPublic,
+  type InviteMilestoneRules,
   type ParticipateInput,
 } from "./types.js";
 
@@ -30,9 +34,57 @@ function httpError(message: string, statusCode: number) {
   return Object.assign(new Error(message), { statusCode });
 }
 
-function primaryReward(rewards: CampaignReward[]): CampaignReward | null {
+type PlanBrief = { id: string; name: string };
+
+function primaryReward(
+  rewards: CampaignRewardWithPlan[],
+): CampaignRewardWithPlan | null {
   if (!rewards.length) return null;
   return [...rewards].sort((a, b) => a.sortOrder - b.sortOrder)[0] || null;
+}
+
+function planBrief(
+  plan: { id: string; name: string } | null | undefined,
+): PlanBrief | null {
+  if (!plan?.id) return null;
+  const name = plan.name?.trim();
+  return { id: plan.id, name: name || plan.id };
+}
+
+async function loadPlanBriefs(
+  ids: Array<string | null | undefined>,
+): Promise<Map<string, PlanBrief>> {
+  const unique = [
+    ...new Set(ids.filter((id): id is string => Boolean(id && id.trim()))),
+  ];
+  if (!unique.length) return new Map();
+  const rows = await prisma.plan.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, name: true },
+  });
+  return new Map(rows.map((p) => [p.id, { id: p.id, name: p.name }]));
+}
+
+function serializePublicReward(reward: CampaignRewardWithPlan | null) {
+  if (!reward) return null;
+  return {
+    kind: reward.kind,
+    plan_id: reward.planId,
+    plan: planBrief(reward.plan),
+    validity_seconds: reward.validitySeconds,
+    data_limit_bytes:
+      reward.dataLimitBytes == null ? null : Number(reward.dataLimitBytes),
+  };
+}
+
+function serializeRequirements(invite: InviteMilestoneRules | null) {
+  const reqs = invite?.inviteeRequirements ?? emptyInviteeRequirements();
+  return {
+    paid: reqs.paid,
+    has_subscription: reqs.hasSubscription,
+    has_traffic: reqs.hasTraffic,
+    min_traffic_bytes: reqs.minTrafficBytes,
+  };
 }
 
 const campaignInclude = {
@@ -88,11 +140,15 @@ export function serializeCampaignPublic(
   c: CampaignWithRelations,
   elig: Awaited<ReturnType<typeof evaluateEligibility>>,
   locale?: string | null,
+  planBriefs?: Map<string, PlanBrief>,
 ) {
   const reward = primaryReward(c.rewards);
   const ui = resolveCampaignUiPublic(c.uiJson, locale);
-  // Prefer resolved title; fall back to operational name.
   const title = ui.title || c.name;
+  const perInviteId = elig.inviteProgress?.perInvitePlanId ?? null;
+  const perInvitePlan = perInviteId
+    ? planBriefs?.get(perInviteId) ?? null
+    : null;
   return {
     id: c.id,
     code: c.code,
@@ -107,17 +163,7 @@ export function serializeCampaignPublic(
       ...ui,
       title,
     },
-    reward: reward
-      ? {
-          kind: reward.kind,
-          plan_id: reward.planId,
-          validity_seconds: reward.validitySeconds,
-          data_limit_bytes:
-            reward.dataLimitBytes == null
-              ? null
-              : Number(reward.dataLimitBytes),
-        }
-      : null,
+    reward: serializePublicReward(reward),
     period_key: elig.periodKey,
     today_count: elig.todayCount,
     already_participated:
@@ -134,7 +180,8 @@ export function serializeCampaignPublic(
           current_count: elig.inviteProgress.currentCount,
           grant_mode: elig.inviteProgress.grantMode,
           plan_id: reward?.planId ?? null,
-          per_invite_plan_id: elig.inviteProgress.perInvitePlanId,
+          per_invite_plan_id: perInviteId,
+          per_invite_plan: perInvitePlan,
           per_invite_granted_count: elig.inviteProgress.perInviteGrantedCount,
           requirements: {
             paid: elig.inviteProgress.requirements.paid,
@@ -144,6 +191,36 @@ export function serializeCampaignPublic(
           },
         }
       : undefined,
+  };
+}
+
+export function serializeInviteCampaignTeaser(
+  c: CampaignWithRelations,
+  locale: string | null | undefined,
+  planBriefs: Map<string, PlanBrief>,
+) {
+  const invite = normalizeInviteFromRules(asRules(c.rulesJson));
+  const reward = primaryReward(c.rewards);
+  const ui = resolveCampaignUiPublic(c.uiJson, locale);
+  const title = ui.title || c.name;
+  const perInviteId = invite?.perInvitePlanId ?? null;
+  return {
+    id: c.id,
+    code: c.code,
+    type: c.type,
+    status: c.status,
+    start_at: c.startAt?.toISOString() || null,
+    end_at: c.endAt?.toISOString() || null,
+    locale: resolveAppCopyLocale(locale),
+    ui: {
+      ...ui,
+      title,
+    },
+    required_count: invite?.requiredCount ?? 0,
+    grant_mode: invite?.grantMode ?? "auto",
+    reward: serializePublicReward(reward),
+    per_invite_plan: perInviteId ? planBriefs.get(perInviteId) ?? null : null,
+    requirements: serializeRequirements(invite),
   };
 }
 
@@ -187,7 +264,10 @@ export async function listActiveCampaignsForUser(input: {
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
   });
 
-  const out = [];
+  const pending: Array<{
+    campaign: (typeof rows)[number];
+    elig: Awaited<ReturnType<typeof evaluateEligibility>>;
+  }> = [];
   for (const c of rows) {
     const elig = await evaluateEligibility({
       campaign: c,
@@ -199,9 +279,46 @@ export async function listActiveCampaignsForUser(input: {
     // Still show campaigns that fail soft eligibility (audience/limit),
     // but hide hard client/package mismatches already filtered partially.
     if (elig.reasons.includes("campaign.package_not_allowed")) continue;
-    out.push(serializeCampaignPublic(c, elig, input.locale));
+    pending.push({ campaign: c, elig });
   }
-  return out;
+  const planIds = pending.flatMap(({ campaign: c, elig }) => [
+    primaryReward(c.rewards)?.planId,
+    elig.inviteProgress?.perInvitePlanId,
+  ]);
+  const briefs = await loadPlanBriefs(planIds);
+  return pending.map(({ campaign, elig }) =>
+    serializeCampaignPublic(campaign, elig, input.locale, briefs),
+  );
+}
+
+export async function listPublicInviteMilestoneCampaigns(input: {
+  projectId: string;
+  client: ClientChannel;
+  packageId?: string | null;
+  locale?: string | null;
+}) {
+  const now = new Date();
+  const rows = await prisma.campaign.findMany({
+    where: {
+      projectId: input.projectId,
+      status: "active",
+      type: "invite_milestone",
+      clients: { some: { client: input.client, enabled: true } },
+      OR: [{ startAt: null }, { startAt: { lte: now } }],
+      AND: [{ OR: [{ endAt: null }, { endAt: { gte: now } }] }],
+    },
+    include: campaignInclude,
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+  });
+  const visible = rows.filter((c) => packageAllowed(c.packages, input.packageId));
+  const planIds = visible.flatMap((c) => [
+    primaryReward(c.rewards)?.planId,
+    normalizeInviteFromRules(asRules(c.rulesJson))?.perInvitePlanId,
+  ]);
+  const briefs = await loadPlanBriefs(planIds);
+  return visible
+    .filter((c) => normalizeInviteFromRules(asRules(c.rulesJson)))
+    .map((c) => serializeInviteCampaignTeaser(c, input.locale, briefs));
 }
 
 function rollLottery(winRateBps: number): boolean {
