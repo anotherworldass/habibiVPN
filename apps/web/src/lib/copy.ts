@@ -42,8 +42,6 @@ const zh = {
       `既是VPN 也是机场，满足各种环境下使用。`,
     ],
     leadOut: "注册领取套餐，复制订阅链接，导入客户端即可使用。",
-    leadOutTrial: (plan: string) =>
-      `新用户注册即送「${plan}」，注册即可使用。`,
     trialChip: (plan: string) => `限时活动 · 注册即送「${plan}」`,
     trialPlanFallback: "体验套餐",
     ctaConnect: "打开连接",
@@ -796,8 +794,6 @@ const en = {
       `${site.brand} is both a VPN and a proxy service, ready for every environment.`,
     ],
     leadOut: "Sign up, claim a plan, copy the subscription link, and import it into a client.",
-    leadOutTrial: (plan: string) =>
-      `New accounts get “${plan}” on signup. Sign up and you’re in.`,
     trialChip: (plan: string) => `Limited offer · signup gift “${plan}”`,
     trialPlanFallback: "a trial plan",
     ctaConnect: "Open Connect",

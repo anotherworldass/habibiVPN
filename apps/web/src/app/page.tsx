@@ -76,10 +76,8 @@ export default function Home() {
                 {copy.leadIn[leadIndex]}
               </span>
             </p>
-            {!loggedIn ? (
-              <p className="hero-lead">
-                {trialPlan ? copy.leadOutTrial(trialPlan) : copy.leadOut}
-              </p>
+            {!loggedIn && !trialPlan ? (
+              <p className="hero-lead">{copy.leadOut}</p>
             ) : null}
             <div className="hero-cta">
               {!ready ? null : loggedIn ? (
