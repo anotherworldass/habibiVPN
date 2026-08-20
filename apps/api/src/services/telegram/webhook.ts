@@ -107,17 +107,20 @@ export async function handleTelegramWebhook(input: {
     video: msg.video,
   });
 
-  await recordMessage({
-    projectId: project.id,
-    botId: bot.id,
-    subscriberId: sub.id,
-    direction: "inbound",
-    source: "user",
-    contentType: detected.contentType,
-    text: detected.text,
-    telegramMessageId: msg.message_id ?? null,
-    bumpUnread: true,
-  });
+  // /start is a Mini App handshake, not a support ticket.
+  if (!isStart) {
+    await recordMessage({
+      projectId: project.id,
+      botId: bot.id,
+      subscriberId: sub.id,
+      direction: "inbound",
+      source: "user",
+      contentType: detected.contentType,
+      text: detected.text,
+      telegramMessageId: msg.message_id ?? null,
+      bumpUnread: true,
+    });
+  }
 
   let welcomeSent = false;
   let autoReplied = false;
@@ -140,23 +143,13 @@ export async function handleTelegramWebhook(input: {
       : undefined;
 
     try {
-      const sent = await sendMessage(token, {
+      await sendMessage(token, {
         chat_id: msg.chat.id,
         text: welcome,
         reply_markup: replyMarkup,
         disable_web_page_preview: true,
       });
       welcomeSent = true;
-      await recordMessage({
-        projectId: project.id,
-        botId: bot.id,
-        subscriberId: sub.id,
-        direction: "outbound",
-        source: "welcome",
-        contentType: "text",
-        text: welcome,
-        telegramMessageId: sent.message_id,
-      });
     } catch (err) {
       console.warn(
         "[telegram.webhook] welcome send failed",
