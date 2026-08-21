@@ -34,6 +34,8 @@ type Provider = {
     apiBaseUrl?: string;
   };
   hasSecret: boolean;
+  secret?: string | null;
+  secretUnreadable?: boolean;
   channels: Channel[];
 };
 
@@ -134,7 +136,7 @@ export default function PaymentSettingsPage() {
           name: provider.name,
           adapter: provider.adapter,
           enabled: provider.enabled,
-          secret: "",
+          secret: provider.secret || "",
           ...provider.config,
         });
       }
@@ -158,7 +160,7 @@ export default function PaymentSettingsPage() {
         name: provider.name,
         adapter: provider.adapter,
         enabled: provider.enabled,
-        secret: "",
+        secret: provider.secret || "",
         ...provider.config,
       });
     }
@@ -352,12 +354,14 @@ export default function PaymentSettingsPage() {
           </Card>
           <Card title={`${selected.name}（${selected.code}）`}>
             <Alert
-              type={selected.hasSecret ? "success" : "warning"}
+              type={selected.secretUnreadable ? "error" : selected.hasSecret ? "success" : "warning"}
               showIcon
               message={
-                selected.hasSecret
-                  ? "商户秘钥已加密保存；留空不会覆盖现有秘钥。"
-                  : "尚未配置商户秘钥，服务商和通道即使开启也不会展示给用户。"
+                selected.secretUnreadable
+                  ? "已保存的商户秘钥无法解密（加密密钥与保存时不一致）。请重新填写并保存。"
+                  : selected.hasSecret
+                    ? "商户秘钥如下所示；清空后保存不会覆盖现有秘钥。"
+                    : "尚未配置商户秘钥，服务商和通道即使开启也不会展示给用户。"
               }
               style={{ marginBottom: 20 }}
             />
@@ -396,10 +400,10 @@ export default function PaymentSettingsPage() {
                   </Form.Item>
                 )}
                 <Form.Item name="secret" label={acceptoSelected ? "API Key (sk_live_...)" : "商户秘钥"}>
-                  <Input.Password
-                    style={{ width: 300 }}
+                  <Input
+                    style={{ width: 360 }}
                     placeholder={selected.hasSecret ? "留空保持不变" : "请输入商户秘钥"}
-                    autoComplete="new-password"
+                    autoComplete="off"
                   />
                 </Form.Item>
                 <Form.Item name="enabled" label="启用服务商" valuePropName="checked">
@@ -672,7 +676,7 @@ export default function PaymentSettingsPage() {
                   <Input style={{ width: 260 }} />
                 </Form.Item>
                 <Form.Item name="secret" label="API Key (sk_live_...)" rules={[{ required: true }]}>
-                  <Input.Password style={{ width: 320 }} autoComplete="new-password" />
+                  <Input style={{ width: 360 }} autoComplete="off" />
                 </Form.Item>
               </Space>
               <Form.Item
@@ -697,7 +701,7 @@ export default function PaymentSettingsPage() {
                   <Input style={{ width: 260 }} />
                 </Form.Item>
                 <Form.Item name="secret" label="商户秘钥" rules={[{ required: true }]}>
-                  <Input.Password style={{ width: 320 }} autoComplete="new-password" />
+                  <Input style={{ width: 360 }} autoComplete="off" />
                 </Form.Item>
               </Space>
               <Form.Item name="createOrderUrl" label="支付下单地址" rules={[{ required: true }, { type: "url" }]}>

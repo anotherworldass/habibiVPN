@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ADMIN_API_PREFIX } from "@habibi/shared";
 import { prisma } from "../lib/prisma.js";
 import { writeAudit } from "../lib/audit.js";
-import { encryptCredentials } from "../payments/credentials.js";
+import { decryptCredentials, encryptCredentials } from "../payments/credentials.js";
 import {
   createPaymentAdapter,
   supportedPaymentAdapters,
@@ -46,8 +46,22 @@ function publicProvider<T extends {
   credentialsEncrypted: string | null;
   channels?: unknown;
 }>(provider: T) {
-  const { credentialsEncrypted: _credentials, ...safe } = provider;
-  return { ...safe, hasSecret: Boolean(_credentials) };
+  const { credentialsEncrypted, ...safe } = provider;
+  let secret: string | null = null;
+  let secretUnreadable = false;
+  if (credentialsEncrypted) {
+    try {
+      secret = decryptCredentials(credentialsEncrypted).secret;
+    } catch {
+      secretUnreadable = true;
+    }
+  }
+  return {
+    ...safe,
+    hasSecret: Boolean(credentialsEncrypted),
+    secret,
+    secretUnreadable,
+  };
 }
 
 export const adminPaymentRoutes: FastifyPluginAsync = async (app) => {
