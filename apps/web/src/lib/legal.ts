@@ -113,7 +113,7 @@ const privacyEn = (): LegalDoc => ({
   switchToZh: "中文",
   switchToEn: "English",
   relatedPrivacy: "Privacy Policy",
-  relatedTerms: "Terms of Service",
+  relatedTerms: "Terms of Use",
   relatedSupport: "Support",
   blocks: [
     {
@@ -182,7 +182,7 @@ const privacyEn = (): LegalDoc => ({
     {
       h3: "Contact us",
       paragraphs: [
-        `For privacy questions, email ${site.supportEmail} or visit Support. You may also review the Terms of Service.`,
+        `For privacy questions, email ${site.supportEmail} or visit Support. You may also review the Terms of Use.`,
       ],
     },
   ],
@@ -191,7 +191,7 @@ const privacyEn = (): LegalDoc => ({
 const termsZh = (): LegalDoc => ({
   title: "用户协议",
   lead: `使用 ${site.brand} 前，请阅读并同意以下服务条款。`,
-  updatedLabel: "最近更新：2026-07-29",
+  updatedLabel: "最近更新：2026-08-21",
   footerAccount: "返回我的",
   footerHome: "回首页",
   switchToZh: "中文",
@@ -228,7 +228,8 @@ const termsZh = (): LegalDoc => ({
       h3: "套餐、支付与订阅",
       list: [
         "套餐时长、流量、设备数等权益以订单与账号内展示为准",
-        "通过 App Store / 其他支付渠道购买时，还须遵守对应平台的支付与退款规则",
+        "通过 App Store 购买的自动续订订阅：费用记入你的 Apple ID；除非在当前周期结束至少 24 小时前取消，否则到期后自动续订；可在设备「设置 → Apple ID → 订阅」中管理或取消",
+        "通过 App Store / 其他支付渠道购买时，还须遵守对应平台的支付与退款规则。App Store 付费另适用 Apple 标准最终用户许可协议（EULA）：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
         "除非法律强制或我们书面承诺，已生效的虚拟服务权益通常不支持无理由退款",
         "活动、兑换码、邀请奖励等以当时公示规则为准，我们保留在合理范围内调整的权利",
       ],
@@ -280,15 +281,15 @@ const termsZh = (): LegalDoc => ({
 });
 
 const termsEn = (): LegalDoc => ({
-  title: "Terms of Service",
+  title: "Terms of Use",
   lead: `Please read and accept these terms before using ${site.brand}.`,
-  updatedLabel: "Last updated: 2026-07-29",
+  updatedLabel: "Last updated: 2026-08-21",
   footerAccount: "My account",
   footerHome: "Home",
   switchToZh: "中文",
   switchToEn: "English",
   relatedPrivacy: "Privacy Policy",
-  relatedTerms: "Terms of Service",
+  relatedTerms: "Terms of Use",
   relatedSupport: "Support",
   blocks: [
     {
@@ -319,7 +320,8 @@ const termsEn = (): LegalDoc => ({
       h3: "Plans, payments, and subscriptions",
       list: [
         "Plan duration, traffic, device limits, and other benefits follow the order and what your account shows",
-        "Purchases via the App Store or other payment channels are also subject to that platform’s payment and refund rules",
+        "Auto-renewable subscriptions purchased via the App Store are charged to your Apple ID. They renew unless canceled at least 24 hours before the end of the current period. Manage or cancel in Settings → Apple ID → Subscriptions",
+        "Purchases via the App Store or other payment channels are also subject to that platform’s payment and refund rules. App Store purchases are additionally governed by Apple’s Standard EULA: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
         "Unless required by law or promised by us in writing, activated digital entitlements are generally non-refundable without cause",
         "Campaigns, redeem codes, and invite rewards follow the rules published at the time; we may adjust them within a reasonable scope",
       ],
