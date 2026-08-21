@@ -388,7 +388,7 @@ VPN 连接：**不要**用 `/nodes` 拨号；用订阅里的 `subscription_url` 
 | POST | `/orders` | 是 | 创建订单并拿支付链接 |
 | GET | `/orders` | 是 | 我的订单列表 |
 | GET | `/orders/:id` | 是 | 单笔；`?refresh=true` 向上游查单 |
-| POST | `/payments/callback/:providerCode` | 无 | 支付通道回调（服务端） |
+| GET / POST | `/payments/callback/:providerCode` | 无 | 支付通道回调（服务端）。易支付兼容网关（Accepto）成功应答为 `success`，其它网关为 `SUCCESS`。GET query 与 POST body 均可。 |
 
 ### `POST /orders`
 

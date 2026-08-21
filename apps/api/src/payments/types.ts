@@ -6,6 +6,12 @@ export type PaymentProviderConfig = {
   callbackIp?: string;
 };
 
+export type AcceptoEpayConfig = {
+  pid: string;
+  submitUrl: string;
+  apiBaseUrl: string;
+};
+
 export type PaymentCredentials = {
   secret: string;
 };
@@ -17,14 +23,20 @@ export type CreatePaymentInput = {
   notifyUrl: string;
   jumpUrl?: string;
   payerName?: string;
+  subject?: string;
 };
 
 export type CreatePaymentResult = {
-  providerOrderNo: string;
+  providerOrderNo: string | null;
   paymentUrl: string;
 };
 
 export type PaymentState = "paid" | "pending" | "failed";
+
+export type QueryPaymentContext = {
+  providerRef?: string | null;
+  paymentUrl?: string | null;
+};
 
 export type QueryPaymentResult = {
   providerOrderNo?: string;
@@ -42,8 +54,12 @@ export type PaymentCallback = {
 };
 
 export interface PaymentAdapter {
+  readonly callbackAck?: string;
   createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult>;
-  queryPayment(merchantOrderNo: string): Promise<QueryPaymentResult>;
+  queryPayment(
+    merchantOrderNo: string,
+    ctx?: QueryPaymentContext,
+  ): Promise<QueryPaymentResult>;
   verifyCallback(payload: Record<string, string>): PaymentCallback;
   queryBalance?(): Promise<unknown>;
 }

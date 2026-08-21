@@ -40,12 +40,17 @@ type PaymentChannel = {
 function methodIcon(method: string) {
   if (method === "wechat_qr") return "微";
   if (method === "alipay_native") return "支";
+  if (method === "crypto") return "币";
   return "付";
 }
 
-function methodLabel(method: string, labels: { wechat: string; alipay: string; online: string }) {
+function methodLabel(
+  method: string,
+  labels: { wechat: string; alipay: string; crypto: string; online: string },
+) {
   if (method === "wechat_qr") return labels.wechat;
   if (method === "alipay_native") return labels.alipay;
+  if (method === "crypto") return labels.crypto;
   return labels.online;
 }
 

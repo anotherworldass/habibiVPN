@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { USER_API_PREFIX } from "@habibi/shared";
 import { prisma } from "../lib/prisma.js";
@@ -226,20 +226,27 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.post(`${USER_API_PREFIX}/payments/callback/:providerCode`, async (req, reply) => {
+  async function paymentCallbackHandler(req: FastifyRequest, reply: FastifyReply) {
     const { providerCode } = req.params as { providerCode: string };
     try {
       const provider = await prisma.paymentProvider.findUnique({
         where: { code: providerCode },
       });
       if (!provider) return reply.code(404).type("text/plain").send("FAIL");
-      const callback = createPaymentAdapter(provider).verifyCallback(stringRecord(req.body));
+      const adapter = createPaymentAdapter(provider);
+      const callback = adapter.verifyCallback({
+        ...stringRecord(req.query),
+        ...stringRecord(req.body),
+      });
       await applyPaymentResult(provider.code, callback);
-      return reply.type("text/plain").send("SUCCESS");
+      return reply.type("text/plain").send(adapter.callbackAck || "SUCCESS");
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode || 500;
       req.log.error({ err: error, providerCode }, "payment callback failed");
       return reply.code(status).type("text/plain").send("FAIL");
     }
-  });
+  }
+
+  app.get(`${USER_API_PREFIX}/payments/callback/:providerCode`, paymentCallbackHandler);
+  app.post(`${USER_API_PREFIX}/payments/callback/:providerCode`, paymentCallbackHandler);
 };

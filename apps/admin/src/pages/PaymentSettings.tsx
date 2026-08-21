@@ -29,6 +29,9 @@ type Provider = {
     queryOrderUrl?: string;
     balanceUrl?: string;
     callbackIp?: string;
+    pid?: string;
+    submitUrl?: string;
+    apiBaseUrl?: string;
   };
   hasSecret: boolean;
   channels: Channel[];
@@ -49,6 +52,36 @@ function yuan(cents: number) {
   return (cents / 100).toFixed(2);
 }
 
+function isAcceptoAdapter(adapter?: string) {
+  return adapter === "accepto_epay";
+}
+
+function providerConfigFromForm(adapter: string, values: {
+  pid?: string;
+  submitUrl?: string;
+  apiBaseUrl?: string;
+  appId?: string;
+  createOrderUrl?: string;
+  queryOrderUrl?: string;
+  balanceUrl?: string;
+  callbackIp?: string;
+}) {
+  if (isAcceptoAdapter(adapter)) {
+    return {
+      pid: values.pid,
+      submitUrl: values.submitUrl,
+      apiBaseUrl: values.apiBaseUrl,
+    };
+  }
+  return {
+    appId: values.appId,
+    createOrderUrl: values.createOrderUrl,
+    queryOrderUrl: values.queryOrderUrl,
+    balanceUrl: values.balanceUrl || undefined,
+    callbackIp: values.callbackIp || undefined,
+  };
+}
+
 export default function PaymentSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,6 +97,8 @@ export default function PaymentSettingsPage() {
   const [channelForm] = Form.useForm();
 
   const selected = providers.find((provider) => provider.id === selectedId);
+  const createAdapter = Form.useWatch("adapter", providerForm);
+  const acceptoSelected = isAcceptoAdapter(selected?.adapter);
 
   async function load(preferredId?: string) {
     setLoading(true);
@@ -123,13 +158,7 @@ export default function PaymentSettingsPage() {
           adapter: values.adapter,
           enabled: false,
           secret: values.secret,
-          config: {
-            appId: values.appId,
-            createOrderUrl: values.createOrderUrl,
-            queryOrderUrl: values.queryOrderUrl,
-            balanceUrl: values.balanceUrl || undefined,
-            callbackIp: values.callbackIp || undefined,
-          },
+          config: providerConfigFromForm(values.adapter, values),
         }),
       });
       message.success("支付商已创建");
@@ -183,13 +212,7 @@ export default function PaymentSettingsPage() {
           name: values.name,
           enabled: values.enabled,
           adapter: selected.adapter,
-          config: {
-            appId: values.appId,
-            createOrderUrl: values.createOrderUrl,
-            queryOrderUrl: values.queryOrderUrl,
-            balanceUrl: values.balanceUrl || undefined,
-            callbackIp: values.callbackIp || undefined,
-          },
+          config: providerConfigFromForm(selected.adapter, values),
           ...(values.secret ? { secret: values.secret } : {}),
         }),
       });
@@ -301,10 +324,16 @@ export default function PaymentSettingsPage() {
                 <Form.Item name="name" label="支付商名称" rules={[{ required: true }]}>
                   <Input style={{ width: 240 }} />
                 </Form.Item>
-                <Form.Item name="appId" label="商户号 appId" rules={[{ required: true }]}>
-                  <Input style={{ width: 240 }} />
-                </Form.Item>
-                <Form.Item name="secret" label="商户秘钥">
+                {acceptoSelected ? (
+                  <Form.Item name="pid" label="Accepto App ID (pid)" rules={[{ required: true }]}>
+                    <Input style={{ width: 240 }} />
+                  </Form.Item>
+                ) : (
+                  <Form.Item name="appId" label="商户号 appId" rules={[{ required: true }]}>
+                    <Input style={{ width: 240 }} />
+                  </Form.Item>
+                )}
+                <Form.Item name="secret" label={acceptoSelected ? "API Key (sk_live_...)" : "商户秘钥"}>
                   <Input.Password
                     style={{ width: 300 }}
                     placeholder={selected.hasSecret ? "留空保持不变" : "请输入商户秘钥"}
@@ -315,41 +344,66 @@ export default function PaymentSettingsPage() {
                   <Switch />
                 </Form.Item>
               </Space>
-              <Form.Item
-                name="createOrderUrl"
-                label="支付下单地址"
-                rules={[{ required: true }, { type: "url" }]}
-              >
-                <Input />
-              </Form.Item>
-              <Form.Item
-                name="queryOrderUrl"
-                label="支付订单查询地址"
-                rules={[{ required: true }, { type: "url" }]}
-              >
-                <Input />
-              </Form.Item>
-              <Form.Item name="balanceUrl" label="查询商户余额地址" rules={[{ type: "url" }]}>
-                <Input />
-              </Form.Item>
-              <Form.Item
-                name="callbackIp"
-                label="平台提供的回调 IP"
-                extra="当前以 MD5 签名作为回调鉴权依据；该 IP 留作部署和排查记录。"
-              >
-                <Input style={{ width: 300 }} />
-              </Form.Item>
+              {acceptoSelected ? (
+                <>
+                  <Form.Item
+                    name="submitUrl"
+                    label="易支付提交地址"
+                    extra="默认 https://api.accepto.io/submit.php"
+                    rules={[{ required: true }, { type: "url" }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item
+                    name="apiBaseUrl"
+                    label="Accepto API 根地址"
+                    extra="用于 GET /api/checkout/{id} 查单兜底"
+                    rules={[{ required: true }, { type: "url" }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                </>
+              ) : (
+                <>
+                  <Form.Item
+                    name="createOrderUrl"
+                    label="支付下单地址"
+                    rules={[{ required: true }, { type: "url" }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item
+                    name="queryOrderUrl"
+                    label="支付订单查询地址"
+                    rules={[{ required: true }, { type: "url" }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item name="balanceUrl" label="查询商户余额地址" rules={[{ type: "url" }]}>
+                    <Input />
+                  </Form.Item>
+                  <Form.Item
+                    name="callbackIp"
+                    label="平台提供的回调 IP"
+                    extra="当前以 MD5 签名作为回调鉴权依据；该 IP 留作部署和排查记录。"
+                  >
+                    <Input style={{ width: 300 }} />
+                  </Form.Item>
+                </>
+              )}
               <Space>
                 <Button type="primary" loading={saving} onClick={() => void saveProvider()}>
                   保存服务商配置
                 </Button>
-                <Button
-                  disabled={!selected.hasSecret}
-                  loading={balanceLoading}
-                  onClick={() => void queryBalance()}
-                >
-                  测试并查询余额
-                </Button>
+                {!acceptoSelected ? (
+                  <Button
+                    disabled={!selected.hasSecret}
+                    loading={balanceLoading}
+                    onClick={() => void queryBalance()}
+                  >
+                    测试并查询余额
+                  </Button>
+                ) : null}
               </Space>
               {balance ? (
                 <Alert
@@ -376,7 +430,9 @@ export default function PaymentSettingsPage() {
                 onClick={() => {
                   channelForm.setFieldsValue({
                     currency: "CNY",
-                    method: "wechat_qr",
+                    method: acceptoSelected ? "crypto" : "wechat_qr",
+                    code: acceptoSelected ? "usdt" : undefined,
+                    name: acceptoSelected ? "加密货币" : undefined,
                     sortOrder: selected.channels.length * 10 + 10,
                   });
                   setChannelModalOpen(true);
@@ -491,30 +547,74 @@ export default function PaymentSettingsPage() {
             <Form.Item name="name" label="支付商名称" rules={[{ required: true }]}>
               <Input style={{ width: 220 }} />
             </Form.Item>
-            <Form.Item name="adapter" label="支付体系" rules={[{ required: true }]}>
-              <Select style={{ width: 220 }} options={adapters} />
+            <Form.Item
+              name="adapter"
+              label="支付体系"
+              rules={[{ required: true }]}
+            >
+              <Select
+                style={{ width: 220 }}
+                options={adapters}
+                onChange={(value) => {
+                  if (isAcceptoAdapter(value)) {
+                    providerForm.setFieldsValue({
+                      submitUrl: "https://api.accepto.io/submit.php",
+                      apiBaseUrl: "https://api.accepto.io",
+                    });
+                  }
+                }}
+              />
             </Form.Item>
           </Space>
-          <Space wrap align="start">
-            <Form.Item name="appId" label="商户号 appId" rules={[{ required: true }]}>
-              <Input style={{ width: 260 }} />
-            </Form.Item>
-            <Form.Item name="secret" label="商户秘钥" rules={[{ required: true }]}>
-              <Input.Password style={{ width: 320 }} autoComplete="new-password" />
-            </Form.Item>
-          </Space>
-          <Form.Item name="createOrderUrl" label="支付下单地址" rules={[{ required: true }, { type: "url" }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="queryOrderUrl" label="订单查询地址" rules={[{ required: true }, { type: "url" }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="balanceUrl" label="余额查询地址" rules={[{ type: "url" }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="callbackIp" label="回调 IP">
-            <Input style={{ width: 300 }} />
-          </Form.Item>
+          {isAcceptoAdapter(createAdapter) ? (
+            <>
+              <Space wrap align="start">
+                <Form.Item name="pid" label="Accepto App ID (pid)" rules={[{ required: true }]}>
+                  <Input style={{ width: 260 }} />
+                </Form.Item>
+                <Form.Item name="secret" label="API Key (sk_live_...)" rules={[{ required: true }]}>
+                  <Input.Password style={{ width: 320 }} autoComplete="new-password" />
+                </Form.Item>
+              </Space>
+              <Form.Item
+                name="submitUrl"
+                label="易支付提交地址"
+                rules={[{ required: true }, { type: "url" }]}
+              >
+                <Input />
+              </Form.Item>
+              <Form.Item
+                name="apiBaseUrl"
+                label="Accepto API 根地址"
+                rules={[{ required: true }, { type: "url" }]}
+              >
+                <Input />
+              </Form.Item>
+            </>
+          ) : (
+            <>
+              <Space wrap align="start">
+                <Form.Item name="appId" label="商户号 appId" rules={[{ required: true }]}>
+                  <Input style={{ width: 260 }} />
+                </Form.Item>
+                <Form.Item name="secret" label="商户秘钥" rules={[{ required: true }]}>
+                  <Input.Password style={{ width: 320 }} autoComplete="new-password" />
+                </Form.Item>
+              </Space>
+              <Form.Item name="createOrderUrl" label="支付下单地址" rules={[{ required: true }, { type: "url" }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="queryOrderUrl" label="订单查询地址" rules={[{ required: true }, { type: "url" }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="balanceUrl" label="余额查询地址" rules={[{ type: "url" }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="callbackIp" label="回调 IP">
+                <Input style={{ width: 300 }} />
+              </Form.Item>
+            </>
+          )}
         </Form>
       </Modal>
 
@@ -529,10 +629,10 @@ export default function PaymentSettingsPage() {
         <Form form={channelForm} layout="vertical" preserve={false}>
           <Space wrap align="start">
             <Form.Item name="code" label="通道编码" rules={[{ required: true }]}>
-              <Input style={{ width: 180 }} placeholder="例如 6608" />
+              <Input style={{ width: 180 }} placeholder="例如 usdt 或 6608" />
             </Form.Item>
             <Form.Item name="name" label="通道名称" rules={[{ required: true }]}>
-              <Input style={{ width: 220 }} placeholder="例如 微信扫码" />
+              <Input style={{ width: 220 }} placeholder="例如 加密货币 / 微信扫码" />
             </Form.Item>
           </Space>
           <Space wrap align="start">
@@ -542,6 +642,7 @@ export default function PaymentSettingsPage() {
                 options={[
                   { value: "wechat_qr", label: "微信扫码" },
                   { value: "alipay_native", label: "支付宝原生" },
+                  { value: "crypto", label: "加密货币" },
                   { value: "other", label: "其他" },
                 ]}
               />

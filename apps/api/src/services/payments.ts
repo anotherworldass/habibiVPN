@@ -156,10 +156,11 @@ export async function createPaymentOrder(input: {
       merchantOrderNo: order.id,
       amountCents: order.amountCents,
       channelCode: channel.code,
+      subject: plan.name,
       notifyUrl: `${env.API_PUBLIC_ORIGIN.replace(/\/$/, "")}/api/v1/payments/callback/${encodeURIComponent(channel.provider.code)}`,
       jumpUrl:
         input.jumpUrl ||
-        `${env.WEB_PUBLIC_ORIGIN.replace(/\/$/, "")}/payment/result?order_id=${encodeURIComponent(order.id)}`,
+        `${env.WEB_PUBLIC_ORIGIN.replace(/\/$/, "")}/payment/${encodeURIComponent(order.id)}`,
     });
     return prisma.order.update({
       where: { id: order.id },
@@ -246,6 +247,9 @@ export async function applyPaymentResult(
   if (!order || order.provider !== providerCode) {
     throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
   }
+  if (["paid", "provisioning", "provisioned"].includes(order.status)) {
+    return order;
+  }
   if (order.amountCents !== result.amountCents) {
     throw Object.assign(new Error("payment.amount_mismatch"), { statusCode: 400 });
   }
@@ -288,7 +292,10 @@ export async function refreshPaymentOrder(userId: string, orderId: string) {
   const provider = await prisma.paymentProvider.findUnique({ where: { code: order.provider } });
   if (!provider || !provider.enabled) return order;
 
-  const result = await createPaymentAdapter(provider).queryPayment(order.id);
+  const result = await createPaymentAdapter(provider).queryPayment(order.id, {
+    providerRef: order.providerRef,
+    paymentUrl: order.paymentUrl,
+  });
   if (result.amountCents != null && result.amountCents !== order.amountCents) {
     throw Object.assign(new Error("payment.amount_mismatch"), { statusCode: 400 });
   }
