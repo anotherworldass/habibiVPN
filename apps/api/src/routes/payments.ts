@@ -200,16 +200,31 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
         if (refresh) {
           const order = await refreshPaymentOrder(req.user!.sub, id);
           if (!order) return reply.code(404).send({ error: "order.not_found" });
-          return { order: publicOrder(order) };
+          const channel = order.paymentChannelId
+            ? await prisma.paymentChannel.findUnique({
+                where: { id: order.paymentChannelId },
+                select: { method: true },
+              })
+            : null;
+          return {
+            order: {
+              ...publicOrder(order),
+              channel_method: channel?.method ?? null,
+            },
+          };
         }
         const order = await prisma.order.findFirst({
           where: { id, userId: req.user!.sub },
-          include: { plan: { select: { id: true, code: true, name: true } } },
+          include: {
+            plan: { select: { id: true, code: true, name: true } },
+            paymentChannel: { select: { method: true } },
+          },
         });
         if (!order) return reply.code(404).send({ error: "order.not_found" });
         return {
           order: {
             ...publicOrder(order),
+            channel_method: order.paymentChannel?.method ?? null,
             plan: {
               id: order.plan.id,
               code: order.plan.code,

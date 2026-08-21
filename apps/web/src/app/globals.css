@@ -2200,6 +2200,10 @@ a.home-invite-banner {
   background: #1677ff;
 }
 
+.checkout-channel-icon[data-method="crypto"] {
+  background: #7c3aed;
+}
+
 .checkout-channel-copy {
   flex: 1;
   min-width: 0;

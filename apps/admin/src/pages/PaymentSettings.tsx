@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { PageContainer } from "@ant-design/pro-components";
 import { Alert, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from "antd";
 import { message } from "../lib/antd-message";
-import { PlusOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, PlusOutlined } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
 
 type Channel = {
@@ -225,16 +225,40 @@ export default function PaymentSettingsPage() {
     }
   }
 
-  async function updateChannel(channel: Channel, patch: Partial<Channel>) {
+  async function updateChannel(channel: Channel, patch: Partial<Channel>, options?: { silent?: boolean }) {
     try {
       await adminFetch(`/admin/v1/payment/channels/${channel.id}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
       await load(selected?.id);
-      message.success("通道配置已更新");
+      if (!options?.silent) message.success("通道配置已更新");
     } catch (error) {
       message.error(error instanceof Error ? error.message : "更新失败");
+    }
+  }
+
+  async function moveChannel(index: number, delta: -1 | 1) {
+    if (!selected) return;
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= selected.channels.length) return;
+    const reordered = [...selected.channels];
+    const [item] = reordered.splice(index, 1);
+    if (!item) return;
+    reordered.splice(nextIndex, 0, item);
+    try {
+      await Promise.all(
+        reordered.map((channel, order) =>
+          adminFetch(`/admin/v1/payment/channels/${channel.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ sortOrder: (order + 1) * 10 }),
+          }),
+        ),
+      );
+      await load(selected.id);
+      message.success("通道顺序已更新");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "调整顺序失败");
     }
   }
 
@@ -442,11 +466,48 @@ export default function PaymentSettingsPage() {
               </Button>
             }
           >
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="结账页按排序数字从小到大展示，跨支付商全局生效。可用上移/下移，或直接改数字让加密货币排在微信、支付宝前面。"
+            />
             <Table<Channel>
               rowKey="id"
               pagination={false}
               dataSource={selected.channels}
               columns={[
+                {
+                  title: "顺序",
+                  width: 168,
+                  render: (_, channel, index) => (
+                    <Space size={4}>
+                      <Button
+                        size="small"
+                        icon={<ArrowUpOutlined />}
+                        disabled={index === 0}
+                        onClick={() => void moveChannel(index, -1)}
+                      />
+                      <Button
+                        size="small"
+                        icon={<ArrowDownOutlined />}
+                        disabled={index === selected.channels.length - 1}
+                        onClick={() => void moveChannel(index, 1)}
+                      />
+                      <InputNumber
+                        min={0}
+                        precision={0}
+                        style={{ width: 72 }}
+                        value={channel.sortOrder}
+                        onChange={(value) => {
+                          if (value != null && value !== channel.sortOrder) {
+                            void updateChannel(channel, { sortOrder: value });
+                          }
+                        }}
+                      />
+                    </Space>
+                  ),
+                },
                 {
                   title: "通道名称",
                   dataIndex: "name",

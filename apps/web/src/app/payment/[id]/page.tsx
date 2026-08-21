@@ -18,6 +18,7 @@ type PaymentOrder = {
   amount_cents: number;
   currency: string;
   payment_url: string | null;
+  channel_method?: string | null;
   failure_reason: string | null;
   provision_error: string | null;
 };
@@ -69,6 +70,7 @@ export default function PaymentOrderPage() {
   }, [load, router]);
 
   const finished = order && ["provisioned", "failed", "cancelled"].includes(order.status);
+  const hostedCheckout = order?.channel_method === "crypto";
 
   return (
     <Shell>
@@ -100,11 +102,13 @@ export default function PaymentOrderPage() {
 
           {order.status === "pending" && order.payment_url ? (
             <div style={{ marginTop: 24, textAlign: "center" }}>
-              <div style={{ display: "inline-block", padding: 12, background: "#fff", borderRadius: 12 }}>
-                <QRCodeCanvas value={order.payment_url} size={220} level="M" />
-              </div>
-              <p style={{ margin: "12px 0", color: "var(--muted)", fontSize: 13 }}>
-                {copy.payment.scanHint}
+              {hostedCheckout ? null : (
+                <div style={{ display: "inline-block", padding: 12, background: "#fff", borderRadius: 12 }}>
+                  <QRCodeCanvas value={order.payment_url} size={220} level="M" />
+                </div>
+              )}
+              <p style={{ margin: hostedCheckout ? "0 0 12px" : "12px 0", color: "var(--muted)", fontSize: 13 }}>
+                {hostedCheckout ? copy.payment.openHint : copy.payment.scanHint}
               </p>
               <a
                 className="btn btn-primary btn-block"
