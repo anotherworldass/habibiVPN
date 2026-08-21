@@ -1,7 +1,7 @@
 /** Public site links — override via NEXT_PUBLIC_* in env if needed */
 export const site = {
   brand: "TiTiVPN",
-  slogan: "随时连上，快速访问",
+  slogan: "稳定在线，始终可靠",
   supportEmail:
     process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@tizi.work",
   supportTelegram:

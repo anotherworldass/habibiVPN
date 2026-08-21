@@ -90,10 +90,11 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
 
   const desktopTabs = loggedIn ? appTabs : guestTabs;
   const mobileTabs = [...desktopTabs, accountTab];
-  const showBrandBar = !flush && !isInvitePath(pathname);
+  const showBrandBar = !isInvitePath(pathname);
 
   const shellClass = [
     "habibi-shell",
+    flush ? "habibi-shell--flush" : "",
     narrow ? "habibi-shell--narrow" : "",
     hideNavigation ? "habibi-shell--no-nav" : "",
   ]

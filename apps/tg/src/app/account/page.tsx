@@ -14,7 +14,6 @@ import {
   appDownloadUrl,
   fetchTelegramChannelUrl,
   getCachedChannelUrl,
-  isPlaceholderUrl,
   site,
   supportTelegramUrl,
 } from "../../lib/site";
@@ -127,11 +126,6 @@ export default function TgAccountPage() {
     haptic("light");
     setError("");
     const url = appDownloadUrl();
-    if (isPlaceholderUrl(url)) {
-      setToast("下载页即将上线");
-      window.setTimeout(() => setToast(""), 2200);
-      return;
-    }
     const ok = await copyText(url);
     openExternal(url);
     hapticSuccess();

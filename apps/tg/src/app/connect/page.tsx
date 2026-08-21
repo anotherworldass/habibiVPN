@@ -16,7 +16,7 @@ import {
 import { formatResetAt, resetPolicyLabel } from "../../lib/plan-format";
 import { copyText } from "../../lib/clipboard";
 import { ensureSession } from "../../lib/session";
-import { appDownloadUrl, isPlaceholderUrl, site } from "../../lib/site";
+import { appDownloadUrl, site } from "../../lib/site";
 import {
   fetchSignupTrialPromo,
   telegramSignupTrialPlan,
@@ -246,11 +246,6 @@ function ConnectContent() {
     haptic("light");
     setError("");
     const url = appDownloadUrl();
-    if (isPlaceholderUrl(url)) {
-      setToast("下载页即将上线");
-      window.setTimeout(() => setToast(""), 2200);
-      return;
-    }
     const ok = await copyText(url);
     if (!ok) {
       setError("复制失败，请长按选择链接");
@@ -471,7 +466,7 @@ function ConnectContent() {
                 </li>
               </ol>
               <p className="guide-note">
-                适合不想折腾客户端的用户。App 上线前可先用机场模式。
+                适合不想折腾客户端的用户。也可切换到机场模式使用第三方客户端。
               </p>
               <button
                 type="button"
