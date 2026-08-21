@@ -77,9 +77,14 @@ const testMailBody = z.object({
 const authEmailPatch = z.object({
   enabled: z.boolean(),
   allowSoftBindWithoutCode: z.boolean(),
+  allowUnverifiedDirectRegister: z.boolean(),
   allowUnverifiedPasswordLogin: z.boolean(),
   allowClaimUnverifiedEmail: z.boolean(),
   blockGmailAliasVariants: z.boolean(),
+  limitRegisterAbuse: z.boolean(),
+  registerAttemptPer10Min: z.number().int().min(1).max(1000),
+  registerIpNewPerDay: z.number().int().min(1).max(10000),
+  registerDeviceNewPerDay: z.number().int().min(1).max(10000),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -281,9 +286,14 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
       const projectId = await resolveAdminProjectId(req);
       const value = authEmailValueSchema.parse({
         allowSoftBindWithoutCode: parsed.data.allowSoftBindWithoutCode,
+        allowUnverifiedDirectRegister: parsed.data.allowUnverifiedDirectRegister,
         allowUnverifiedPasswordLogin: parsed.data.allowUnverifiedPasswordLogin,
         allowClaimUnverifiedEmail: parsed.data.allowClaimUnverifiedEmail,
         blockGmailAliasVariants: parsed.data.blockGmailAliasVariants,
+        limitRegisterAbuse: parsed.data.limitRegisterAbuse,
+        registerAttemptPer10Min: parsed.data.registerAttemptPer10Min,
+        registerIpNewPerDay: parsed.data.registerIpNewPerDay,
+        registerDeviceNewPerDay: parsed.data.registerDeviceNewPerDay,
       });
       const row = await upsertProjectSetting({
         projectId,

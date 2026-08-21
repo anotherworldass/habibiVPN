@@ -14,6 +14,9 @@ const MAP: Record<string, string> = {
   "auth.bootstrap_rate_limited": "操作太频繁，请稍后再试",
   "auth.bootstrap_device_limited": "今日创建账号已达上限",
   "auth.device_id_required": "缺少设备标识，请重开小程序",
+  "auth.register_rate_limited": "注册过于频繁，请稍后再试",
+  "auth.register_device_limited": "该设备今日注册次数已达上限",
+  "auth.register_ip_limited": "当前网络今日注册次数已达上限",
   "plan.not_found": "套餐不存在或已下架",
   "plan.not_free_claimable": "该套餐不可免费领取",
   "subscription.plan_already_owned": "你已拥有该套餐",
@@ -36,6 +39,8 @@ const MAP: Record<string, string> = {
   "referral.disabled": "推广功能暂时关闭",
   "payment.channel_unavailable": "该支付通道暂不可用",
   "payment.create_failed": "创建支付订单失败，请稍后重试",
+  "payment.too_many_pending": "未支付订单过多，请先完成已有订单后再试",
+  "payment.rate_limited": "下单过于频繁，请稍后再试",
   "order.not_found": "订单不存在",
 };
 

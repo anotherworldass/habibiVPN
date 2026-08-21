@@ -70,8 +70,9 @@ Authorization: Bearer <user_jwt>
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | POST | `/auth/bootstrap` | 可选 | 匿名冷启动 / 幂等续期 |
+| GET | `/auth/register-policy` | 无 | Web 注册是否必须验证码 |
 | POST | `/auth/register/send-code` | 可选 | 发送注册/绑邮验证码（不创建用户） |
-| POST | `/auth/register` | 可选 | 验码后注册/绑定；匿名 Bearer 且无 `code` 时可软绑定（未验证） |
+| POST | `/auth/register` | 可选 | 验码后注册/绑定；策略允许时可无验证码软绑定或直接注册（未验证） |
 | POST | `/auth/login` | 无 | 邮箱密码登录（未验证是否允许由项目策略控制） |
 | POST | `/auth/login/send-code` | 无 | 发送登录验证码（防枚举） |
 | POST | `/auth/login/code` | 无 | 邮箱验证码登录 |
@@ -135,6 +136,16 @@ Authorization: Bearer <user_jwt>
 
 App **必须**持久化并每次上传稳定 `device_id`（安装级 UUID），否则无法复用匿名号、也更容易触发 IP 限流。
 
+### `GET /auth/register-policy`
+
+无鉴权。给 Web 注册页判断是否展示验证码。
+
+```json
+{ "require_register_code": true, "allow_soft_bind_without_code": true }
+```
+
+`require_register_code` 为 `false` 时，对应 Admin「允许无验证码直接注册（Web）」已开启。
+
 ### `POST /auth/register/send-code`
 
 先发邮箱验证码，**不创建用户**。密码会暂存在 OTP payload，验码注册时需再传同一密码。
@@ -177,7 +188,11 @@ App **必须**持久化并每次上传稳定 `device_id`（安装级 UUID），�
 
 - 写入 `email` + 密码，`email_verified_at = null`  
 - 邮箱已被任意账号占用（含未验证）→ `auth.email_taken`（软绑定不能互抢）  
-- 无匿名 Bearer 或策略关闭软绑定 → `auth.verify_code_required`
+- 无匿名 Bearer 且未开启「允许无验证码直接注册」→ `auth.verify_code_required`
+- 匿名 Bearer 但策略关闭软绑定 → `auth.verify_code_required`
+- 无匿名 Bearer 且开启「允许无验证码直接注册」→ 创建未验证新账号
+
+Web 注册页通过 `GET /auth/register-policy` 的 `require_register_code` 决定是否展示验证码。
 
 **B. 验证码注册 / 绑定** — 须先 `send-code`：
 
@@ -405,6 +420,8 @@ VPN 连接：**不要**用 `/nodes` 拨号；用订阅里的 `subscription_url` 
 响应：`{ "order": { "id", "status", "payment_url", "amount_cents", ... } }`
 
 客户端轮询 `GET /orders/:id` 直到 `paid` / `provisioned`。
+
+下单有防刷限制：同一账号最多 3 笔待支付订单；同一用户约 10 秒冷却、10 分钟最多 8 次；同一 IP 10 分钟最多 30 次。相同套餐/通道/金额的待支付订单会复用已有支付链接，不重复向网关拉单。超限返回 `429`（`payment.too_many_pending` / `payment.rate_limited`）。
 
 ### `GET /orders?status=&limit=&offset=`
 

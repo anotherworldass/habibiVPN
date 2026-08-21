@@ -129,10 +129,13 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
           couponCode: parsed.data.coupon_code,
           client: parsed.data.client ?? headerClient ?? undefined,
           jumpUrl: parsed.data.jump_url,
+          ip: req.ip,
         });
         return reply.code(201).send({ order: publicOrder(order) });
       } catch (error) {
         const status = (error as { statusCode?: number }).statusCode || 500;
+        const retryAfter = (error as { retryAfterSeconds?: number }).retryAfterSeconds;
+        if (retryAfter) reply.header("retry-after", String(retryAfter));
         req.log.error({ err: error }, "create payment order failed");
         return reply.code(status).send({
           error: error instanceof Error ? error.message : "payment.create_failed",

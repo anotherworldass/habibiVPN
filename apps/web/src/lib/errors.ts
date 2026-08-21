@@ -47,6 +47,11 @@ const MAP_ZH: Record<string, string> = {
   "payment.provider_not_configured": "支付服务尚未完成配置",
   "payment.create_failed": "创建支付订单失败，请稍后重试",
   "payment.remote_failed": "支付平台显示订单失败",
+  "payment.too_many_pending": "未支付订单过多，请先完成或等待已有订单过期后再试",
+  "payment.rate_limited": "下单过于频繁，请稍后再试",
+  "auth.register_rate_limited": "注册过于频繁，请稍后再试",
+  "auth.register_device_limited": "该设备今日注册次数已达上限",
+  "auth.register_ip_limited": "当前网络今日注册次数已达上限",
   "order.not_found": "订单不存在",
   "support.unsafe_content":
     "消息包含不安全内容（如脚本或注入代码），请删除后重发",
@@ -109,6 +114,11 @@ const MAP_EN: Record<string, string> = {
   "payment.provider_not_configured": "Payments are not fully configured",
   "payment.create_failed": "Couldn't create the payment. Try again later.",
   "payment.remote_failed": "The payment provider marked this order as failed",
+  "payment.too_many_pending": "Too many unpaid orders. Finish or wait on an existing one first.",
+  "payment.rate_limited": "Too many payment attempts. Try again shortly.",
+  "auth.register_rate_limited": "Too many sign-ups. Try again later.",
+  "auth.register_device_limited": "This device has reached today's sign-up limit.",
+  "auth.register_ip_limited": "This network has reached today's sign-up limit.",
   "order.not_found": "Order not found",
   "support.unsafe_content":
     "Message contains unsafe content. Remove it and send again.",

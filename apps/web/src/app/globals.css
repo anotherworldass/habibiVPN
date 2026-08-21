@@ -1679,6 +1679,21 @@ a.home-invite-banner {
   margin-top: 16px;
 }
 
+.activity-share-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.activity-share-actions .btn {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .activity-body > .hero-cta {
   margin-top: 18px;
 }
@@ -5794,6 +5809,53 @@ a.home-invite-banner {
   min-width: 0;
 }
 
+.account-verify {
+  margin-top: 22px;
+  margin-bottom: 4px;
+}
+
+button.account-verify-toggle {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-verify-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+}
+
+.account-verify-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.account-verify-collapse {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-verify-collapse:hover {
+  color: var(--text);
+}
+
+.account-verify-lead {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .account-desktop-aside {
   min-width: 0;
 }
@@ -7218,7 +7280,12 @@ a.home-invite-banner {
     grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
     gap: 20px;
     align-items: start;
-    margin-top: 20px;
+    margin-top: 28px;
+  }
+
+  .account-verify {
+    margin-top: 0;
+    margin-bottom: 16px;
   }
 
   .account-link-stack {

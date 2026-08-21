@@ -2,11 +2,12 @@
 
 import Link from "../../components/LocaleLink";
 import { useLocaleRouter } from "../../components/useLocaleRouter";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import HelpLinks from "../../components/HelpLinks";
 import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
-import { clearToken, getToken } from "../../lib/auth";
+import { clearToken, getToken, setToken } from "../../lib/auth";
+import { buildWebClientMeta } from "../../lib/device";
 import { friendlyError } from "../../lib/errors";
 import { useLocale } from "../../components/LocaleProvider";
 import {
@@ -21,6 +22,7 @@ type Me = {
   id: string;
   uid?: number;
   email?: string | null;
+  email_verified?: boolean;
   subscription_count?: number;
   has_subscription?: boolean;
 };
@@ -33,6 +35,16 @@ export default function AccountPage() {
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [activity, setActivity] = useState<InviteCampaignPublic | null>(null);
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifyDevCode, setVerifyDevCode] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [verifyOk, setVerifyOk] = useState("");
+  const [allowSoftSave, setAllowSoftSave] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
 
   useEffect(() => {
     if (!getToken()) {
@@ -40,15 +52,154 @@ export default function AccountPage() {
       return;
     }
     apiFetch<{ user: Me }>("/api/v1/me")
-      .then((res) => setMe(res.user))
+      .then((res) => {
+        setMe(res.user);
+        if (res.user.email) setVerifyEmail(res.user.email);
+      })
       .catch((e) => setError(friendlyError(e, copy.common.loadFailed)))
       .finally(() => setReady(true));
     void fetchPublicInviteCampaign(locale).then(setActivity);
+    void apiFetch<{ allow_soft_bind_without_code?: boolean }>(
+      "/api/v1/auth/register-policy",
+    )
+      .then((policy) => {
+        setAllowSoftSave(policy.allow_soft_bind_without_code === true);
+      })
+      .catch(() => {
+        setAllowSoftSave(false);
+      });
   }, [router, locale]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
 
   const uidText = ready ? (me?.uid != null ? String(me.uid) : "—") : "…";
   const emailText = ready ? me?.email || "—" : copy.account.loadingEmail;
   const planCount = ready ? me?.subscription_count ?? 0 : null;
+  const needsVerify = ready && !!me?.email && !me.email_verified;
+  const draftEmail = verifyEmail.trim().toLowerCase();
+  const boundEmail = (me?.email || "").toLowerCase();
+  const emailChanged = !!draftEmail && !!boundEmail && draftEmail !== boundEmail;
+
+  function applyAuthUser(user: Me, fallbackEmail: string) {
+    setMe((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...user,
+            email: user.email ?? fallbackEmail,
+            email_verified: !!user.email_verified,
+          }
+        : user,
+    );
+    setVerifyEmail(user.email ?? fallbackEmail);
+  }
+
+  async function onSendVerifyCode() {
+    const email = draftEmail;
+    if (!email || !email.includes("@")) {
+      setError(copy.account.emailInvalid);
+      return;
+    }
+    setError("");
+    setVerifyOk("");
+    setVerifyDevCode("");
+    setSendingCode(true);
+    try {
+      const res = await apiFetch<{
+        ok: true;
+        verify_code?: string;
+      }>("/api/v1/auth/register/send-code", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          client_meta: buildWebClientMeta(),
+        }),
+      });
+      setCooldown(60);
+      if (res.verify_code) {
+        setVerifyDevCode(res.verify_code);
+        setVerifyCode(res.verify_code);
+      }
+    } catch (err) {
+      setError(friendlyError(err, copy.common.sendFailed));
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
+  async function onConfirmVerify(e: FormEvent) {
+    e.preventDefault();
+    const email = draftEmail;
+    if (!email || !email.includes("@")) {
+      setError(copy.account.emailInvalid);
+      return;
+    }
+    setError("");
+    setVerifyOk("");
+    setVerifying(true);
+    try {
+      const res = await apiFetch<{ token?: string; user: Me }>(
+        "/api/v1/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email,
+            code: verifyCode.trim(),
+            client_meta: buildWebClientMeta(),
+          }),
+        },
+      );
+      if (res.token) setToken(res.token);
+      applyAuthUser(res.user, email);
+      setVerifyCode("");
+      setVerifyDevCode("");
+      setVerifyOk(copy.account.verifyOk);
+    } catch (err) {
+      setError(friendlyError(err, copy.account.verifySubmit));
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function onSaveUnverifiedEmail() {
+    const email = draftEmail;
+    if (!email || !email.includes("@")) {
+      setError(copy.account.emailInvalid);
+      return;
+    }
+    if (!emailChanged) {
+      setVerifyOk(copy.account.emailUnchanged);
+      return;
+    }
+    setError("");
+    setVerifyOk("");
+    setSavingEmail(true);
+    try {
+      const res = await apiFetch<{ token?: string; user: Me }>(
+        "/api/v1/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email,
+            client_meta: buildWebClientMeta(),
+          }),
+        },
+      );
+      if (res.token) setToken(res.token);
+      applyAuthUser(res.user, email);
+      setVerifyCode("");
+      setVerifyDevCode("");
+      setVerifyOk(copy.account.emailSaved);
+    } catch (err) {
+      setError(friendlyError(err, copy.account.saveFailed));
+    } finally {
+      setSavingEmail(false);
+    }
+  }
 
   return (
     <Shell>
@@ -74,7 +225,19 @@ export default function AccountPage() {
             <div className="account-identity-copy">
               <span className="account-eyebrow">{copy.account.uid}</span>
               <div className="account-uid-value">{uidText}</div>
-              <div className="account-email">{emailText}</div>
+              <div className="account-email">
+                {emailText}
+                {ready && me?.email ? (
+                  <span
+                    className="status-chip"
+                    style={{ marginLeft: 8, fontSize: 12, verticalAlign: "middle" }}
+                  >
+                    {me.email_verified
+                      ? copy.account.verifiedTag
+                      : copy.account.unverifiedTag}
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <Link href="/subscription" className="account-plan-chip">
@@ -94,6 +257,129 @@ export default function AccountPage() {
 
           <div className="account-desktop-body">
             <div className="account-desktop-main">
+              {needsVerify ? (
+                verifyOpen ? (
+                <form
+                  className="panel account-verify"
+                  onSubmit={(e) => void onConfirmVerify(e)}
+                >
+                  <div className="account-verify-head">
+                    <h2>{copy.account.verifyTitle}</h2>
+                    <button
+                      type="button"
+                      className="account-verify-collapse"
+                      onClick={() => setVerifyOpen(false)}
+                    >
+                      {copy.account.verifyCollapse}
+                    </button>
+                  </div>
+                  <p className="account-verify-lead">
+                    {copy.account.verifyLead}
+                  </p>
+                  {verifyOk ? (
+                    <p className="alert-ok" style={{ marginBottom: 12 }}>
+                      {verifyOk}
+                    </p>
+                  ) : null}
+                  {verifyDevCode ? (
+                    <p style={{ marginBottom: 12, fontSize: 13, color: "var(--muted)" }}>
+                      {copy.common.devCode}
+                      <strong>{verifyDevCode}</strong>
+                    </p>
+                  ) : null}
+                  <label className="field" style={{ display: "block", marginBottom: 12 }}>
+                    <span className="field-label">{copy.common.email}</span>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        className="field-input"
+                        type="email"
+                        autoComplete="email"
+                        inputMode="email"
+                        required
+                        value={verifyEmail}
+                        onChange={(ev) => {
+                          setVerifyEmail(ev.target.value);
+                          setVerifyCode("");
+                          setVerifyDevCode("");
+                          setVerifyOk("");
+                        }}
+                        placeholder="you@example.com"
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={
+                          sendingCode || cooldown > 0 || verifying || savingEmail
+                        }
+                        onClick={() => void onSendVerifyCode()}
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        {sendingCode
+                          ? copy.common.sending
+                          : cooldown > 0
+                            ? `${cooldown}s`
+                            : copy.account.verifySend}
+                      </button>
+                    </div>
+                  </label>
+                  {allowSoftSave && emailChanged ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-block"
+                      style={{ marginBottom: 12 }}
+                      disabled={savingEmail || verifying || sendingCode}
+                      onClick={() => void onSaveUnverifiedEmail()}
+                    >
+                      {savingEmail
+                        ? copy.account.savingEmail
+                        : copy.account.saveEmail}
+                    </button>
+                  ) : null}
+                  <label className="field" style={{ display: "block", marginBottom: 12 }}>
+                    <span className="field-label">{copy.account.verifyCode}</span>
+                    <input
+                      className="field-input"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      required
+                      maxLength={6}
+                      value={verifyCode}
+                      onChange={(ev) => setVerifyCode(ev.target.value.trim())}
+                      placeholder={copy.register.codePh}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-block"
+                    disabled={verifying || !verifyCode.trim()}
+                  >
+                    {verifying ? copy.account.verifying : copy.account.verifySubmit}
+                  </button>
+                </form>
+                ) : (
+                <button
+                  type="button"
+                  className="account-nav-card account-verify account-verify-toggle"
+                  onClick={() => setVerifyOpen(true)}
+                >
+                  <span className="account-nav-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <path d="m3 7 9 7 9-7" />
+                    </svg>
+                  </span>
+                  <div className="promo-entry-body">
+                    <div className="promo-entry-title">{copy.account.verifyTitle}</div>
+                    <div className="promo-entry-desc">{copy.account.verifyToggleHint}</div>
+                  </div>
+                  <span className="account-chevron" aria-hidden>
+                    ›
+                  </span>
+                </button>
+                )
+              ) : null}
               <div className="account-link-stack">
                 {activity ? (
                   <Link href="/activity" className="account-promo-card account-promo-card--featured">

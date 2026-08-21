@@ -12,6 +12,11 @@ import {
 import { createUpstreamSlot } from "./provision.js";
 import { settleCommissionsForOrder } from "./referral/commission.js";
 import { resolveCommissionKind } from "./referral/commission-kind.js";
+import {
+  assertCreateOrderAllowed,
+  findReusablePendingOrder,
+  shouldRefreshRemotePayment,
+} from "./payments-guard.js";
 
 /** App Store / Play 数字内容必须走 IAP，禁止第三方网关下单。 */
 export const STORE_IAP_ONLY_CLIENTS: ReadonlySet<ClientChannel> = new Set([
@@ -59,6 +64,7 @@ export async function createPaymentOrder(input: {
   jumpUrl?: string;
   couponCode?: string | null;
   client?: ClientChannel;
+  ip?: string | null;
 }) {
   const [plan, channel, user] = await Promise.all([
     prisma.plan.findUnique({ where: { id: input.planId } }),
@@ -98,6 +104,8 @@ export async function createPaymentOrder(input: {
     throw Object.assign(new Error("payment.provider_not_configured"), { statusCode: 503 });
   }
 
+  await assertCreateOrderAllowed({ userId: input.userId, ip: input.ip });
+
   const listPriceCents = plan.priceCents;
   let discountCents = 0;
   let amountCents = listPriceCents;
@@ -124,6 +132,15 @@ export async function createPaymentOrder(input: {
   if (amountCents < channel.minCents || amountCents > channel.maxCents) {
     throw Object.assign(new Error("payment.amount_out_of_range"), { statusCode: 400 });
   }
+
+  const reusable = await findReusablePendingOrder({
+    userId: input.userId,
+    planId: plan.id,
+    paymentChannelId: channel.id,
+    amountCents,
+    couponCode,
+  });
+  if (reusable) return reusable;
 
   const commissionKind = await resolveCommissionKind(input.userId);
   const order = await prisma.order.create({
@@ -289,6 +306,7 @@ export async function refreshPaymentOrder(userId: string, orderId: string) {
   });
   if (!order) throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
   if (!order.provider || !["pending", "paid"].includes(order.status)) return order;
+  if (!(await shouldRefreshRemotePayment(order.id))) return order;
   const provider = await prisma.paymentProvider.findUnique({ where: { code: order.provider } });
   if (!provider || !provider.enabled) return order;
 

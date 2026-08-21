@@ -279,17 +279,17 @@ export default function ActivityPage() {
                   </div>
                   <div className="promo-link-box">{inviteUrl}</div>
                 </div>
-                <div className="promo-channel-actions" style={{ marginTop: 12 }}>
+                <div className="activity-share-actions">
                   <button
                     type="button"
-                    className="btn btn-primary btn-block"
+                    className="btn btn-primary"
                     onClick={() => void copyText(inviteUrl, "web")}
                   >
                     {copied === "web" ? copy.promo.copiedLink : copy.promo.copyLink}
                   </button>
                   <button
                     type="button"
-                    className="btn btn-secondary btn-block"
+                    className="btn btn-secondary"
                     onClick={() => setQrOpen(true)}
                   >
                     {copy.promo.showQr}

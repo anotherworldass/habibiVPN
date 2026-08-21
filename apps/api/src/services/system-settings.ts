@@ -48,21 +48,36 @@ export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 export const authEmailValueSchema = z.object({
   /** Anonymous UID may bind email+password without OTP → unverified. */
   allowSoftBindWithoutCode: z.boolean(),
+  /** Web / no-session register may create an unverified account without OTP. */
+  allowUnverifiedDirectRegister: z.boolean(),
   /** Unverified email may log in with email+password. */
   allowUnverifiedPasswordLogin: z.boolean(),
   /** Verified register/bind may strip an unverified holder of the same email. */
   allowClaimUnverifiedEmail: z.boolean(),
   /** Treat Gmail dots / plus-tags / googlemail.com as the same mailbox. */
   blockGmailAliasVariants: z.boolean(),
+  /** Cap new email accounts per IP / device fingerprint. */
+  limitRegisterAbuse: z.boolean(),
+  /** Send-code / register attempts per IP and per device in 10 minutes. */
+  registerAttemptPer10Min: z.number().int().min(1).max(1000),
+  /** Distinct new email accounts per IP in 24h. */
+  registerIpNewPerDay: z.number().int().min(1).max(10000),
+  /** Distinct new email accounts per device in 24h. */
+  registerDeviceNewPerDay: z.number().int().min(1).max(10000),
 });
 
 export type AuthEmailValue = z.infer<typeof authEmailValueSchema>;
 
 export const DEFAULT_AUTH_EMAIL_VALUE: AuthEmailValue = {
   allowSoftBindWithoutCode: true,
+  allowUnverifiedDirectRegister: false,
   allowUnverifiedPasswordLogin: false,
   allowClaimUnverifiedEmail: true,
   blockGmailAliasVariants: false,
+  limitRegisterAbuse: true,
+  registerAttemptPer10Min: 8,
+  registerIpNewPerDay: 12,
+  registerDeviceNewPerDay: 2,
 };
 
 export const SIGNUP_TRIAL_TRIGGERS = [
@@ -248,6 +263,17 @@ function asObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function parseBoundedInt(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) return fallback;
+  return n;
+}
+
 export function maskMailSesValue(raw: unknown): MailSesPublicValue {
   const o = asObject(raw);
   const secret =
@@ -374,6 +400,10 @@ export function parseAuthEmailValue(raw: unknown): AuthEmailValue {
       typeof o.allowSoftBindWithoutCode === "boolean"
         ? o.allowSoftBindWithoutCode
         : DEFAULT_AUTH_EMAIL_VALUE.allowSoftBindWithoutCode,
+    allowUnverifiedDirectRegister:
+      typeof o.allowUnverifiedDirectRegister === "boolean"
+        ? o.allowUnverifiedDirectRegister
+        : DEFAULT_AUTH_EMAIL_VALUE.allowUnverifiedDirectRegister,
     allowUnverifiedPasswordLogin:
       typeof o.allowUnverifiedPasswordLogin === "boolean"
         ? o.allowUnverifiedPasswordLogin
@@ -386,6 +416,28 @@ export function parseAuthEmailValue(raw: unknown): AuthEmailValue {
       typeof o.blockGmailAliasVariants === "boolean"
         ? o.blockGmailAliasVariants
         : DEFAULT_AUTH_EMAIL_VALUE.blockGmailAliasVariants,
+    limitRegisterAbuse:
+      typeof o.limitRegisterAbuse === "boolean"
+        ? o.limitRegisterAbuse
+        : DEFAULT_AUTH_EMAIL_VALUE.limitRegisterAbuse,
+    registerAttemptPer10Min: parseBoundedInt(
+      o.registerAttemptPer10Min,
+      DEFAULT_AUTH_EMAIL_VALUE.registerAttemptPer10Min,
+      1,
+      1000,
+    ),
+    registerIpNewPerDay: parseBoundedInt(
+      o.registerIpNewPerDay,
+      DEFAULT_AUTH_EMAIL_VALUE.registerIpNewPerDay,
+      1,
+      10000,
+    ),
+    registerDeviceNewPerDay: parseBoundedInt(
+      o.registerDeviceNewPerDay,
+      DEFAULT_AUTH_EMAIL_VALUE.registerDeviceNewPerDay,
+      1,
+      10000,
+    ),
   };
   return authEmailValueSchema.parse(merged);
 }

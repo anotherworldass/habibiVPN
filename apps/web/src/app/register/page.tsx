@@ -11,6 +11,7 @@ import { apiFetch } from "../../lib/api";
 import { setToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { bindSupportSession } from "../../lib/support";
+import { buildWebClientMeta } from "../../lib/device";
 import {
   clearInviteCode,
   normalizeInviteCode,
@@ -34,6 +35,7 @@ function RegisterForm() {
   const [sendingCode, setSendingCode] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [devCode, setDevCode] = useState("");
+  const [requireCode, setRequireCode] = useState(true);
 
   useEffect(() => {
     const fromUrl = normalizeInviteCode(searchParams.get("ref"));
@@ -49,6 +51,16 @@ function RegisterForm() {
       setInviteLocked(true);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    void apiFetch<{ require_register_code?: boolean }>("/api/v1/auth/register-policy")
+      .then((policy) => {
+        setRequireCode(policy.require_register_code !== false);
+      })
+      .catch(() => {
+        setRequireCode(true);
+      });
+  }, []);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -70,7 +82,8 @@ function RegisterForm() {
         email: string;
         password: string;
         invite_code?: string;
-      } = { email, password };
+        client_meta?: ReturnType<typeof buildWebClientMeta>;
+      } = { email, password, client_meta: buildWebClientMeta() };
       const inv = inviteCode.trim();
       if (inv) body.invite_code = inv;
       const res = await apiFetch<{
@@ -102,13 +115,15 @@ function RegisterForm() {
       const body: {
         email: string;
         password: string;
-        code: string;
+        code?: string;
         invite_code?: string;
+        client_meta?: ReturnType<typeof buildWebClientMeta>;
       } = {
         email,
         password,
-        code: code.trim(),
+        client_meta: buildWebClientMeta(),
       };
+      if (requireCode) body.code = code.trim();
       const inv = inviteCode.trim();
       if (inv) body.invite_code = inv;
       const res = await apiFetch<{ token: string }>("/api/v1/auth/register", {
@@ -178,6 +193,7 @@ function RegisterForm() {
           />
         </label>
 
+        {requireCode ? (
         <label className="field" style={{ display: "block", marginBottom: 14 }}>
           <span className="field-label">{messages.common.code}</span>
           <div style={{ display: "flex", gap: 8 }}>
@@ -186,7 +202,7 @@ function RegisterForm() {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              required
+              required={requireCode}
               maxLength={6}
               value={code}
               onChange={(e) => setCode(e.target.value.trim())}
@@ -208,6 +224,7 @@ function RegisterForm() {
             </button>
           </div>
         </label>
+        ) : null}
 
         <label className="field" style={{ display: "block", marginBottom: 20 }}>
           <span className="field-label">

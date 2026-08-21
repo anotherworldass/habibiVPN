@@ -1,4 +1,5 @@
 import { clearToken, getToken } from "./auth";
+import { getOrCreateDeviceId } from "./device";
 import { resolveSiteLocale } from "./locale";
 
 function clientHeaders(): Record<string, string> {
@@ -12,8 +13,11 @@ function clientHeaders(): Record<string, string> {
     /* ignore */
   }
   headers["x-habibi-locale"] = resolveSiteLocale();
-  if (typeof window !== "undefined" && window.location.hostname) {
-    headers["x-habibi-site-host"] = window.location.hostname;
+  if (typeof window !== "undefined") {
+    if (window.location.hostname) {
+      headers["x-habibi-site-host"] = window.location.hostname;
+    }
+    headers["x-habibi-device-id"] = getOrCreateDeviceId();
   }
   return headers;
 }

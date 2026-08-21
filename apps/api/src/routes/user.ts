@@ -37,6 +37,10 @@ import {
 import { getAuthEmailPolicy } from "../services/system-settings.js";
 import { emailCredentialData, listEmailHolders } from "../services/email-canonical.js";
 import {
+  assertRegisterAttemptAllowed,
+  assertRegisterNewAccountAllowed,
+} from "../services/register-guard.js";
+import {
   getPublicSignupTrialPromo,
   scheduleSignupTrialGrant,
 } from "../services/signup-trial.js";
@@ -296,6 +300,16 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  /** Public flags for Web/TG register UI (no secrets). */
+  app.get(`${USER_API_PREFIX}/auth/register-policy`, async (req) => {
+    const source = await resolveSource(sourceHintsFromRequest(req));
+    const policy = await getAuthEmailPolicy(source.projectId);
+    return {
+      require_register_code: !policy.allowUnverifiedDirectRegister,
+      allow_soft_bind_without_code: policy.allowSoftBindWithoutCode,
+    };
+  });
+
   /** Send register / bind-email verification code (does not create user yet). */
   app.post(`${USER_API_PREFIX}/auth/register/send-code`, async (req, reply) => {
     const parsed = registerSendCodeBody.safeParse(req.body);
@@ -320,6 +334,13 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         if (current) bindUserId = current.id;
       }
       const { ip } = extractAuthContext(req);
+      if (!bindUserId) {
+        await assertRegisterAttemptAllowed({
+          projectId: source.projectId,
+          req,
+          clientMeta: parsed.data.client_meta,
+        });
+      }
       return await sendRegisterEmailCode({
         projectId: source.projectId,
         email: parsed.data.email,
@@ -356,16 +377,55 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     const clientMeta = clientMetaFromBody(parsed.data.client_meta);
 
     try {
-      // Soft-bind: anonymous Bearer + no OTP → unverified email (policy-gated).
-      // Also allows updating an existing unverified soft-bound email.
+      // Soft-bind / unverified register: no OTP (policy-gated).
       if (!code) {
-        if (!authPolicy.allowSoftBindWithoutCode) {
-          return reply.code(400).send({ error: "auth.verify_code_required" });
-        }
         const session = await tryUserFromAuth(req);
-        if (!session) {
+        if (session) {
+          if (!authPolicy.allowSoftBindWithoutCode) {
+            return reply.code(400).send({ error: "auth.verify_code_required" });
+          }
+        } else if (!authPolicy.allowUnverifiedDirectRegister) {
           return reply.code(400).send({ error: "auth.verify_code_required" });
         }
+
+        const password = parsed.data.password?.trim() || "";
+        const inviteCode = parsed.data.invite_code?.trim() || undefined;
+
+        if (!session) {
+          if (!password || password.length < 6) {
+            return reply.code(400).send({ error: "validation.failed" });
+          }
+          await assertRegisterNewAccountAllowed({
+            projectId: source.projectId,
+            req,
+            clientMeta,
+          });
+          const user = await createUserWithInvite({
+            email,
+            passwordHash: await hashPassword(password),
+            inviteCode,
+            source,
+            emailVerifiedAt: null,
+            claimUnverified: false,
+          });
+          void recordAuthEvent({
+            userId: user.id,
+            eventType: "register",
+            req,
+            clientMeta,
+            fallbackClient: source.sourceClient,
+            meta: {
+              email,
+              invite_code: inviteCode || null,
+              project_id: source.projectId,
+              email_verified: false,
+              direct_unverified: true,
+            },
+          });
+          const token = await signUserToken({ sub: user.id, email: user.email });
+          return { token, user: publicAuthUser(user) };
+        }
+
         const current = await prisma.user.findUnique({
           where: { id: session.sub },
         });
@@ -375,9 +435,6 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         if (current.emailVerifiedAt) {
           return reply.code(409).send({ error: "auth.already_registered" });
         }
-
-        const password = parsed.data.password?.trim() || "";
-        const inviteCode = parsed.data.invite_code?.trim() || undefined;
 
         // Update soft-bound email (and optional password) without OTP.
         if (current.email && !current.emailVerifiedAt) {
@@ -561,6 +618,11 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         return { token, user: publicAuthUser(user) };
       }
 
+      await assertRegisterNewAccountAllowed({
+        projectId: source.projectId,
+        req,
+        clientMeta,
+      });
       const user = await createUserWithInvite({
         email,
         passwordHash,
