@@ -66,6 +66,28 @@ function formatDays(
   return null;
 }
 
+function trafficKind(n?: number | null): "unlimited" | "metered" | null {
+  if (n == null) return null;
+  if (n === 0) return "unlimited";
+  return "metered";
+}
+
+function PlanTrafficBadge({ bytes }: { bytes?: number | null }) {
+  const plansCopy = t(useLocale()).plans;
+  const kind = trafficKind(bytes);
+  if (!kind) return null;
+  const unlimited = kind === "unlimited";
+  return (
+    <span
+      className={
+        unlimited ? "plan-corner plan-corner--unlimited" : "plan-corner plan-corner--metered"
+      }
+    >
+      {unlimited ? plansCopy.trafficUnlimited : plansCopy.trafficMetered}
+    </span>
+  );
+}
+
 function PlanSpecs({
   days,
   traffic,
@@ -125,11 +147,14 @@ function FreePlanCards({
       </div>
       <div className="plans-grid">
         {plans.map((p) => {
-          const traffic = formatBytes(
-            p.data_limit_bytes,
-            messages.common.unlimited,
-            messages.common.traffic,
-          );
+          const traffic =
+            p.data_limit_bytes === 0
+              ? null
+              : formatBytes(
+                  p.data_limit_bytes,
+                  messages.common.unlimited,
+                  messages.common.traffic,
+                );
           const days = formatDays(
             p.validity_seconds,
             messages.common.days,
@@ -138,7 +163,10 @@ function FreePlanCards({
           );
           return (
             <article key={p.id} className="plan-card plan-card--free">
-              <span className="plan-badge plan-badge--free">{plansCopy.freeBadge}</span>
+              <PlanTrafficBadge bytes={p.data_limit_bytes} />
+              <div className="plan-badges">
+                <span className="plan-badge plan-badge--free">{plansCopy.freeBadge}</span>
+              </div>
               <div className="plan-card-main">
                 <h3 className="plan-card-title">{p.name}</h3>
                 <div className="plan-price plan-price--free">¥0</div>
@@ -209,11 +237,14 @@ function PaidPlanCards({
 
       <div className="plans-grid">
         {plans.map((p) => {
-          const traffic = formatBytes(
-            p.data_limit_bytes,
-            messages.common.unlimited,
-            messages.common.traffic,
-          );
+          const traffic =
+            p.data_limit_bytes === 0
+              ? null
+              : formatBytes(
+                  p.data_limit_bytes,
+                  messages.common.unlimited,
+                  messages.common.traffic,
+                );
           const days = formatDays(
             p.validity_seconds,
             messages.common.days,
@@ -226,6 +257,7 @@ function PaidPlanCards({
               : null;
           return (
             <article key={p.id} className="plan-card">
+              <PlanTrafficBadge bytes={p.data_limit_bytes} />
               <div className="plan-card-main">
                 <h3 className="plan-card-title">{p.name}</h3>
                 <div className="plan-price">

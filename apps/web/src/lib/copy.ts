@@ -380,6 +380,8 @@ const zh = {
     inviteDesc: "分享邀请链接，好友付费你拿佣金",
     duration: "时长",
     traffic: "流量",
+    trafficUnlimited: "不限流量",
+    trafficMetered: "流量套餐",
   },
   login: {
     title: "登录",
@@ -1235,6 +1237,8 @@ const en = {
     inviteDesc: "Share your invite link and earn commission when they pay",
     duration: "Duration",
     traffic: "Data",
+    trafficUnlimited: "Unlimited data",
+    trafficMetered: "Data plan",
   },
   login: {
     title: "Log in",
