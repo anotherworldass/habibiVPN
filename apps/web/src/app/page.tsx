@@ -229,9 +229,14 @@ export default function Home() {
             </div>
           </div>
         </div>
+        <a href="#home-next" className="hero-scroll" aria-label={copy.scrollHint}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </a>
       </section>
 
-      <div className="habibi-pad">
+      <div className="habibi-pad" id="home-next">
         <section className="section">
           <h2 className="section-title">{copy.stepsTitle}</h2>
           <p className="section-lead">{copy.stepsLead}</p>
