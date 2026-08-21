@@ -98,7 +98,23 @@ export default function PaymentSettingsPage() {
 
   const selected = providers.find((provider) => provider.id === selectedId);
   const createAdapter = Form.useWatch("adapter", providerForm);
-  const acceptoSelected = isAcceptoAdapter(selected?.adapter);
+  const editAdapter = Form.useWatch("adapter", form);
+  const acceptoSelected = isAcceptoAdapter(editAdapter || selected?.adapter);
+
+  function applyAdapterDefaults(adapter: string) {
+    const current = form.getFieldsValue();
+    if (isAcceptoAdapter(adapter)) {
+      form.setFieldsValue({
+        pid: current.pid || current.appId,
+        submitUrl: current.submitUrl || "https://api.accepto.io/submit.php",
+        apiBaseUrl: current.apiBaseUrl || "https://api.accepto.io",
+      });
+      return;
+    }
+    form.setFieldsValue({
+      appId: current.appId || current.pid,
+    });
+  }
 
   async function load(preferredId?: string) {
     setLoading(true);
@@ -116,6 +132,7 @@ export default function PaymentSettingsPage() {
       if (provider) {
         form.setFieldsValue({
           name: provider.name,
+          adapter: provider.adapter,
           enabled: provider.enabled,
           secret: "",
           ...provider.config,
@@ -139,6 +156,7 @@ export default function PaymentSettingsPage() {
     if (provider) {
       form.setFieldsValue({
         name: provider.name,
+        adapter: provider.adapter,
         enabled: provider.enabled,
         secret: "",
         ...provider.config,
@@ -211,8 +229,8 @@ export default function PaymentSettingsPage() {
         body: JSON.stringify({
           name: values.name,
           enabled: values.enabled,
-          adapter: selected.adapter,
-          config: providerConfigFromForm(selected.adapter, values),
+          adapter: values.adapter,
+          config: providerConfigFromForm(values.adapter, values),
           ...(values.secret ? { secret: values.secret } : {}),
         }),
       });
@@ -343,10 +361,30 @@ export default function PaymentSettingsPage() {
               }
               style={{ marginBottom: 20 }}
             />
+            {editAdapter && selected.adapter !== editAdapter ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="支付体系已更改，保存后才会按新协议对接。密钥通常不能沿用，请重新填写对应商户秘钥/API Key。"
+                style={{ marginBottom: 20 }}
+              />
+            ) : null}
             <Form form={form} layout="vertical" style={{ maxWidth: 920 }}>
               <Space wrap size="large" align="start">
                 <Form.Item name="name" label="支付商名称" rules={[{ required: true }]}>
                   <Input style={{ width: 240 }} />
+                </Form.Item>
+                <Form.Item
+                  name="adapter"
+                  label="支付体系"
+                  rules={[{ required: true }]}
+                  extra="改这个才会切换 Accepto / 艾希字段；仅改名称不会换协议。"
+                >
+                  <Select
+                    style={{ width: 260 }}
+                    options={adapters}
+                    onChange={(value) => applyAdapterDefaults(value)}
+                  />
                 </Form.Item>
                 {acceptoSelected ? (
                   <Form.Item name="pid" label="Accepto App ID (pid)" rules={[{ required: true }]}>
