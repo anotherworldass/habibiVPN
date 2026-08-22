@@ -78,6 +78,7 @@ function SubscriptionContent() {
   const router = useLocaleRouter();
   const search = useSearchParams();
   const claimed = search.get("claimed") === "1";
+  const welcome = search.get("welcome") === "1";
   const queryId = search.get("id");
 
   const [subs, setSubs] = useState<Subscription[]>([]);
@@ -101,30 +102,57 @@ function SubscriptionContent() {
       router.replace("/login");
       return;
     }
-    Promise.all([
-      apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions"),
-      apiFetch<{ plans: Plan[] }>(
-        `/api/v1/plans?client=h5&locale=${encodeURIComponent(locale)}`,
-      ).catch(() => ({ plans: [] as Plan[] })),
-    ])
-      .then(([subRes, planRes]) => {
-        const list = subRes.subscriptions || [];
-        setSubs(list);
-        const preferred =
-          (queryId && list.find((s) => s.id === queryId)?.id) ||
-          list.find((s) => s.status === "active")?.id ||
-          list[0]?.id ||
-          null;
-        setSelectedId(preferred);
-        setHasClaimableFree(
-          (planRes.plans || []).some(
-            (p) => p.is_free_claimable && !p.already_claimed,
-          ),
-        );
-      })
-      .catch((e) => setError(friendlyError(e, copy.sub.loadFailed)))
-      .finally(() => setLoading(false));
-  }, [router, queryId, locale, copy.sub.loadFailed]);
+    let cancelled = false;
+    const deadline = welcome ? Date.now() + 12_000 : 0;
+
+    async function fetchOnce(): Promise<Subscription[]> {
+      const [subRes, planRes] = await Promise.all([
+        apiFetch<{ subscriptions: Subscription[] }>("/api/v1/subscriptions"),
+        apiFetch<{ plans: Plan[] }>(
+          `/api/v1/plans?client=h5&locale=${encodeURIComponent(locale)}`,
+        ).catch(() => ({ plans: [] as Plan[] })),
+      ]);
+      const list = subRes.subscriptions || [];
+      if (cancelled) return list;
+      setSubs(list);
+      const preferred =
+        (queryId && list.find((s) => s.id === queryId)?.id) ||
+        list.find((s) => s.status === "active")?.id ||
+        list[0]?.id ||
+        null;
+      setSelectedId(preferred);
+      setHasClaimableFree(
+        (planRes.plans || []).some(
+          (p) => p.is_free_claimable && !p.already_claimed,
+        ),
+      );
+      return list;
+    }
+
+    void (async () => {
+      try {
+        let list = await fetchOnce();
+        while (
+          !cancelled &&
+          welcome &&
+          list.length === 0 &&
+          Date.now() < deadline
+        ) {
+          await new Promise((r) => setTimeout(r, 1500));
+          if (cancelled) return;
+          list = await fetchOnce();
+        }
+      } catch (e) {
+        if (!cancelled) setError(friendlyError(e, copy.sub.loadFailed));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, queryId, locale, copy.sub.loadFailed, welcome]);
 
   const selected = useMemo(
     () => subs.find((s) => s.id === selectedId) || null,
@@ -228,7 +256,12 @@ function SubscriptionContent() {
         <p>{copy.sub.lead}</p>
       </div>
 
-      {claimed && (
+      {welcome && !loading && subs.length > 0 && (
+        <p className="alert-ok" style={{ marginTop: 12 }}>
+          {copy.sub.welcomeGranted}
+        </p>
+      )}
+      {claimed && !welcome && (
         <p className="alert-ok" style={{ marginTop: 12 }}>
           {copy.sub.claimed}
         </p>
@@ -240,7 +273,9 @@ function SubscriptionContent() {
       )}
 
       {loading && (
-        <p style={{ marginTop: 20, color: "var(--muted)", fontSize: 14 }}>{copy.sub.syncing}</p>
+        <p style={{ marginTop: 20, color: "var(--muted)", fontSize: 14 }}>
+          {welcome ? copy.sub.granting : copy.sub.syncing}
+        </p>
       )}
 
       {!loading && subs.length === 0 && (

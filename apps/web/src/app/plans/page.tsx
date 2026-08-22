@@ -421,9 +421,9 @@ function PlansContent() {
           </p>
         </div>
 
-        {welcome && (
+        {welcome && !loading && (
           <p className="alert-ok" style={{ marginTop: 12 }}>
-            {plansCopy.welcome}
+            {freePlans.length > 0 ? plansCopy.welcome : plansCopy.welcomePaid}
           </p>
         )}
         {error && (

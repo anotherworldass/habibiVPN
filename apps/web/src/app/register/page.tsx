@@ -18,6 +18,7 @@ import {
   peekInviteCode,
   saveInviteCode,
 } from "../../lib/invite";
+import { fetchSignupTrialPromo } from "../../lib/signup-trial";
 
 function RegisterForm() {
   const router = useLocaleRouter();
@@ -133,7 +134,12 @@ function RegisterForm() {
       setToken(res.token);
       await bindSupportSession();
       clearInviteCode();
-      router.push("/plans?welcome=1");
+      const promo = await fetchSignupTrialPromo();
+      router.push(
+        promo.enabled && promo.web
+          ? "/subscription?welcome=1"
+          : "/plans?welcome=1",
+      );
     } catch (err) {
       setError(friendlyError(err, registerCopy.failed));
     } finally {

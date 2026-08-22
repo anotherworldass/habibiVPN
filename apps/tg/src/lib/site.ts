@@ -116,12 +116,50 @@ export async function fetchTelegramChannelUrl(): Promise<string> {
   return cfg.channel_url;
 }
 
-/** Single download entry for Mini App — prefer dedicated URL, else website /download */
-export function appDownloadUrl() {
-  const dedicated = process.env.NEXT_PUBLIC_DOWNLOAD_URL || "";
-  if (dedicated && !isPlaceholderUrl(dedicated)) return dedicated;
-  if (site.website) {
-    return `${site.website.replace(/\/$/, "")}/download`;
+function hostnameOf(urlOrHost: string): string {
+  const raw = urlOrHost.trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+  } catch {
+    return "";
   }
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/$/, "");
+}
+
+/**
+ * Official H5 origin. Mini App is usually on tg.example.com; Telegram
+ * openLink cannot open the Mini App's own host, so never return that.
+ */
+export function publicWebsiteUrl(): string {
+  const env = stripTrailingSlash(site.website || "");
+  const envHost = hostnameOf(env);
+  const miniHost =
+    typeof window !== "undefined" ? window.location.hostname : "";
+
+  const isMiniAppHost = (host: string) =>
+    Boolean(host) &&
+    (host.startsWith("tg.") || (Boolean(miniHost) && host === miniHost));
+
+  if (env && !isMiniAppHost(envHost)) return env;
+
+  const host = miniHost || envHost;
+  if (host.startsWith("tg.")) return `https://${host.slice(3)}`;
+  return env;
+}
+
+/** Public H5 /download — never the Mini App origin (Telegram blocks same-host openLink). */
+export function appDownloadUrl() {
+  const dedicated = stripTrailingSlash(process.env.NEXT_PUBLIC_DOWNLOAD_URL || "");
+  if (dedicated && !isPlaceholderUrl(dedicated)) {
+    const miniHost =
+      typeof window !== "undefined" ? window.location.hostname : "";
+    if (!miniHost || hostnameOf(dedicated) !== miniHost) return dedicated;
+  }
+  const website = publicWebsiteUrl();
+  if (website) return `${stripTrailingSlash(website)}/download`;
   return "#";
 }

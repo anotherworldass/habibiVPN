@@ -14,6 +14,7 @@ import {
   appDownloadUrl,
   fetchTelegramChannelUrl,
   getCachedChannelUrl,
+  publicWebsiteUrl,
   site,
   supportTelegramUrl,
 } from "../../lib/site";
@@ -348,6 +349,7 @@ export default function TgAccountPage() {
   const uidText = ready ? (me?.uid != null ? String(me.uid) : "—") : "…";
   const planCount = ready ? (me?.subscription_count ?? 0) : null;
   const needsEmailBind = ready && (!me?.email || me.is_anonymous);
+  const website = publicWebsiteUrl();
 
   return (
     <TgShell>
@@ -397,12 +399,12 @@ export default function TgAccountPage() {
                 <span className="bind-card-email-text">{me.email}</span>
                 <span className="bind-card-email-tag">已验证</span>
               </div>
-              {site.website ? (
+              {website ? (
                 <div className="stack" style={{ marginTop: 12 }}>
                   <button
                     type="button"
                     className="btn btn-secondary btn-block"
-                    onClick={() => openExternal(site.website)}
+                    onClick={() => openExternal(website)}
                   >
                     打开官网登录
                   </button>
@@ -657,16 +659,16 @@ export default function TgAccountPage() {
 
       <p className="section-label">官网与帮助</p>
       <div style={{ marginTop: 10 }}>
-        {site.website ? (
+        {website ? (
           <button
             type="button"
             className="list-row"
             style={{ width: "100%", cursor: "pointer", color: "inherit" }}
-            onClick={() => openExternal(site.website)}
+            onClick={() => openExternal(website)}
           >
             <div className="list-row-body">
               <div className="list-row-title">官方网站</div>
-              <div className="list-row-desc">{site.website}</div>
+              <div className="list-row-desc">{website}</div>
             </div>
             <span className="list-chevron" aria-hidden>
               ›
