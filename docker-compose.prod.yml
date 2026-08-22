@@ -6,6 +6,21 @@
 #   REDIS_URL=redis://127.0.0.1:6379
 # web / tg / admin 经 api-gw（compose 别名 api）转到本槽 API 端口。
 
+# 值来自 --env-file 指定的 .env（见 scripts/deploy-prod.sh）。
+# 四个服务共用 Dockerfile 的 build 阶段，这组 args 必须完全一致。
+x-next-public-args: &next-public-args
+  NEXT_PUBLIC_WEBSITE_URL: ${NEXT_PUBLIC_WEBSITE_URL:-}
+  NEXT_PUBLIC_DOWNLOAD_URL: ${NEXT_PUBLIC_DOWNLOAD_URL:-}
+  NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
+  NEXT_PUBLIC_SUPPORT_TELEGRAM: ${NEXT_PUBLIC_SUPPORT_TELEGRAM:-}
+  NEXT_PUBLIC_TG_BOT_USERNAME: ${NEXT_PUBLIC_TG_BOT_USERNAME:-}
+  NEXT_PUBLIC_TWITTER_URL: ${NEXT_PUBLIC_TWITTER_URL:-}
+  NEXT_PUBLIC_APP_STORE_URL: ${NEXT_PUBLIC_APP_STORE_URL:-}
+  NEXT_PUBLIC_PLAY_STORE_URL: ${NEXT_PUBLIC_PLAY_STORE_URL:-}
+  NEXT_PUBLIC_ANDROID_APK_URL: ${NEXT_PUBLIC_ANDROID_APK_URL:-}
+  NEXT_PUBLIC_WINDOWS_URL: ${NEXT_PUBLIC_WINDOWS_URL:-}
+  NEXT_PUBLIC_MACOS_URL: ${NEXT_PUBLIC_MACOS_URL:-}
+
 services:
   api:
     image: habibivpn-api:prod
@@ -13,6 +28,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
       target: api
+      args: *next-public-args
     restart: unless-stopped
     init: true
     network_mode: host
@@ -67,6 +83,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
       target: web
+      args: *next-public-args
     restart: unless-stopped
     init: true
     extra_hosts:
@@ -104,6 +121,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
       target: tg
+      args: *next-public-args
     restart: unless-stopped
     init: true
     extra_hosts:
@@ -141,6 +159,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
       target: admin
+      args: *next-public-args
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -27,6 +27,20 @@ ENV NODE_ENV=production
 ENV HABIBI_API_ORIGIN=http://api:3001
 ENV DATABASE_URL=mysql://build:build@127.0.0.1:3306/build
 ENV NODE_OPTIONS=--max-old-space-size=2048
+# NEXT_PUBLIC_* 会被内联进客户端 bundle，只有构建期给才生效，运行时 env_file 无效。
+# 由 compose 的 build.args 从 .env 透传；api/web/tg/admin 必须传同一组值，
+# 否则本阶段缓存 key 分裂，整包会重复构建。
+ARG NEXT_PUBLIC_WEBSITE_URL
+ARG NEXT_PUBLIC_DOWNLOAD_URL
+ARG NEXT_PUBLIC_SUPPORT_EMAIL
+ARG NEXT_PUBLIC_SUPPORT_TELEGRAM
+ARG NEXT_PUBLIC_TG_BOT_USERNAME
+ARG NEXT_PUBLIC_TWITTER_URL
+ARG NEXT_PUBLIC_APP_STORE_URL
+ARG NEXT_PUBLIC_PLAY_STORE_URL
+ARG NEXT_PUBLIC_ANDROID_APK_URL
+ARG NEXT_PUBLIC_WINDOWS_URL
+ARG NEXT_PUBLIC_MACOS_URL
 RUN pnpm --filter @habibi/shared build \
   && pnpm --filter @habibi/api prisma:generate \
   && pnpm --filter @habibi/api build \
