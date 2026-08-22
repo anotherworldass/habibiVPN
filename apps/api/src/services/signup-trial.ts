@@ -12,7 +12,9 @@ export type { SignupTrialEvent } from "./signup-trial-policy.js";
 export {
   evaluateSignupTrialGrant,
   publicSignupTrialChannels,
-  signupTrialTriggerMatches,
+  resolveSignupTrialSurface,
+  signupTrialEventEnabled,
+  signupTrialEventForAuth,
 } from "./signup-trial-policy.js";
 
 export type PublicSignupTrialPromo = {
@@ -57,7 +59,7 @@ export async function getPublicSignupTrialPromo(
   });
   if (!plan) return EMPTY_PROMO;
 
-  const channels = publicSignupTrialChannels(cfg.value.trigger);
+  const channels = publicSignupTrialChannels(cfg.value.events);
   const copy = localizePlanCopy(plan, locale);
   return {
     enabled: true,
@@ -108,7 +110,7 @@ export async function grantSignupTrialIfEligible(
 
   const decision = evaluateSignupTrialGrant({
     enabled: cfg.enabled,
-    trigger: cfg.value.trigger,
+    events: cfg.value.events,
     event,
     planId,
     user,

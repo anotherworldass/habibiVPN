@@ -11,7 +11,7 @@ import {
   DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE,
   DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE,
   SETTING_KEYS,
-  SIGNUP_TRIAL_TRIGGERS,
+  SIGNUP_TRIAL_EVENTS,
   STORAGE_S3_ROLES,
   SUBSCRIPTION_DOMAINS_MAX,
   SUBSCRIPTION_NOTICE_CLIENTS,
@@ -91,7 +91,7 @@ const authEmailPatch = z.object({
 const signupTrialPatch = z.object({
   enabled: z.boolean(),
   planId: z.string().max(64),
-  trigger: z.enum(SIGNUP_TRIAL_TRIGGERS),
+  events: z.array(z.enum(SIGNUP_TRIAL_EVENTS)),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -371,10 +371,13 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         if (!plan) {
           return reply.code(400).send({ error: "signup_trial.plan_invalid" });
         }
+        if (parsed.data.events.length === 0) {
+          return reply.code(400).send({ error: "signup_trial.events_required" });
+        }
       }
       const value = signupTrialValueSchema.parse({
         planId,
-        trigger: parsed.data.trigger,
+        events: parsed.data.events,
       });
       const row = await upsertProjectSetting({
         projectId,

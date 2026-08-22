@@ -43,6 +43,8 @@ import {
 import {
   getPublicSignupTrialPromo,
   scheduleSignupTrialGrant,
+  resolveSignupTrialSurface,
+  signupTrialEventForAuth,
 } from "../services/signup-trial.js";
 import {
   assertBootstrapBurstLimit,
@@ -85,6 +87,35 @@ function localeFromRequest(req: FastifyRequest): string | null {
       : req.headers["accept-language"]) ||
     null
   );
+}
+
+function headerOne(req: FastifyRequest, name: string): string | null {
+  const raw = req.headers[name];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+function scheduleSignupTrialFromRequest(
+  userId: string,
+  req: FastifyRequest,
+  kind:
+    | "bootstrap"
+    | "unverified_register"
+    | "unverified_bind"
+    | "verified_register"
+    | "verified_bind",
+  clientMeta?: { shell?: string | null } | null,
+) {
+  const event = signupTrialEventForAuth(
+    resolveSignupTrialSurface({
+      shell: headerOne(req, "x-habibi-shell") || clientMeta?.shell || null,
+      client: sourceHintsFromRequest(req).client,
+    }),
+    kind,
+  );
+  if (!event) return;
+  scheduleSignupTrialGrant(userId, event, localeFromRequest(req));
 }
 
 /** `?live=1|true|yes` forces upstream sync; default is local cache + TTL background refresh. */
@@ -292,7 +323,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         fallbackClient: source.sourceClient,
         meta: { project_id: source.projectId, reused: false },
       });
-      scheduleSignupTrialGrant(user.id, "bootstrap", localeFromRequest(req));
+      scheduleSignupTrialFromRequest(user.id, req, "bootstrap", clientMeta);
       const token = await signUserToken({ sub: user.id, email: user.email });
       return { token, user: publicAuthUser(user), reused: false };
     } catch (err) {
@@ -422,6 +453,12 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
               direct_unverified: true,
             },
           });
+          scheduleSignupTrialFromRequest(
+            user.id,
+            req,
+            "unverified_register",
+            clientMeta,
+          );
           const token = await signUserToken({ sub: user.id, email: user.email });
           return { token, user: publicAuthUser(user) };
         }
@@ -517,6 +554,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
             soft_bind: true,
           },
         });
+        scheduleSignupTrialFromRequest(user.id, req, "unverified_bind", clientMeta);
         const token = await signUserToken({ sub: user.id, email: user.email });
         return { token, user: publicAuthUser(user) };
       }
@@ -578,7 +616,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
               verify_soft_bind: true,
             },
           });
-          scheduleSignupTrialGrant(user.id, "verified_email", localeFromRequest(req));
+          scheduleSignupTrialFromRequest(user.id, req, "verified_bind", clientMeta);
           const token = await signUserToken({ sub: user.id, email: user.email });
           return { token, user: publicAuthUser(user) };
         }
@@ -613,7 +651,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
             email_changed: !!current.email && current.email !== email,
           },
         });
-        scheduleSignupTrialGrant(user.id, "verified_email", localeFromRequest(req));
+        scheduleSignupTrialFromRequest(user.id, req, "verified_bind", clientMeta);
         const token = await signUserToken({ sub: user.id, email: user.email });
         return { token, user: publicAuthUser(user) };
       }
@@ -644,7 +682,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
           email_verified: true,
         },
       });
-      scheduleSignupTrialGrant(user.id, "verified_email", localeFromRequest(req));
+      scheduleSignupTrialFromRequest(user.id, req, "verified_register", clientMeta);
       const token = await signUserToken({ sub: user.id, email: user.email });
       return { token, user: publicAuthUser(user) };
     } catch (err) {

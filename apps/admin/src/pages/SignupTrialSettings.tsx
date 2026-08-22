@@ -4,6 +4,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Form,
   Input,
   Select,
@@ -15,13 +16,68 @@ import { message } from "../lib/antd-message";
 import { adminFetch } from "../lib/api";
 import { getProjectId } from "../lib/project";
 
+const SIGNUP_TRIAL_EVENTS = [
+  "web_unverified",
+  "web_verified",
+  "app_bootstrap",
+  "app_soft_bind",
+  "app_verified_bind",
+  "telegram_bootstrap",
+  "telegram_soft_bind",
+  "telegram_verified_bind",
+  "telegram_bind",
+] as const;
+
+type SignupTrialEvent = (typeof SIGNUP_TRIAL_EVENTS)[number];
+
+const DEFAULT_EVENTS: SignupTrialEvent[] = [
+  "web_verified",
+  "app_bootstrap",
+  "app_verified_bind",
+  "telegram_bootstrap",
+  "telegram_verified_bind",
+  "telegram_bind",
+];
+
+const EVENT_GROUPS: Array<{
+  title: string;
+  items: Array<{ value: SignupTrialEvent; label: string }>;
+}> = [
+  {
+    title: "Web",
+    items: [
+      { value: "web_unverified", label: "注册（不验邮）" },
+      { value: "web_verified", label: "注册（验邮）" },
+    ],
+  },
+  {
+    title: "App",
+    items: [
+      { value: "app_bootstrap", label: "新建匿名账号" },
+      { value: "app_soft_bind", label: "绑邮箱（不验邮）" },
+      { value: "app_verified_bind", label: "绑邮箱（验邮）" },
+    ],
+  },
+  {
+    title: "Telegram",
+    items: [
+      { value: "telegram_bootstrap", label: "新建匿名账号" },
+      { value: "telegram_soft_bind", label: "绑邮箱（不验邮）" },
+      { value: "telegram_verified_bind", label: "绑邮箱（验邮）" },
+      { value: "telegram_bind", label: "绑定 Telegram" },
+    ],
+  },
+];
+
 type SignupTrialConfig = {
   project_id: string;
   key: string;
   enabled: boolean;
   remark: string | null;
   planId: string;
-  trigger: "any_register" | "verified_email" | "bootstrap" | "identity";
+  events?: SignupTrialEvent[];
+  /** @deprecated migrated on load */
+  trigger?: string;
 };
 
 type SellPlan = {
@@ -30,6 +86,13 @@ type SellPlan = {
   name: string;
   enabled: boolean;
 };
+
+function normalizeEvents(cfg: SignupTrialConfig): SignupTrialEvent[] {
+  if (Array.isArray(cfg.events)) {
+    return SIGNUP_TRIAL_EVENTS.filter((e) => cfg.events!.includes(e));
+  }
+  return [...DEFAULT_EVENTS];
+}
 
 export default function SignupTrialSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -53,7 +116,7 @@ export default function SignupTrialSettingsPage() {
       form.setFieldsValue({
         enabled: cfg.enabled,
         planId: cfg.planId || undefined,
-        trigger: cfg.trigger || "any_register",
+        events: normalizeEvents(cfg),
         remark: cfg.remark || "",
       });
     } catch (e) {
@@ -76,7 +139,7 @@ export default function SignupTrialSettingsPage() {
         body: JSON.stringify({
           enabled: !!values.enabled,
           planId: values.planId || "",
-          trigger: values.trigger,
+          events: values.events || [],
           remark: values.remark?.trim() || null,
         }),
       });
@@ -111,6 +174,9 @@ export default function SignupTrialSettingsPage() {
             <li>
               体验套餐建议短时长、限流量。目录若不想出现「免费领取」，把该套餐的可领开关关掉。
             </li>
+            <li>
+              Web「注册（不验邮）」依赖邮箱策略里的「允许不验邮直接注册」；未打开时该场景不会发生。
+            </li>
           </ul>
         }
       />
@@ -121,7 +187,7 @@ export default function SignupTrialSettingsPage() {
           layout="vertical"
           initialValues={{
             enabled: false,
-            trigger: "any_register",
+            events: DEFAULT_EVENTS,
           }}
         >
           <Form.Item
@@ -150,30 +216,44 @@ export default function SignupTrialSettingsPage() {
             />
           </Form.Item>
           <Form.Item
-            name="trigger"
-            label="发放时机"
-            extra="要 Web / App / TG 体验一致，选「各端注册都送」。同一用户只会开通一次。"
+            name="events"
+            label="发放场景"
+            extra="按端、按动作分别勾选。同一用户同一套餐只会开通一次。"
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value: string[] | undefined) {
+                  if (getFieldValue("enabled") && !(value && value.length)) {
+                    return Promise.reject(new Error("启用时请至少勾选一个场景"));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
           >
-            <Select
-              options={[
-                {
-                  value: "any_register",
-                  label: "各端注册都送（Web 验邮、App/TG 新建匿名号）",
-                },
-                {
-                  value: "verified_email",
-                  label: "仅验证邮箱后（含 Web 注册、App 绑邮箱）",
-                },
-                {
-                  value: "bootstrap",
-                  label: "仅 App/TG 新建匿名账号（不含 Web）",
-                },
-                {
-                  value: "identity",
-                  label: "验证邮箱或绑定 Telegram（含 Web，不含纯匿名）",
-                },
-              ]}
-            />
+            <Checkbox.Group style={{ width: "100%" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                {EVENT_GROUPS.map((group) => (
+                  <div key={group.title}>
+                    <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
+                      {group.title}
+                    </Typography.Text>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {group.items.map((item) => (
+                        <Checkbox key={item.value} value={item.value}>
+                          {item.label}
+                        </Checkbox>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Checkbox.Group>
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input.TextArea rows={2} />

@@ -1,51 +1,101 @@
-import type { SignupTrialTrigger } from "./system-settings.js";
+import type { SignupTrialEvent } from "./system-settings.js";
 
-export type SignupTrialEvent = "verified_email" | "bootstrap" | "telegram_bind";
+export type { SignupTrialEvent } from "./system-settings.js";
 
 export type SignupTrialSkipReason =
   | "disabled"
-  | "trigger_mismatch"
+  | "event_mismatch"
   | "no_plan"
   | "user_not_found"
   | "user_disabled"
   | "plan_invalid";
 
-export function signupTrialTriggerMatches(
-  trigger: SignupTrialTrigger,
+export type SignupTrialSurface = "web" | "app" | "telegram";
+
+export function resolveSignupTrialSurface(input: {
+  shell?: string | null;
+  client?: string | null;
+}): SignupTrialSurface {
+  const shell = (input.shell || "").trim().toLowerCase();
+  if (shell === "telegram_mini_app" || shell === "telegram" || shell === "tg") {
+    return "telegram";
+  }
+  const client = (input.client || "").trim().toLowerCase();
+  if (
+    client === "ios_appstore" ||
+    client === "ios_alt" ||
+    client === "android_play" ||
+    client === "android_direct" ||
+    client === "windows" ||
+    client === "macos"
+  ) {
+    return "app";
+  }
+  return "web";
+}
+
+export function signupTrialEventEnabled(
+  events: readonly SignupTrialEvent[],
   event: SignupTrialEvent,
 ): boolean {
-  if (trigger === "any_register") return true;
-  if (trigger === "verified_email") return event === "verified_email";
-  if (trigger === "bootstrap") return event === "bootstrap";
-  return event === "verified_email" || event === "telegram_bind";
+  return events.includes(event);
 }
 
 /** Where the public promo may appear: Web, native App bootstrap, Telegram Mini App. */
-export function publicSignupTrialChannels(trigger: SignupTrialTrigger): {
+export function publicSignupTrialChannels(events: readonly SignupTrialEvent[]): {
   web: boolean;
   app: boolean;
   telegram: boolean;
 } {
+  const on = (event: SignupTrialEvent) => signupTrialEventEnabled(events, event);
   return {
-    web: signupTrialTriggerMatches(trigger, "verified_email"),
-    app: signupTrialTriggerMatches(trigger, "bootstrap"),
+    web: on("web_unverified") || on("web_verified"),
+    app: on("app_bootstrap") || on("app_soft_bind") || on("app_verified_bind"),
     telegram:
-      signupTrialTriggerMatches(trigger, "telegram_bind") ||
-      signupTrialTriggerMatches(trigger, "bootstrap"),
+      on("telegram_bootstrap") ||
+      on("telegram_soft_bind") ||
+      on("telegram_verified_bind") ||
+      on("telegram_bind"),
   };
+}
+
+export function signupTrialEventForAuth(
+  surface: SignupTrialSurface,
+  kind:
+    | "bootstrap"
+    | "unverified_register"
+    | "unverified_bind"
+    | "verified_register"
+    | "verified_bind",
+): SignupTrialEvent | null {
+  if (kind === "bootstrap") {
+    if (surface === "telegram") return "telegram_bootstrap";
+    if (surface === "app") return "app_bootstrap";
+    return null;
+  }
+  if (kind === "unverified_register") return "web_unverified";
+  if (kind === "verified_register") return "web_verified";
+  if (kind === "unverified_bind") {
+    if (surface === "telegram") return "telegram_soft_bind";
+    if (surface === "app") return "app_soft_bind";
+    return "web_unverified";
+  }
+  if (surface === "telegram") return "telegram_verified_bind";
+  if (surface === "app") return "app_verified_bind";
+  return "web_verified";
 }
 
 export function evaluateSignupTrialGrant(input: {
   enabled: boolean;
-  trigger: SignupTrialTrigger;
+  events: readonly SignupTrialEvent[];
   event: SignupTrialEvent;
   planId: string;
   user: { id: string; projectId: string; status: string } | null;
   plan: { id: string; projectId: string; enabled: boolean } | null;
 }): { ok: true; planId: string } | { ok: false; reason: SignupTrialSkipReason } {
   if (!input.enabled) return { ok: false, reason: "disabled" };
-  if (!signupTrialTriggerMatches(input.trigger, input.event)) {
-    return { ok: false, reason: "trigger_mismatch" };
+  if (!signupTrialEventEnabled(input.events, input.event)) {
+    return { ok: false, reason: "event_mismatch" };
   }
   const planId = input.planId.trim();
   if (!planId) return { ok: false, reason: "no_plan" };

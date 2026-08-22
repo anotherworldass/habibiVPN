@@ -4488,6 +4488,7 @@ a.home-invite-banner {
 }
 
 .sub-qr-wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6340,6 +6341,34 @@ button.account-verify-toggle {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.sub-link-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.sub-link-view-head .client-copy-label {
+  margin: 0;
+}
+
+.sub-qr-save-canvas {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sub-qr-actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  margin-top: 4px;
 }
 
 .client-copy-grid {

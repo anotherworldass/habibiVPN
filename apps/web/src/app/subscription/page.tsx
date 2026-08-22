@@ -3,7 +3,8 @@
 import Link from "../../components/LocaleLink";
 import { useLocaleRouter } from "../../components/useLocaleRouter";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import Shell from "../../components/Shell";
 import { TrafficUsage } from "../../components/TrafficUsage";
 import { apiFetch } from "../../lib/api";
@@ -91,6 +92,9 @@ function SubscriptionContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshOk, setRefreshOk] = useState(false);
   const [usageMode, setUsageMode] = useState<"official" | "third-party">("official");
+  const [linkView, setLinkView] = useState<"link" | "qr">("link");
+  const [qrSaved, setQrSaved] = useState(false);
+  const qrSaveRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -135,6 +139,7 @@ function SubscriptionContent() {
     setSelectedId(id);
     setCopied(false);
     setCopiedClient(null);
+    setQrSaved(false);
     setRefreshOk(false);
     setSyncing(true);
     setError("");
@@ -201,6 +206,18 @@ function SubscriptionContent() {
     setCopied(false);
     setCopiedClient(key);
     setTimeout(() => setCopiedClient(null), 1600);
+  }
+
+  function saveQr() {
+    const canvas = qrSaveRef.current?.querySelector("canvas");
+    if (!canvas) return;
+    const href = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = "subscription-qr.png";
+    a.click();
+    setQrSaved(true);
+    setTimeout(() => setQrSaved(false), 1600);
   }
 
   return (
@@ -458,39 +475,88 @@ function SubscriptionContent() {
                 <p className="usage-card-note">{copy.sub.thirdNote}</p>
                 {subscriptionUrl ? (
                   <>
-                    <p className="client-copy-label">{copy.sub.clientCopyTitle}</p>
-                    <div
-                      className="client-copy-grid"
-                      role="group"
-                      aria-label={copy.sub.clientCopyTitle}
-                    >
-                      {THIRD_PARTY_CLIENTS.map(({ key, label }) => {
-                        const justCopied = copiedClient === key;
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            className="client-copy-btn"
-                            data-copied={justCopied}
-                            onClick={() => void copyClientUrl(key)}
-                          >
-                            <strong>{label}</strong>
-                            <span>{justCopied ? copy.sub.copiedShort : copy.sub.copyShort}</span>
-                          </button>
-                        );
-                      })}
+                    <div className="sub-link-view-head">
+                      <p className="client-copy-label">{copy.sub.linkTitle}</p>
+                      <div className="view-toggle" role="group" aria-label={copy.sub.viewAria}>
+                        <button
+                          type="button"
+                          data-active={linkView === "link"}
+                          onClick={() => setLinkView("link")}
+                        >
+                          {copy.sub.linkTab}
+                        </button>
+                        <button
+                          type="button"
+                          data-active={linkView === "qr"}
+                          onClick={() => setLinkView("qr")}
+                        >
+                          {copy.sub.qrTab}
+                        </button>
+                      </div>
                     </div>
-                    <code className="sub-url client-copy-generic-url">
-                      {subscriptionUrl}
-                    </code>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-block"
-                      style={{ marginTop: 10 }}
-                      onClick={() => void copyUrl()}
-                    >
-                      {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
-                    </button>
+                    {linkView === "qr" ? (
+                      <div className="sub-qr-wrap">
+                        <div className="sub-qr-card">
+                          <QRCodeSVG value={subscriptionUrl} size={180} level="M" />
+                        </div>
+                        <div ref={qrSaveRef} className="sub-qr-save-canvas" aria-hidden>
+                          <QRCodeCanvas value={subscriptionUrl} size={256} level="M" />
+                        </div>
+                        <p className="sub-qr-hint">{copy.sub.qrHint}</p>
+                        <div className="sub-qr-actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-block"
+                            onClick={saveQr}
+                          >
+                            {qrSaved ? copy.sub.qrSaved : copy.sub.saveQr}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-block"
+                            onClick={() => void copyUrl()}
+                          >
+                            {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="client-copy-label">{copy.sub.clientCopyTitle}</p>
+                        <div
+                          className="client-copy-grid"
+                          role="group"
+                          aria-label={copy.sub.clientCopyTitle}
+                        >
+                          {THIRD_PARTY_CLIENTS.map(({ key, label }) => {
+                            const justCopied = copiedClient === key;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                className="client-copy-btn"
+                                data-copied={justCopied}
+                                onClick={() => void copyClientUrl(key)}
+                              >
+                                <strong>{label}</strong>
+                                <span>{justCopied ? copy.sub.copiedShort : copy.sub.copyShort}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <code className="sub-url client-copy-generic-url">
+                          {subscriptionUrl}
+                        </code>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-block"
+                          style={{ marginTop: 10 }}
+                          onClick={() => void copyUrl()}
+                        >
+                          {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
+                        </button>
+                      </>
+                    )}
                   </>
                 ) : (
                   <p style={{ margin: "14px 0 0", fontSize: 13, color: "var(--amber)" }}>

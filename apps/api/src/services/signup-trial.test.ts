@@ -3,57 +3,127 @@ import { describe, it } from "node:test";
 import {
   evaluateSignupTrialGrant,
   publicSignupTrialChannels,
-  signupTrialTriggerMatches,
+  resolveSignupTrialSurface,
+  signupTrialEventEnabled,
+  signupTrialEventForAuth,
 } from "./signup-trial-policy.js";
+import { migrateSignupTrialTriggerToEvents, parseSignupTrialValue } from "./system-settings.js";
 
-describe("signupTrialTriggerMatches", () => {
-  it("verified_email only matches email OTP register/bind", () => {
-    assert.equal(signupTrialTriggerMatches("verified_email", "verified_email"), true);
-    assert.equal(signupTrialTriggerMatches("verified_email", "bootstrap"), false);
-    assert.equal(signupTrialTriggerMatches("verified_email", "telegram_bind"), false);
+describe("migrateSignupTrialTriggerToEvents", () => {
+  it("maps verified_email to email-verify scenes only", () => {
+    assert.deepEqual(migrateSignupTrialTriggerToEvents("verified_email"), [
+      "web_verified",
+      "app_verified_bind",
+      "telegram_verified_bind",
+    ]);
   });
 
-  it("bootstrap only matches new anonymous accounts", () => {
-    assert.equal(signupTrialTriggerMatches("bootstrap", "bootstrap"), true);
-    assert.equal(signupTrialTriggerMatches("bootstrap", "verified_email"), false);
-    assert.equal(signupTrialTriggerMatches("bootstrap", "telegram_bind"), false);
+  it("maps bootstrap to App/TG anonymous create", () => {
+    assert.deepEqual(migrateSignupTrialTriggerToEvents("bootstrap"), [
+      "app_bootstrap",
+      "telegram_bootstrap",
+    ]);
   });
 
-  it("identity matches verified email or telegram bind, not anonymous bootstrap", () => {
-    assert.equal(signupTrialTriggerMatches("identity", "verified_email"), true);
-    assert.equal(signupTrialTriggerMatches("identity", "telegram_bind"), true);
-    assert.equal(signupTrialTriggerMatches("identity", "bootstrap"), false);
+  it("maps identity to verified email + telegram bind", () => {
+    assert.deepEqual(migrateSignupTrialTriggerToEvents("identity"), [
+      "web_verified",
+      "app_verified_bind",
+      "telegram_verified_bind",
+      "telegram_bind",
+    ]);
   });
 
-  it("any_register matches Web, App/TG bootstrap, and telegram bind", () => {
-    assert.equal(signupTrialTriggerMatches("any_register", "verified_email"), true);
-    assert.equal(signupTrialTriggerMatches("any_register", "bootstrap"), true);
-    assert.equal(signupTrialTriggerMatches("any_register", "telegram_bind"), true);
+  it("maps any_register without unverified web / soft-bind", () => {
+    const events = migrateSignupTrialTriggerToEvents("any_register");
+    assert.equal(events.includes("web_unverified"), false);
+    assert.equal(events.includes("app_soft_bind"), false);
+    assert.equal(events.includes("web_verified"), true);
+    assert.equal(events.includes("app_bootstrap"), true);
+    assert.equal(events.includes("telegram_bind"), true);
+  });
+});
+
+describe("parseSignupTrialValue", () => {
+  it("prefers events over legacy trigger", () => {
+    const value = parseSignupTrialValue({
+      planId: "p1",
+      trigger: "any_register",
+      events: ["web_unverified"],
+    });
+    assert.deepEqual(value.events, ["web_unverified"]);
+  });
+
+  it("migrates legacy trigger when events are absent", () => {
+    const value = parseSignupTrialValue({ planId: "p1", trigger: "bootstrap" });
+    assert.deepEqual(value.events, ["app_bootstrap", "telegram_bootstrap"]);
+  });
+});
+
+describe("signupTrialEventEnabled", () => {
+  it("matches only listed scenes", () => {
+    assert.equal(signupTrialEventEnabled(["web_verified"], "web_verified"), true);
+    assert.equal(signupTrialEventEnabled(["web_verified"], "web_unverified"), false);
+  });
+});
+
+describe("resolveSignupTrialSurface", () => {
+  it("prefers Telegram shell over client", () => {
+    assert.equal(
+      resolveSignupTrialSurface({ shell: "telegram_mini_app", client: "h5" }),
+      "telegram",
+    );
+  });
+
+  it("treats native clients as app", () => {
+    assert.equal(
+      resolveSignupTrialSurface({ shell: null, client: "ios_appstore" }),
+      "app",
+    );
+  });
+
+  it("defaults to web", () => {
+    assert.equal(resolveSignupTrialSurface({}), "web");
+  });
+});
+
+describe("signupTrialEventForAuth", () => {
+  it("does not grant on web bootstrap", () => {
+    assert.equal(signupTrialEventForAuth("web", "bootstrap"), null);
+  });
+
+  it("maps unverified web register separately from App/TG bind", () => {
+    assert.equal(signupTrialEventForAuth("web", "unverified_register"), "web_unverified");
+    assert.equal(signupTrialEventForAuth("app", "unverified_bind"), "app_soft_bind");
+    assert.equal(
+      signupTrialEventForAuth("telegram", "unverified_bind"),
+      "telegram_soft_bind",
+    );
   });
 });
 
 describe("publicSignupTrialChannels", () => {
-  it("any_register and verified_email appear on Web", () => {
-    assert.deepEqual(publicSignupTrialChannels("any_register"), {
+  it("web promo follows web scenes including unverified register", () => {
+    assert.deepEqual(publicSignupTrialChannels(["web_unverified"]), {
       web: true,
-      app: true,
-      telegram: true,
+      app: false,
+      telegram: false,
     });
-    assert.deepEqual(publicSignupTrialChannels("verified_email"), {
+    assert.deepEqual(publicSignupTrialChannels(["web_verified"]), {
       web: true,
       app: false,
       telegram: false,
     });
   });
 
-  it("bootstrap is App/TG; identity is Web and TG bind, not anonymous App", () => {
-    assert.deepEqual(publicSignupTrialChannels("bootstrap"), {
+  it("app and telegram are independent", () => {
+    assert.deepEqual(publicSignupTrialChannels(["app_bootstrap"]), {
       web: false,
       app: true,
-      telegram: true,
+      telegram: false,
     });
-    assert.deepEqual(publicSignupTrialChannels("identity"), {
-      web: true,
+    assert.deepEqual(publicSignupTrialChannels(["telegram_bind"]), {
+      web: false,
       app: false,
       telegram: true,
     });
@@ -67,8 +137,8 @@ describe("evaluateSignupTrialGrant", () => {
   it("skips when setting is disabled", () => {
     const out = evaluateSignupTrialGrant({
       enabled: false,
-      trigger: "verified_email",
-      event: "verified_email",
+      events: ["web_verified"],
+      event: "web_verified",
       planId: "plan1",
       user,
       plan,
@@ -76,23 +146,23 @@ describe("evaluateSignupTrialGrant", () => {
     assert.deepEqual(out, { ok: false, reason: "disabled" });
   });
 
-  it("skips when trigger does not match the event", () => {
+  it("skips when the scene is not selected", () => {
     const out = evaluateSignupTrialGrant({
       enabled: true,
-      trigger: "verified_email",
-      event: "bootstrap",
+      events: ["web_verified"],
+      event: "web_unverified",
       planId: "plan1",
       user,
       plan,
     });
-    assert.deepEqual(out, { ok: false, reason: "trigger_mismatch" });
+    assert.deepEqual(out, { ok: false, reason: "event_mismatch" });
   });
 
   it("skips when plan id is empty", () => {
     const out = evaluateSignupTrialGrant({
       enabled: true,
-      trigger: "verified_email",
-      event: "verified_email",
+      events: ["web_verified"],
+      event: "web_verified",
       planId: "  ",
       user,
       plan: null,
@@ -104,8 +174,8 @@ describe("evaluateSignupTrialGrant", () => {
     assert.equal(
       evaluateSignupTrialGrant({
         enabled: true,
-        trigger: "verified_email",
-        event: "verified_email",
+        events: ["web_verified"],
+        event: "web_verified",
         planId: "plan1",
         user: { ...user, status: "disabled" },
         plan,
@@ -115,8 +185,8 @@ describe("evaluateSignupTrialGrant", () => {
     assert.equal(
       evaluateSignupTrialGrant({
         enabled: true,
-        trigger: "verified_email",
-        event: "verified_email",
+        events: ["web_verified"],
+        event: "web_verified",
         planId: "plan1",
         user,
         plan: { ...plan, projectId: "other" },
@@ -128,26 +198,12 @@ describe("evaluateSignupTrialGrant", () => {
   it("allows grant when config, user, and plan line up", () => {
     const out = evaluateSignupTrialGrant({
       enabled: true,
-      trigger: "identity",
+      events: ["telegram_bind"],
       event: "telegram_bind",
       planId: "plan1",
       user,
       plan,
     });
     assert.deepEqual(out, { ok: true, planId: "plan1" });
-  });
-
-  it("treats already-owned as a skip at the grant layer (idempotent key + unique slot)", () => {
-    assert.equal(
-      evaluateSignupTrialGrant({
-        enabled: true,
-        trigger: "verified_email",
-        event: "verified_email",
-        planId: "plan1",
-        user,
-        plan,
-      }).ok,
-      true,
-    );
   });
 });

@@ -80,6 +80,7 @@ export const DEFAULT_AUTH_EMAIL_VALUE: AuthEmailValue = {
   registerDeviceNewPerDay: 2,
 };
 
+/** Legacy combined trigger; kept to migrate stored settings into `events`. */
 export const SIGNUP_TRIAL_TRIGGERS = [
   "any_register",
   "verified_email",
@@ -89,17 +90,63 @@ export const SIGNUP_TRIAL_TRIGGERS = [
 
 export type SignupTrialTrigger = (typeof SIGNUP_TRIAL_TRIGGERS)[number];
 
+/** Independent grant scenes (admin checkboxes). */
+export const SIGNUP_TRIAL_EVENTS = [
+  "web_unverified",
+  "web_verified",
+  "app_bootstrap",
+  "app_soft_bind",
+  "app_verified_bind",
+  "telegram_bootstrap",
+  "telegram_soft_bind",
+  "telegram_verified_bind",
+  "telegram_bind",
+] as const;
+
+export type SignupTrialEvent = (typeof SIGNUP_TRIAL_EVENTS)[number];
+
 export const signupTrialValueSchema = z.object({
   planId: z.string().max(64),
-  trigger: z.enum(SIGNUP_TRIAL_TRIGGERS),
+  events: z.array(z.enum(SIGNUP_TRIAL_EVENTS)),
 });
 
 export type SignupTrialValue = z.infer<typeof signupTrialValueSchema>;
 
+/** Matches former `any_register` (does not include unverified web / soft-bind). */
+export const DEFAULT_SIGNUP_TRIAL_EVENTS: SignupTrialEvent[] = [
+  "web_verified",
+  "app_bootstrap",
+  "app_verified_bind",
+  "telegram_bootstrap",
+  "telegram_verified_bind",
+  "telegram_bind",
+];
+
 export const DEFAULT_SIGNUP_TRIAL_VALUE: SignupTrialValue = {
   planId: "",
-  trigger: "any_register",
+  events: [...DEFAULT_SIGNUP_TRIAL_EVENTS],
 };
+
+export function migrateSignupTrialTriggerToEvents(
+  trigger: string,
+): SignupTrialEvent[] {
+  switch (trigger) {
+    case "verified_email":
+      return ["web_verified", "app_verified_bind", "telegram_verified_bind"];
+    case "bootstrap":
+      return ["app_bootstrap", "telegram_bootstrap"];
+    case "identity":
+      return [
+        "web_verified",
+        "app_verified_bind",
+        "telegram_verified_bind",
+        "telegram_bind",
+      ];
+    case "any_register":
+    default:
+      return [...DEFAULT_SIGNUP_TRIAL_EVENTS];
+  }
+}
 
 /** Mail OTP / reset send anti-abuse limits (Redis counters). */
 export const mailRateLimitValueSchema = z.object({
@@ -477,13 +524,24 @@ export async function getAuthEmailPolicy(
 
 export function parseSignupTrialValue(raw: unknown): SignupTrialValue {
   const o = asObject(raw);
-  const trigger = SIGNUP_TRIAL_TRIGGERS.includes(o.trigger as SignupTrialTrigger)
-    ? (o.trigger as SignupTrialTrigger)
-    : DEFAULT_SIGNUP_TRIAL_VALUE.trigger;
   const planId = typeof o.planId === "string" ? o.planId.trim() : "";
+  let events: SignupTrialEvent[];
+  if (Array.isArray(o.events)) {
+    const seen = new Set<SignupTrialEvent>();
+    for (const item of o.events) {
+      if (SIGNUP_TRIAL_EVENTS.includes(item as SignupTrialEvent)) {
+        seen.add(item as SignupTrialEvent);
+      }
+    }
+    events = SIGNUP_TRIAL_EVENTS.filter((e) => seen.has(e));
+  } else if (typeof o.trigger === "string") {
+    events = migrateSignupTrialTriggerToEvents(o.trigger);
+  } else {
+    events = [...DEFAULT_SIGNUP_TRIAL_EVENTS];
+  }
   return signupTrialValueSchema.parse({
     planId,
-    trigger,
+    events,
   });
 }
 
