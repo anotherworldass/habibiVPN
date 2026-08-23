@@ -65,6 +65,7 @@ import WalletCatalogPage from "./pages/WalletCatalog";
 import WalletSpendsPage from "./pages/WalletSpends";
 import LoginPage from "./pages/Login";
 import PaymentSettingsPage from "./pages/PaymentSettings";
+import PaymentOrderGuardSettingsPage from "./pages/PaymentOrderGuardSettings";
 import OrdersPage from "./pages/Orders";
 import OpsStatsPage from "./pages/OpsStats";
 import CampaignsPage from "./pages/Campaigns";
@@ -214,6 +215,11 @@ function ProtectedLayout() {
             routes: [
               { path: "/payment", name: "支付配置", icon: <CreditCardOutlined /> },
               {
+                path: "/payment/order-guard",
+                name: "下单风控",
+                icon: <SafetyCertificateOutlined />,
+              },
+              {
                 path: "/orders",
                 name: "订单流水",
                 icon: <MoneyCollectOutlined />,
@@ -360,6 +366,10 @@ function ProtectedLayout() {
         <Route path="/sell-plans/groups" element={<PlanGroupsPage />} />
         <Route path="/sell-plans/preview" element={<CatalogPreviewPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
+        <Route
+          path="/payment/order-guard"
+          element={<PaymentOrderGuardSettingsPage />}
+        />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/entitlement-ledgers" element={<EntitlementLedgerPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />

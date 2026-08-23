@@ -26,6 +26,8 @@ export const SETTING_KEYS = {
   LLM_PROVIDERS: "llm.providers",
   /** Auto-grant a trial plan after register / identity events. */
   SIGNUP_TRIAL: "signup.trial",
+  /** Create-order anti-abuse caps (pending orders, cooldown, Redis counters). */
+  PAYMENT_ORDER_GUARD: "payment.order_guard",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */
@@ -177,6 +179,41 @@ const MAIL_RATE_LIMIT_CACHE_TTL_MS = 30_000;
 const mailRateLimitCache = new Map<
   string,
   { value: MailRateLimitValue; at: number }
+>();
+
+/** Create-order anti-abuse caps (DB pending count + Redis counters). */
+export const paymentOrderGuardValueSchema = z.object({
+  /** Concurrent unpaid gateway orders per account (`payment.too_many_pending`). */
+  maxPendingOrders: z.number().int().min(1).max(100),
+  /** Minimum seconds between two create-order calls per user. */
+  createCooldownSeconds: z.number().int().min(0).max(3600),
+  /** Create-order attempts per user in 10 minutes. */
+  userPer10Min: z.number().int().min(1).max(1000),
+  /** Create-order attempts per IP in 10 minutes. */
+  ipPer10Min: z.number().int().min(1).max(10_000),
+  /**
+   * Reuse an identical pending order (same plan/channel/amount/coupon) created
+   * within this window instead of pulling a new link from the gateway.
+   */
+  pendingReuseMinutes: z.number().int().min(0).max(1440),
+});
+
+export type PaymentOrderGuardValue = z.infer<
+  typeof paymentOrderGuardValueSchema
+>;
+
+export const DEFAULT_PAYMENT_ORDER_GUARD_VALUE: PaymentOrderGuardValue = {
+  maxPendingOrders: 3,
+  createCooldownSeconds: 10,
+  userPer10Min: 8,
+  ipPer10Min: 30,
+  pendingReuseMinutes: 30,
+};
+
+const PAYMENT_ORDER_GUARD_CACHE_TTL_MS = 30_000;
+const paymentOrderGuardCache = new Map<
+  string,
+  { value: PaymentOrderGuardValue; at: number }
 >();
 
 /** User chat widget / App WebView: how many latest messages to return. */
@@ -640,6 +677,86 @@ export function primeMailRateLimitCache(
   value: MailRateLimitValue,
 ) {
   mailRateLimitCache.set(projectId, { value, at: Date.now() });
+}
+
+export function parsePaymentOrderGuardValue(
+  raw: unknown,
+): PaymentOrderGuardValue {
+  const o = asObject(raw);
+  const num = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : fallback;
+  return paymentOrderGuardValueSchema.parse({
+    maxPendingOrders: num(
+      o.maxPendingOrders,
+      DEFAULT_PAYMENT_ORDER_GUARD_VALUE.maxPendingOrders,
+    ),
+    createCooldownSeconds: num(
+      o.createCooldownSeconds,
+      DEFAULT_PAYMENT_ORDER_GUARD_VALUE.createCooldownSeconds,
+    ),
+    userPer10Min: num(
+      o.userPer10Min,
+      DEFAULT_PAYMENT_ORDER_GUARD_VALUE.userPer10Min,
+    ),
+    ipPer10Min: num(o.ipPer10Min, DEFAULT_PAYMENT_ORDER_GUARD_VALUE.ipPer10Min),
+    pendingReuseMinutes: num(
+      o.pendingReuseMinutes,
+      DEFAULT_PAYMENT_ORDER_GUARD_VALUE.pendingReuseMinutes,
+    ),
+  });
+}
+
+export async function getPaymentOrderGuardConfig(projectId: string): Promise<{
+  enabled: boolean;
+  value: PaymentOrderGuardValue;
+  remark: string | null;
+}> {
+  const row = await getProjectSetting(
+    projectId,
+    SETTING_KEYS.PAYMENT_ORDER_GUARD,
+  );
+  if (!row) {
+    return {
+      enabled: false,
+      value: { ...DEFAULT_PAYMENT_ORDER_GUARD_VALUE },
+      remark: null,
+    };
+  }
+  return {
+    enabled: row.enabled,
+    value: parsePaymentOrderGuardValue(row.value),
+    remark: row.remark,
+  };
+}
+
+/**
+ * Effective policy for the create-order path. Cached in memory; invalidated on
+ * admin save. Soft TTL covers multi-instance lag.
+ */
+export async function getPaymentOrderGuardPolicy(
+  projectId: string,
+): Promise<PaymentOrderGuardValue> {
+  const hit = paymentOrderGuardCache.get(projectId);
+  if (hit && Date.now() - hit.at < PAYMENT_ORDER_GUARD_CACHE_TTL_MS) {
+    return hit.value;
+  }
+  const cfg = await getPaymentOrderGuardConfig(projectId);
+  const value = cfg.enabled
+    ? cfg.value
+    : { ...DEFAULT_PAYMENT_ORDER_GUARD_VALUE };
+  paymentOrderGuardCache.set(projectId, { value, at: Date.now() });
+  return value;
+}
+
+export function invalidatePaymentOrderGuardCache(projectId: string) {
+  paymentOrderGuardCache.delete(projectId);
+}
+
+export function primePaymentOrderGuardCache(
+  projectId: string,
+  value: PaymentOrderGuardValue,
+) {
+  paymentOrderGuardCache.set(projectId, { value, at: Date.now() });
 }
 
 export function parseSupportClientMessageWindowValue(

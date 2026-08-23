@@ -17,6 +17,7 @@ import {
   findReusablePendingOrder,
   shouldRefreshRemotePayment,
 } from "./payments-guard.js";
+import { getPaymentOrderGuardPolicy } from "./system-settings.js";
 
 /** App Store / Play 数字内容必须走 IAP，禁止第三方网关下单。 */
 export const STORE_IAP_ONLY_CLIENTS: ReadonlySet<ClientChannel> = new Set([
@@ -104,7 +105,13 @@ export async function createPaymentOrder(input: {
     throw Object.assign(new Error("payment.provider_not_configured"), { statusCode: 503 });
   }
 
-  await assertCreateOrderAllowed({ userId: input.userId, ip: input.ip });
+  const orderGuard = await getPaymentOrderGuardPolicy(user.projectId);
+  await assertCreateOrderAllowed({
+    projectId: user.projectId,
+    userId: input.userId,
+    ip: input.ip,
+    policy: orderGuard,
+  });
 
   const listPriceCents = plan.priceCents;
   let discountCents = 0;
@@ -134,11 +141,13 @@ export async function createPaymentOrder(input: {
   }
 
   const reusable = await findReusablePendingOrder({
+    projectId: user.projectId,
     userId: input.userId,
     planId: plan.id,
     paymentChannelId: channel.id,
     amountCents,
     couponCode,
+    policy: orderGuard,
   });
   if (reusable) return reusable;
 

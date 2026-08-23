@@ -8,6 +8,7 @@ import { sendMailWithSesConfig } from "../services/mail/ses.js";
 import { probeStorageS3Profile } from "../services/storage/s3-probe.js";
 import {
   DEFAULT_MAIL_RATE_LIMIT_VALUE,
+  DEFAULT_PAYMENT_ORDER_GUARD_VALUE,
   DEFAULT_SUBSCRIPTION_NODE_NAME_VALUE,
   DEFAULT_SUPPORT_CLIENT_MESSAGE_WINDOW_VALUE,
   SETTING_KEYS,
@@ -26,6 +27,7 @@ import {
   getAuthEmailConfig,
   getMailRateLimitConfig,
   getMailSesConfig,
+  getPaymentOrderGuardConfig,
   getSubscriptionDomainsConfig,
   getSubscriptionNoticeConfig,
   getSubscriptionNodeNameConfig,
@@ -35,7 +37,9 @@ import {
   mailRateLimitValueSchema,
   mergeMailSesValue,
   normalizeSubscriptionPublicOrigin,
+  paymentOrderGuardValueSchema,
   primeMailRateLimitCache,
+  primePaymentOrderGuardCache,
   primeSubscriptionDomainsCache,
   primeSubscriptionNoticeCache,
   primeSubscriptionNodeNameCache,
@@ -102,6 +106,16 @@ const mailRateLimitPatch = z.object({
   ipPerMinute: z.number().int().min(1).max(1000),
   ipPerHour: z.number().int().min(1).max(10_000),
   projectPerMinute: z.number().int().min(1).max(10_000),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const paymentOrderGuardPatch = z.object({
+  enabled: z.boolean(),
+  maxPendingOrders: z.number().int().min(1).max(100),
+  createCooldownSeconds: z.number().int().min(0).max(3600),
+  userPer10Min: z.number().int().min(1).max(1000),
+  ipPer10Min: z.number().int().min(1).max(10_000),
+  pendingReuseMinutes: z.number().int().min(0).max(1440),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -482,6 +496,85 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
       return {
         project_id: projectId,
         key: SETTING_KEYS.MAIL_RATE_LIMIT,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/payment/order-guard`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const cfg = await getPaymentOrderGuardConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.PAYMENT_ORDER_GUARD,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/payment/order-guard`, async (req, reply) => {
+    const parsed = paymentOrderGuardPatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const value = paymentOrderGuardValueSchema.parse({
+        maxPendingOrders: parsed.data.maxPendingOrders,
+        createCooldownSeconds: parsed.data.createCooldownSeconds,
+        userPer10Min: parsed.data.userPer10Min,
+        ipPer10Min: parsed.data.ipPer10Min,
+        pendingReuseMinutes: parsed.data.pendingReuseMinutes,
+      });
+      const row = await upsertProjectSetting({
+        projectId,
+        key: SETTING_KEYS.PAYMENT_ORDER_GUARD,
+        value,
+        enabled: parsed.data.enabled,
+        remark: parsed.data.remark ?? null,
+      });
+
+      // Hot-reload into this process; other instances pick up within soft TTL.
+      primePaymentOrderGuardCache(
+        projectId,
+        parsed.data.enabled
+          ? value
+          : { ...DEFAULT_PAYMENT_ORDER_GUARD_VALUE },
+      );
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.payment_order_guard.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: {
+          enabled: row.enabled,
+          ...value,
+        },
+      });
+
+      const cfg = await getPaymentOrderGuardConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.PAYMENT_ORDER_GUARD,
         enabled: cfg.enabled,
         remark: cfg.remark,
         ...cfg.value,

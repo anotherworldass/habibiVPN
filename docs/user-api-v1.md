@@ -421,7 +421,7 @@ VPN 连接：**不要**用 `/nodes` 拨号；用订阅里的 `subscription_url` 
 
 客户端轮询 `GET /orders/:id` 直到 `paid` / `provisioned`。
 
-下单有防刷限制：同一账号最多 3 笔待支付订单；同一用户约 10 秒冷却、10 分钟最多 8 次；同一 IP 10 分钟最多 30 次。相同套餐/通道/金额的待支付订单会复用已有支付链接，不重复向网关拉单。超限返回 `429`（`payment.too_many_pending` / `payment.rate_limited`）。
+下单有防刷限制，阈值按项目在后台「支付与订单 → 下单风控」配置（`payment.order_guard`）。默认：同一账号最多 3 笔待支付订单；同一用户约 10 秒冷却、10 分钟最多 8 次；同一 IP 10 分钟最多 30 次。相同套餐/通道/金额且在复用窗口（默认 30 分钟）内的待支付订单会复用已有支付链接，不重复向网关拉单。超限返回 `429`（`payment.too_many_pending` / `payment.rate_limited`）。
 
 ### `GET /orders?status=&limit=&offset=`
 
