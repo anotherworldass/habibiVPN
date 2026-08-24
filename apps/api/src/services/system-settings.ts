@@ -196,6 +196,12 @@ export const paymentOrderGuardValueSchema = z.object({
    * within this window instead of pulling a new link from the gateway.
    */
   pendingReuseMinutes: z.number().int().min(0).max(1440),
+  /**
+   * Auto-cancel pending orders older than this so they stop consuming the
+   * per-account cap. 0 disables the sweeper (orders then stay pending forever
+   * unless the gateway reports a failure).
+   */
+  pendingExpireMinutes: z.number().int().min(0).max(43_200),
 });
 
 export type PaymentOrderGuardValue = z.infer<
@@ -208,6 +214,7 @@ export const DEFAULT_PAYMENT_ORDER_GUARD_VALUE: PaymentOrderGuardValue = {
   userPer10Min: 8,
   ipPer10Min: 30,
   pendingReuseMinutes: 30,
+  pendingExpireMinutes: 120,
 };
 
 const PAYMENT_ORDER_GUARD_CACHE_TTL_MS = 30_000;
@@ -702,6 +709,10 @@ export function parsePaymentOrderGuardValue(
     pendingReuseMinutes: num(
       o.pendingReuseMinutes,
       DEFAULT_PAYMENT_ORDER_GUARD_VALUE.pendingReuseMinutes,
+    ),
+    pendingExpireMinutes: num(
+      o.pendingExpireMinutes,
+      DEFAULT_PAYMENT_ORDER_GUARD_VALUE.pendingExpireMinutes,
     ),
   });
 }

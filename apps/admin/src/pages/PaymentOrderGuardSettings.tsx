@@ -26,6 +26,7 @@ type PaymentOrderGuardConfig = {
   userPer10Min: number;
   ipPer10Min: number;
   pendingReuseMinutes: number;
+  pendingExpireMinutes: number;
 };
 
 const DEFAULT_GUARD = {
@@ -35,6 +36,7 @@ const DEFAULT_GUARD = {
   userPer10Min: 8,
   ipPer10Min: 30,
   pendingReuseMinutes: 30,
+  pendingExpireMinutes: 120,
   remark: "",
 };
 
@@ -61,6 +63,7 @@ export default function PaymentOrderGuardSettingsPage() {
         userPer10Min: cfg.userPer10Min,
         ipPer10Min: cfg.ipPer10Min,
         pendingReuseMinutes: cfg.pendingReuseMinutes,
+        pendingExpireMinutes: cfg.pendingExpireMinutes,
         remark: cfg.remark || "",
       });
     } catch (e) {
@@ -87,6 +90,7 @@ export default function PaymentOrderGuardSettingsPage() {
           userPer10Min: Number(values.userPer10Min),
           ipPer10Min: Number(values.ipPer10Min),
           pendingReuseMinutes: Number(values.pendingReuseMinutes),
+          pendingExpireMinutes: Number(values.pendingExpireMinutes),
           remark: values.remark?.trim() || null,
         }),
       });
@@ -126,6 +130,10 @@ export default function PaymentOrderGuardSettingsPage() {
               次数计数存在 Redis；Redis 不可用时仅待支付订单数上限仍然生效。保存后本
               API 进程立即读入内存，约 30 秒内其它实例也会刷新。
             </li>
+            <li>
+              超时未支付的订单由后台任务每 2 分钟清一次，置为「已取消」并释放占用的优惠券；
+              若之后网关仍回调支付成功，订单会正常转为已支付并开通。
+            </li>
           </ul>
         }
       />
@@ -136,7 +144,7 @@ export default function PaymentOrderGuardSettingsPage() {
             name="enabled"
             label="启用自定义阈值"
             valuePropName="checked"
-            extra="关闭时使用系统默认：待支付 3 笔、冷却 10s、用户 8 次/10 分、IP 30 次/10 分、复用窗口 30 分钟"
+            extra="关闭时使用系统默认：待支付 3 笔、冷却 10s、用户 8 次/10 分、IP 30 次/10 分、复用窗口 30 分钟、超时 120 分钟自动取消"
           >
             <Switch />
           </Form.Item>
@@ -178,6 +186,14 @@ export default function PaymentOrderGuardSettingsPage() {
               extra="相同套餐/通道/金额在窗口内复用旧支付链接，不占用新的名额；填 0 关闭复用"
             >
               <InputNumber min={0} max={1440} style={{ width: 180 }} />
+            </Form.Item>
+            <Form.Item
+              name="pendingExpireMinutes"
+              label="待支付订单自动过期（分钟）"
+              rules={[{ required: true }]}
+              extra="超过该时长仍未支付则自动取消，释放名额；填 0 则永不自动取消"
+            >
+              <InputNumber min={0} max={43200} style={{ width: 180 }} />
             </Form.Item>
           </Space>
           <Form.Item name="remark" label="备注">

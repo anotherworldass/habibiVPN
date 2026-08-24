@@ -6,6 +6,7 @@ import { seedPromoGroupsIfNeeded } from "./services/referral/groups.js";
 import { seedDefaultProjectIfNeeded } from "./services/project.js";
 import { startCommissionSettleJob } from "./services/referral/settle-job.js";
 import { startFupBandwidthJob } from "./services/fup-job.js";
+import { startPendingOrderExpireJob } from "./services/payments-expire-job.js";
 import { startTelegramBroadcastWorker } from "./services/telegram/broadcast-worker.js";
 
 await seedAdminIfNeeded();
@@ -19,6 +20,7 @@ try {
   await app.listen({ host: env.API_HOST, port: env.API_PORT });
   startCommissionSettleJob(app.log);
   startFupBandwidthJob(app.log);
+  startPendingOrderExpireJob(app.log);
   startTelegramBroadcastWorker(app.log);
   app.log.info(`Habibi API listening on http://${env.API_HOST}:${env.API_PORT}`);
 } catch (err) {

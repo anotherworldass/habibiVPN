@@ -284,8 +284,9 @@ export async function applyPaymentResult(
   }
 
   if (result.state === "paid") {
+    // `cancelled` included: a sweeper/admin cancel must not swallow a late pay.
     await prisma.order.updateMany({
-      where: { id: order.id, status: { in: ["pending", "failed"] } },
+      where: { id: order.id, status: { in: ["pending", "failed", "cancelled"] } },
       data: {
         status: "paid",
         providerRef: result.providerOrderNo,
@@ -314,7 +315,9 @@ export async function refreshPaymentOrder(userId: string, orderId: string) {
     where: { id: orderId, userId },
   });
   if (!order) throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
-  if (!order.provider || !["pending", "paid"].includes(order.status)) return order;
+  if (!order.provider || !["pending", "paid", "cancelled"].includes(order.status)) {
+    return order;
+  }
   if (!(await shouldRefreshRemotePayment(order.id))) return order;
   const provider = await prisma.paymentProvider.findUnique({ where: { code: order.provider } });
   if (!provider || !provider.enabled) return order;

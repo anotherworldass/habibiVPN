@@ -139,7 +139,7 @@ export default function PaymentOrderPage() {
             </p>
           ) : null}
 
-          {order.status === "failed" ? (
+          {order.status === "failed" || order.status === "cancelled" ? (
             <Link href="/plans" className="btn btn-secondary btn-block" style={{ marginTop: 20 }}>
               {copy.payment.reorder}
             </Link>

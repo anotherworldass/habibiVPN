@@ -2,7 +2,9 @@ import type { FastifyPluginAsync } from "fastify";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { ADMIN_API_PREFIX } from "@habibi/shared";
 import { resolveAdminProjectId } from "../lib/admin-project.js";
+import { writeAudit } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
+import { cancelPendingOrder } from "../services/payments-expire.js";
 
 const ORDER_STATUSES = new Set<OrderStatus>([
   "pending",
@@ -95,6 +97,48 @@ export const adminOrderRoutes: FastifyPluginAsync = async (app) => {
       ]);
 
       return { total, items, project_id: projectId };
+    } catch (err) {
+      return mapErr(err, reply);
+    }
+  });
+
+  /** Free a stuck pending order so it stops consuming the per-account cap. */
+  app.post(`${prefix}/:id/cancel`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const { id } = req.params as { id: string };
+      const order = await prisma.order.findFirst({
+        where: { id, user: { projectId } },
+      });
+      if (!order) {
+        throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
+      }
+      if (order.status !== "pending") {
+        throw Object.assign(new Error("order.not_pending"), {
+          statusCode: 409,
+        });
+      }
+
+      const cancelled = await cancelPendingOrder({
+        orderId: order.id,
+        reason: "payment.cancelled_by_admin",
+      });
+      if (cancelled) {
+        await writeAudit({
+          actorType: "admin",
+          actorId: req.admin?.sub,
+          action: "order.cancel",
+          targetType: "order",
+          targetId: order.id,
+          meta: { userId: order.userId, amountCents: order.amountCents },
+        });
+      }
+
+      return {
+        ok: true,
+        cancelled,
+        order: await prisma.order.findUnique({ where: { id: order.id } }),
+      };
     } catch (err) {
       return mapErr(err, reply);
     }

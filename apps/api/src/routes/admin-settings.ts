@@ -116,6 +116,7 @@ const paymentOrderGuardPatch = z.object({
   userPer10Min: z.number().int().min(1).max(1000),
   ipPer10Min: z.number().int().min(1).max(10_000),
   pendingReuseMinutes: z.number().int().min(0).max(1440),
+  pendingExpireMinutes: z.number().int().min(0).max(43_200),
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -542,6 +543,7 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         userPer10Min: parsed.data.userPer10Min,
         ipPer10Min: parsed.data.ipPer10Min,
         pendingReuseMinutes: parsed.data.pendingReuseMinutes,
+        pendingExpireMinutes: parsed.data.pendingExpireMinutes,
       });
       const row = await upsertProjectSetting({
         projectId,

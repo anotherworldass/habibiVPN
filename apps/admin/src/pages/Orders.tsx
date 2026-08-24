@@ -108,6 +108,28 @@ export default function OrdersPage() {
     });
   }
 
+  async function cancel(row: OrderRow) {
+    modal.confirm({
+      title: "取消这笔待支付订单？",
+      content:
+        "将释放该用户占用的待支付名额与优惠券。若用户之后仍完成支付，订单会照常转为已支付并开通。",
+      okText: "确认取消",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await adminFetch(`/admin/v1/orders/${row.id}/cancel`, {
+            method: "POST",
+          });
+          message.success("已取消");
+          actionRef.current?.reload();
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : "取消失败");
+          throw err;
+        }
+      },
+    });
+  }
+
   const columns: ProColumns<OrderRow>[] = [
     {
       title: "关键词",
@@ -265,10 +287,25 @@ export default function OrdersPage() {
       width: 100,
       fixed: "right",
       render: (_, row) => {
+        if (row.status === "pending") {
+          return [
+            <Button
+              key="cancel"
+              type="link"
+              size="small"
+              danger
+              onClick={(e) => {
+                e.stopPropagation();
+                void cancel(row);
+              }}
+            >
+              取消
+            </Button>,
+          ];
+        }
         const canRefund =
           row.status !== "refunded" &&
           row.status !== "cancelled" &&
-          row.status !== "pending" &&
           row.status !== "failed";
         return canRefund
           ? [
