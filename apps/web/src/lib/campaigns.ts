@@ -6,6 +6,11 @@ export type CampaignPlanBrief = {
   id: string;
   name: string;
   name_i18n?: Record<string, string> | null;
+  description?: string | null;
+  validity_seconds?: number | null;
+  validity_calendar_months?: number | null;
+  data_limit_bytes?: number | null;
+  device_slots?: number | null;
 };
 
 export type CampaignUi = {

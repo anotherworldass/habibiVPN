@@ -39,6 +39,23 @@ type PlanBrief = {
   id: string;
   name: string;
   name_i18n?: Record<string, string>;
+  description?: string | null;
+  validity_seconds?: number | null;
+  validity_calendar_months?: number | null;
+  data_limit_bytes?: number | null;
+  device_slots?: number | null;
+};
+
+type PlanBriefSource = {
+  id: string;
+  name: string;
+  nameI18n?: unknown;
+  description?: string | null;
+  descriptionI18n?: unknown;
+  validitySeconds?: number | null;
+  validityCalendarMonths?: number | null;
+  dataLimitBytes?: bigint | number | null;
+  deviceSlots?: number | null;
 };
 
 function primaryReward(
@@ -49,16 +66,12 @@ function primaryReward(
 }
 
 function planBrief(
-  plan:
-    | {
-        id: string;
-        name: string;
-        nameI18n?: unknown;
-        description?: string | null;
-      }
-    | null
-    | undefined,
+  plan: PlanBriefSource | null | undefined,
   locale?: string | null,
+  overlay?: {
+    validitySeconds?: number | null;
+    dataLimitBytes?: bigint | number | null;
+  },
 ): PlanBrief | null {
   if (!plan?.id) return null;
   const copy = localizePlanCopy(
@@ -66,15 +79,42 @@ function planBrief(
       name: plan.name,
       description: plan.description ?? null,
       nameI18n: plan.nameI18n,
+      descriptionI18n: plan.descriptionI18n,
     },
     locale,
   );
+  const durationOverride = overlay?.validitySeconds != null;
+  const trafficOverride = overlay?.dataLimitBytes != null;
+  const trafficRaw = trafficOverride
+    ? overlay.dataLimitBytes
+    : plan.dataLimitBytes;
   return {
     id: plan.id,
     name: copy.name || plan.name || plan.id,
     name_i18n: copy.name_i18n as Record<string, string>,
+    description: copy.description || null,
+    validity_seconds: durationOverride
+      ? overlay.validitySeconds ?? null
+      : (plan.validitySeconds ?? null),
+    validity_calendar_months: durationOverride
+      ? null
+      : (plan.validityCalendarMonths ?? null),
+    data_limit_bytes: trafficRaw == null ? null : Number(trafficRaw),
+    device_slots: plan.deviceSlots ?? null,
   };
 }
+
+const planBriefSelect = {
+  id: true,
+  name: true,
+  nameI18n: true,
+  description: true,
+  descriptionI18n: true,
+  validitySeconds: true,
+  validityCalendarMonths: true,
+  dataLimitBytes: true,
+  deviceSlots: true,
+} as const;
 
 async function loadPlanBriefs(
   ids: Array<string | null | undefined>,
@@ -86,7 +126,7 @@ async function loadPlanBriefs(
   if (!unique.length) return new Map();
   const rows = await prisma.plan.findMany({
     where: { id: { in: unique } },
-    select: { id: true, name: true, nameI18n: true, description: true },
+    select: planBriefSelect,
   });
   return new Map(rows.map((p) => [p.id, planBrief(p, locale)!]));
 }
@@ -99,7 +139,10 @@ function serializePublicReward(
   return {
     kind: reward.kind,
     plan_id: reward.planId,
-    plan: planBrief(reward.plan, locale),
+    plan: planBrief(reward.plan, locale, {
+      validitySeconds: reward.validitySeconds,
+      dataLimitBytes: reward.dataLimitBytes,
+    }),
     validity_seconds: reward.validitySeconds,
     data_limit_bytes:
       reward.dataLimitBytes == null ? null : Number(reward.dataLimitBytes),
@@ -122,7 +165,7 @@ const campaignInclude = {
   rewards: {
     orderBy: { sortOrder: "asc" as const },
     include: {
-      plan: { select: { id: true, name: true, code: true, nameI18n: true } },
+      plan: { select: { ...planBriefSelect, code: true } },
     },
   },
 };

@@ -27,6 +27,12 @@ export type CampaignRewardWithPlan = CampaignReward & {
     name: string;
     code: string;
     nameI18n?: unknown;
+    description?: string | null;
+    descriptionI18n?: unknown;
+    validitySeconds?: number | null;
+    validityCalendarMonths?: number | null;
+    dataLimitBytes?: bigint | number | null;
+    deviceSlots?: number | null;
   } | null;
 };
 

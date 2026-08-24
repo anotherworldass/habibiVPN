@@ -14,6 +14,7 @@ import {
   fetchPublicInviteCampaign,
   inviteCampaignSummary,
   resolvedCampaignUi,
+  type CampaignPlanBrief,
   type InviteCampaignAuth,
   type InviteCampaignPublic,
   type InviteRequirements,
@@ -45,6 +46,38 @@ function requirementLines(
   return lines.length ? lines : [copy.reqSignup];
 }
 
+const planInfoIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 11.2v5" />
+    <circle cx="12" cy="8.2" r="0.95" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+function formatPlanDuration(
+  plan: CampaignPlanBrief,
+  copy: ReturnType<typeof t>,
+) {
+  if (plan.validity_calendar_months && plan.validity_calendar_months > 0) {
+    return copy.activity.planMonths(plan.validity_calendar_months);
+  }
+  const sec = plan.validity_seconds;
+  if (sec == null) return null;
+  if (sec === 0) return copy.common.lifetime;
+  if (sec % 86400 === 0) return `${sec / 86400} ${copy.common.days}`;
+  if (sec % 3600 === 0) return `${sec / 3600} ${copy.common.hours}`;
+  return null;
+}
+
+function formatPlanTraffic(plan: CampaignPlanBrief, copy: ReturnType<typeof t>) {
+  const n = plan.data_limit_bytes;
+  if (n == null) return null;
+  if (n === 0) return copy.common.unlimited;
+  const gb = n / 1024 ** 3;
+  if (gb >= 1) return `${gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(1)} GB`;
+  return `${(n / 1024 ** 2).toFixed(0)} MB`;
+}
+
 export default function ActivityPage() {
   const locale = useLocale();
   const copy = t(locale);
@@ -57,6 +90,7 @@ export default function ActivityPage() {
   const [tools, setTools] = useState<Tools | null>(null);
   const [copied, setCopied] = useState("");
   const [qrOpen, setQrOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState<CampaignPlanBrief | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [claimedOk, setClaimedOk] = useState(false);
 
@@ -95,13 +129,16 @@ export default function ActivityPage() {
   }, [locale]);
 
   useEffect(() => {
-    if (!qrOpen) return;
+    if (!qrOpen && !planOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setQrOpen(false);
+      if (e.key === "Escape") {
+        setQrOpen(false);
+        setPlanOpen(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [qrOpen]);
+  }, [qrOpen, planOpen]);
 
   const campaign = authCampaign || publicCampaign;
   const progress = authCampaign?.invite_progress;
@@ -206,7 +243,19 @@ export default function ActivityPage() {
                 {perPlan ? (
                   <div className="activity-reward">
                     <div className="activity-reward-kicker">{a.perInviteKicker}</div>
-                    <h2>{a.perInviteTitle(campaignPlanName(locale, perPlan) || perPlan.name)}</h2>
+                    <h2 className="activity-reward-title">
+                      <span>
+                        {a.perInviteTitle(campaignPlanName(locale, perPlan) || perPlan.name)}
+                      </span>
+                      <button
+                        type="button"
+                        className="activity-plan-info"
+                        aria-label={a.planInfoAria}
+                        onClick={() => setPlanOpen(perPlan)}
+                      >
+                        {planInfoIcon}
+                      </button>
+                    </h2>
                     <p>
                       {loggedIn ? a.perInviteGranted(granted, perCap) : a.perInviteHint(perCap)}
                     </p>
@@ -215,7 +264,22 @@ export default function ActivityPage() {
                 {milestonePlan ? (
                   <div className="activity-reward">
                     <div className="activity-reward-kicker">{a.milestoneKicker}</div>
-                    <h2>{a.milestoneTitle(required, campaignPlanName(locale, milestonePlan) || milestonePlan.name)}</h2>
+                    <h2 className="activity-reward-title">
+                      <span>
+                        {a.milestoneTitle(
+                          required,
+                          campaignPlanName(locale, milestonePlan) || milestonePlan.name,
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        className="activity-plan-info"
+                        aria-label={a.planInfoAria}
+                        onClick={() => setPlanOpen(milestonePlan)}
+                      >
+                        {planInfoIcon}
+                      </button>
+                    </h2>
                     <p>
                       {authCampaign?.already_participated || claimedOk
                         ? a.milestoneDone
@@ -341,6 +405,71 @@ export default function ActivityPage() {
               </div>
               <p className="sub-qr-hint">{copy.promo.qrHintLong}</p>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {planOpen ? (
+        <div
+          className="confirm-mask"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="activity-plan-title"
+          onClick={() => setPlanOpen(null)}
+        >
+          <div className="confirm-sheet activity-plan-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="promo-section-head" style={{ marginBottom: 12 }}>
+              <h2 id="activity-plan-title" className="promo-section-title">
+                {a.planInfoTitle}
+              </h2>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ minHeight: 32, padding: "0 12px", fontSize: 13 }}
+                onClick={() => setPlanOpen(null)}
+              >
+                {copy.promo.close}
+              </button>
+            </div>
+            <h3 className="activity-plan-sheet-name">
+              {campaignPlanName(locale, planOpen) || planOpen.name}
+            </h3>
+            {planOpen.description ? (
+              <p className="activity-plan-sheet-desc">{planOpen.description}</p>
+            ) : null}
+            {(() => {
+              const duration = formatPlanDuration(planOpen, copy);
+              const traffic = formatPlanTraffic(planOpen, copy);
+              const devices =
+                planOpen.device_slots != null && planOpen.device_slots > 0
+                  ? String(planOpen.device_slots)
+                  : null;
+              if (!duration && !traffic && !devices && !planOpen.description) {
+                return <p className="activity-plan-sheet-empty">{a.planInfoEmpty}</p>;
+              }
+              return (
+                <dl className="activity-plan-sheet-specs">
+                  {duration ? (
+                    <div>
+                      <dt>{copy.plans.duration}</dt>
+                      <dd>{duration}</dd>
+                    </div>
+                  ) : null}
+                  {traffic ? (
+                    <div>
+                      <dt>{copy.plans.traffic}</dt>
+                      <dd>{traffic}</dd>
+                    </div>
+                  ) : null}
+                  {devices ? (
+                    <div>
+                      <dt>{copy.sub.devices}</dt>
+                      <dd>{devices}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              );
+            })()}
           </div>
         </div>
       ) : null}

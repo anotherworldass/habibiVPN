@@ -1655,9 +1655,99 @@ a.home-invite-banner {
   color: var(--teal-deep);
 }
 
-.activity-reward h2 {
+.activity-reward h2,
+.activity-reward-title {
   margin: 6px 0 0;
   font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.activity-reward-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.activity-reward-title span {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-plan-info {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--teal-deep);
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+  cursor: pointer;
+}
+
+.activity-plan-info svg {
+  width: 16px;
+  height: 16px;
+}
+
+.activity-plan-info:hover,
+.activity-plan-info:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--teal) 22%, white);
+  outline: none;
+}
+
+.activity-plan-sheet-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.activity-plan-sheet-desc {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.activity-plan-sheet-empty {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.activity-plan-sheet-specs {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.activity-plan-sheet-specs > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--teal) 6%, #f7fafc);
+}
+
+.activity-plan-sheet-specs dt {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.activity-plan-sheet-specs dd {
+  margin: 0;
+  font-size: 14px;
   font-weight: 700;
   color: var(--ink);
 }
@@ -1797,11 +1887,11 @@ a.home-invite-banner {
 }
 
 .invite-cross-card--promo .invite-cross-cta {
-  padding: 11px 16px;
-  background: var(--accent-bright);
-  color: var(--brand-grad-2);
+  padding: 10px 16px;
+  background: #fff;
+  color: var(--ink);
   font-size: 13px;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--brand-grad-2) 22%, transparent);
+  box-shadow: none;
 }
 
 .invite-cross-card--inset {
