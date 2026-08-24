@@ -408,38 +408,14 @@ function SubscriptionContent() {
                 limitBytes={selected.data_limit_bytes}
               />
 
-              {!subscriptionUrl && (
-                <p style={{ margin: "14px 0 0", fontSize: 13, color: "var(--amber)" }}>
-                  {copy.sub.noLink}
-                </p>
-              )}
-              <button
-                type="button"
-                className="btn btn-secondary btn-block"
-                style={{ marginTop: 16 }}
-                onClick={() => setConfirmRefresh(true)}
-                disabled={refreshing || selectedExpired}
-              >
-                {copy.sub.refresh}
-              </button>
               {selectedExpired && (
-                <>
-                  <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-                    {copy.sub.refreshDisabledExpired}
-                  </p>
-                  <Link
-                    href="/plans"
-                    className="btn btn-primary btn-block"
-                    style={{ marginTop: 10 }}
-                  >
-                    {copy.sub.buyCta}
-                  </Link>
-                </>
-              )}
-              {refreshOk && (
-                <p className="alert-ok" style={{ marginTop: 10 }}>
-                  {copy.sub.refreshed}
-                </p>
+                <Link
+                  href="/plans"
+                  className="btn btn-primary btn-block"
+                  style={{ marginTop: 16 }}
+                >
+                  {copy.sub.buyCta}
+                </Link>
               )}
             </aside>
           )}
@@ -596,6 +572,25 @@ function SubscriptionContent() {
                 ) : (
                   <p style={{ margin: "14px 0 0", fontSize: 13, color: "var(--amber)" }}>
                     {copy.sub.noLink}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-block"
+                  style={{ marginTop: 16 }}
+                  onClick={() => setConfirmRefresh(true)}
+                  disabled={refreshing || selectedExpired}
+                >
+                  {copy.sub.refresh}
+                </button>
+                {selectedExpired && (
+                  <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+                    {copy.sub.refreshDisabledExpired}
+                  </p>
+                )}
+                {refreshOk && (
+                  <p className="alert-ok" style={{ marginTop: 10 }}>
+                    {copy.sub.refreshed}
                   </p>
                 )}
               </article>

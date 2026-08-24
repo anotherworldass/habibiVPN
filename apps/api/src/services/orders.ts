@@ -5,6 +5,7 @@ import {
   settleCommissionsForOrder,
 } from "./referral/commission.js";
 import { resolveCommissionKind } from "./referral/commission-kind.js";
+import { allocateOrderNo } from "./order-no.js";
 import {
   clawbackUpstreamForOrder,
   type EntitlementClawbackResult,
@@ -39,10 +40,12 @@ export async function createPaidOrderAndSettle(input: {
   }
 
   const commissionKind = await resolveCommissionKind(input.userId);
+  const orderNo = await allocateOrderNo(prisma);
   const order = await prisma.order.create({
     data: {
       userId: input.userId,
       planId: input.planId,
+      orderNo,
       status: "paid",
       amountCents,
       currency: input.currency || plan.currency,

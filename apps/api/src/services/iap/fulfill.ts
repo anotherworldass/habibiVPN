@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { provisionPaidOrder, publicOrder } from "../payments.js";
 import { resolveCommissionKind } from "../referral/commission-kind.js";
+import { allocateOrderNo } from "../order-no.js";
 import {
   APP_STORE_PROVIDER,
   type AppleTransactionInfo,
@@ -135,10 +136,12 @@ export async function fulfillAppleTransaction(input: {
 
   let order;
   try {
+    const orderNo = await allocateOrderNo(prisma);
     order = await prisma.order.create({
       data: {
         userId: user.id,
         planId: plan.id,
+        orderNo,
         status: "paid",
         listPriceCents: plan.priceCents,
         amountCents,
@@ -252,10 +255,12 @@ export async function fulfillGooglePurchase(input: {
   const commissionKind =
     input.commissionKind ?? (await resolveCommissionKind(input.userId));
 
+  const orderNo = await allocateOrderNo(prisma);
   const order = await prisma.order.create({
     data: {
       userId: user.id,
       planId: plan.id,
+      orderNo,
       status: "paid",
       listPriceCents: plan.priceCents,
       amountCents,

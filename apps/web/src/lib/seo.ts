@@ -102,11 +102,11 @@ const pages: Record<PublicSeoPath, Record<SiteLocale, PageSeo>> = {
   },
   "/plans": {
     zh: {
-      title: `价格 · ${site.brand}`,
+      title: `选择套餐 · ${site.brand}`,
       description: "浏览免费试用与付费套餐，领取或购买后即可生成订阅链接。",
     },
     en: {
-      title: `Pricing · ${site.brand}`,
+      title: `Select plan · ${site.brand}`,
       description: "Browse free trials and paid plans. Claiming or purchasing a plan creates your subscription link.",
     },
   },

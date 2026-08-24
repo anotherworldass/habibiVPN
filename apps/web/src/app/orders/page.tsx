@@ -8,15 +8,18 @@ import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { formatCents } from "../../lib/money";
+import { pickSiteCopy } from "../../lib/locale";
 import { useLocale } from "../../components/LocaleProvider";
 import { t } from "../../lib/copy";
 
 type OrderItem = {
   id: string;
+  order_no?: string;
   status: string;
   amount_cents: number;
   currency: string;
   provider: string | null;
+  payment_provider_name?: string | null;
   is_trial_period?: boolean | null;
   paid_at: string | null;
   created_at: string;
@@ -24,14 +27,16 @@ type OrderItem = {
     id: string;
     code: string;
     name: string;
+    name_i18n?: Record<string, string>;
+    description?: string | null;
+    description_i18n?: Record<string, string>;
+    validity_seconds?: number | null;
+    data_limit_bytes?: number | null;
   } | null;
 };
 
-function providerLabel(provider: string | null) {
-  if (!provider) return "";
-  if (provider === "app_store") return "App Store";
-  if (provider === "google_play") return "Google Play";
-  return provider;
+function paymentMerchantLabel(order: OrderItem) {
+  return order.payment_provider_name?.trim() || "";
 }
 
 function formatTime(iso: string | null | undefined) {
@@ -43,10 +48,39 @@ function formatTime(iso: string | null | undefined) {
   }
 }
 
+function formatDuration(
+  sec: number | null | undefined,
+  days: string,
+  hours: string,
+  lifetime: string,
+) {
+  if (sec == null) return null;
+  if (sec === 0) return lifetime;
+  if (sec % 86400 === 0) return `${sec / 86400} ${days}`;
+  if (sec % 3600 === 0) return `${sec / 3600} ${hours}`;
+  return null;
+}
+
+function formatTraffic(
+  n: number | null | undefined,
+  unlimited: string,
+  traffic: string,
+) {
+  if (n == null) return null;
+  if (n === 0) return `${unlimited}${traffic}`;
+  const gb = n / 1024 ** 3;
+  if (gb >= 1) {
+    const value = gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(1);
+    return `${value} GB`;
+  }
+  return `${(n / 1024 ** 2).toFixed(0)} MB`;
+}
+
 const PAGE_SIZE = 20;
 
 export default function OrdersPage() {
-  const copy = t(useLocale());
+  const locale = useLocale();
+  const copy = t(locale);
   const router = useLocaleRouter();
   const [items, setItems] = useState<OrderItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -119,13 +153,34 @@ export default function OrdersPage() {
           <>
             <div className="orders-list">
               {items.map((order) => {
-                const title = order.plan?.name || order.plan?.code || copy.orders.fallbackTitle;
+                const planName =
+                  pickSiteCopy(order.plan?.name_i18n, locale, order.plan?.name || "") ||
+                  order.plan?.code ||
+                  copy.orders.fallbackTitle;
+                const planDesc = pickSiteCopy(
+                  order.plan?.description_i18n,
+                  locale,
+                  order.plan?.description || "",
+                );
+                const duration = formatDuration(
+                  order.plan?.validity_seconds,
+                  copy.common.days,
+                  copy.common.hours,
+                  copy.common.lifetime,
+                );
+                const traffic = formatTraffic(
+                  order.plan?.data_limit_bytes,
+                  copy.common.unlimited,
+                  copy.common.traffic,
+                );
+                const planBits = [duration, traffic].filter(Boolean);
                 const when = order.paid_at || order.created_at;
+                const merchant = paymentMerchantLabel(order);
                 return (
                   <article key={order.id} className="orders-item">
                     <div className="orders-item-row">
                       <div className="orders-item-main">
-                        <h2>{title}</h2>
+                        <h2>{planName}</h2>
                         <span className="promo-badge promo-badge--ok">
                           {copy.orders.success}
                           {order.is_trial_period ? ` · ${copy.orders.trial}` : ""}
@@ -135,11 +190,25 @@ export default function OrdersPage() {
                         {formatCents(order.amount_cents, order.currency)}
                       </div>
                     </div>
+                    <dl className="orders-item-facts">
+                      <div>
+                        <dt>{copy.orders.orderNo}</dt>
+                        <dd className="orders-item-id">{order.order_no || order.id}</dd>
+                      </div>
+                      <div>
+                        <dt>{copy.orders.plan}</dt>
+                        <dd>
+                          {planName}
+                          {planBits.length ? ` · ${planBits.join(" · ")}` : ""}
+                        </dd>
+                      </div>
+                    </dl>
+                    {planDesc ? (
+                      <p className="orders-item-desc">{planDesc}</p>
+                    ) : null}
                     <p className="orders-item-meta">
                       {formatTime(when)}
-                      {providerLabel(order.provider)
-                        ? ` · ${providerLabel(order.provider)}`
-                        : ""}
+                      {merchant ? ` · ${merchant}` : ""}
                     </p>
                   </article>
                 );

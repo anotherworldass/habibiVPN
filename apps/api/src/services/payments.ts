@@ -18,6 +18,7 @@ import {
   shouldRefreshRemotePayment,
 } from "./payments-guard.js";
 import { getPaymentOrderGuardPolicy } from "./system-settings.js";
+import { allocateOrderNo } from "./order-no.js";
 
 /** App Store / Play 数字内容必须走 IAP，禁止第三方网关下单。 */
 export const STORE_IAP_ONLY_CLIENTS: ReadonlySet<ClientChannel> = new Set([
@@ -34,6 +35,7 @@ export function isStoreIapOnlyClient(
 export function publicOrder(order: Order) {
   return {
     id: order.id,
+    order_no: order.orderNo,
     status: order.status,
     list_price_cents: order.listPriceCents ?? order.amountCents,
     discount_cents: order.discountCents,
@@ -55,6 +57,60 @@ export function publicOrder(order: Order) {
     paid_at: order.paidAt,
     provisioned_at: order.provisionedAt,
     created_at: order.createdAt,
+  };
+}
+
+export function resolvePaymentProviderName(input: {
+  provider: string | null;
+  channel?: {
+    provider?: { name: string } | null;
+  } | null;
+  providers?: { code: string; name: string }[];
+  channels?: { code: string; method: string; provider: { name: string } }[];
+}): string | null {
+  const fromChannel = input.channel?.provider?.name?.trim();
+  if (fromChannel) return fromChannel;
+  const code = input.provider?.trim() || "";
+  if (!code) return null;
+  if (code === "app_store") return "App Store";
+  if (code === "google_play") return "Google Play";
+  const byProvider = input.providers?.find((p) => p.code === code)?.name?.trim();
+  if (byProvider) return byProvider;
+  const byRail = input.channels?.find((c) => c.method === code || c.code === code);
+  return byRail?.provider.name?.trim() || null;
+}
+
+export const publicOrderPlanSelect = {
+  id: true,
+  code: true,
+  name: true,
+  nameI18n: true,
+  description: true,
+  descriptionI18n: true,
+  validitySeconds: true,
+  dataLimitBytes: true,
+} as const;
+
+export function publicOrderPlan(plan: {
+  id: string;
+  code: string;
+  name: string;
+  nameI18n: unknown;
+  description: string | null;
+  descriptionI18n: unknown;
+  validitySeconds: number | null;
+  dataLimitBytes: bigint | null;
+}) {
+  return {
+    id: plan.id,
+    code: plan.code,
+    name: plan.name,
+    name_i18n: (plan.nameI18n ?? {}) as Record<string, string>,
+    description: plan.description,
+    description_i18n: (plan.descriptionI18n ?? {}) as Record<string, string>,
+    validity_seconds: plan.validitySeconds,
+    data_limit_bytes:
+      plan.dataLimitBytes == null ? null : Number(plan.dataLimitBytes),
   };
 }
 
@@ -152,11 +208,13 @@ export async function createPaymentOrder(input: {
   if (reusable) return reusable;
 
   const commissionKind = await resolveCommissionKind(input.userId);
+  const orderNo = await allocateOrderNo(prisma);
   const order = await prisma.order.create({
     data: {
       userId: input.userId,
       planId: plan.id,
       paymentChannelId: channel.id,
+      orderNo,
       listPriceCents,
       discountCents,
       couponId,
@@ -312,7 +370,7 @@ export async function applyPaymentResult(
 
 export async function refreshPaymentOrder(userId: string, orderId: string) {
   const order = await prisma.order.findFirst({
-    where: { id: orderId, userId },
+    where: { userId, OR: [{ id: orderId }, { orderNo: orderId }] },
   });
   if (!order) throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
   if (!order.provider || !["pending", "paid", "cancelled"].includes(order.status)) {

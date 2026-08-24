@@ -70,6 +70,7 @@ export const adminOrderRoutes: FastifyPluginAsync = async (app) => {
           ? {
               OR: [
                 { id: { contains: qTrim } },
+                { orderNo: { contains: qTrim } },
                 { providerRef: { contains: qTrim } },
                 { couponCode: { contains: qTrim } },
                 { user: { email: { contains: qTrim } } },
@@ -108,7 +109,10 @@ export const adminOrderRoutes: FastifyPluginAsync = async (app) => {
       const projectId = await resolveAdminProjectId(req);
       const { id } = req.params as { id: string };
       const order = await prisma.order.findFirst({
-        where: { id, user: { projectId } },
+        where: {
+          user: { projectId },
+          OR: [{ id }, { orderNo: id }],
+        },
       });
       if (!order) {
         throw Object.assign(new Error("order.not_found"), { statusCode: 404 });

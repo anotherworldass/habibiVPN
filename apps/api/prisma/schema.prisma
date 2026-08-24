@@ -1409,6 +1409,8 @@ model StoreProduct {
 
 model Order {
   id               String         @id @default(cuid())
+  /// User-facing serial: YYYYMMDD + 5-digit day seq (Asia/Shanghai), e.g. 2026082400007
+  orderNo          String         @unique @map("order_no")
   userId           String         @map("user_id")
   planId           String         @map("plan_id")
   paymentChannelId String?        @map("payment_channel_id")
@@ -1458,6 +1460,15 @@ model Order {
   @@index([couponId])
   @@unique([provider, providerRef])
   @@map("orders")
+}
+
+/// Per-calendar-day sequence for user-facing order numbers (Asia/Shanghai).
+model OrderNoCounter {
+  /// YYYYMMDD
+  day     String @id
+  nextSeq Int    @map("next_seq")
+
+  @@map("order_no_counters")
 }
 
 // ─── Growth: campaigns / redeem codes / coupons ─────────────────────────────

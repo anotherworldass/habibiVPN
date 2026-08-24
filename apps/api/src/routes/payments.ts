@@ -8,7 +8,10 @@ import {
   createPaymentOrder,
   isStoreIapOnlyClient,
   publicOrder,
+  publicOrderPlan,
+  publicOrderPlanSelect,
   refreshPaymentOrder,
+  resolvePaymentProviderName,
 } from "../services/payments.js";
 import type { ClientChannel } from "@prisma/client";
 
@@ -167,27 +170,45 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
             }
           : {}),
       };
-      const [total, rows] = await Promise.all([
+      const [total, rows, providers, channels] = await Promise.all([
         prisma.order.count({ where }),
         prisma.order.findMany({
           where,
           include: {
-            plan: { select: { id: true, code: true, name: true } },
+            plan: { select: publicOrderPlanSelect },
+            paymentChannel: {
+              select: {
+                name: true,
+                method: true,
+                code: true,
+                provider: { select: { code: true, name: true } },
+              },
+            },
           },
           orderBy: { createdAt: "desc" },
           take: limit,
           skip: offset,
+        }),
+        prisma.paymentProvider.findMany({ select: { code: true, name: true } }),
+        prisma.paymentChannel.findMany({
+          select: {
+            code: true,
+            method: true,
+            provider: { select: { name: true } },
+          },
         }),
       ]);
       return {
         total,
         items: rows.map((order) => ({
           ...publicOrder(order),
-          plan: {
-            id: order.plan.id,
-            code: order.plan.code,
-            name: order.plan.name,
-          },
+          plan: publicOrderPlan(order.plan),
+          payment_provider_name: resolvePaymentProviderName({
+            provider: order.provider,
+            channel: order.paymentChannel,
+            providers,
+            channels,
+          }),
         })),
       };
     },
@@ -217,9 +238,9 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
           };
         }
         const order = await prisma.order.findFirst({
-          where: { id, userId: req.user!.sub },
+          where: { userId: req.user!.sub, OR: [{ id }, { orderNo: id }] },
           include: {
-            plan: { select: { id: true, code: true, name: true } },
+            plan: { select: publicOrderPlanSelect },
             paymentChannel: { select: { method: true } },
           },
         });
@@ -228,11 +249,7 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
           order: {
             ...publicOrder(order),
             channel_method: order.paymentChannel?.method ?? null,
-            plan: {
-              id: order.plan.id,
-              code: order.plan.code,
-              name: order.plan.name,
-            },
+            plan: publicOrderPlan(order.plan),
           },
         };
       } catch (error) {

@@ -7,6 +7,7 @@ import { adminFetch } from "../lib/api";
 
 type OrderRow = {
   id: string;
+  orderNo?: string;
   amountCents: number;
   listPriceCents?: number | null;
   discountCents?: number;
@@ -247,16 +248,11 @@ export default function OrdersPage() {
     },
     {
       title: "订单号",
-      dataIndex: "id",
-      width: 140,
-      ellipsis: true,
+      dataIndex: "orderNo",
+      width: 148,
       search: false,
       copyable: true,
-      render: (_, r) => (
-        <Typography.Text copyable={{ text: r.id }} style={{ fontSize: 12 }}>
-          {r.id.slice(0, 12)}…
-        </Typography.Text>
-      ),
+      render: (_, r) => r.orderNo || r.id,
     },
     {
       title: "渠道单号",

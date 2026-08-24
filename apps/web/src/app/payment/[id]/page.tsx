@@ -14,6 +14,7 @@ import { t } from "../../../lib/copy";
 
 type PaymentOrder = {
   id: string;
+  order_no?: string;
   status: string;
   amount_cents: number;
   currency: string;
@@ -157,7 +158,7 @@ export default function PaymentOrderPage() {
           ) : null}
 
           <p style={{ margin: "16px 0 0", color: "var(--muted)", fontSize: 12 }}>
-            {copy.payment.orderId}{order.id}
+            {copy.payment.orderId}{order.order_no || order.id}
           </p>
         </div>
       ) : null}

@@ -21,12 +21,6 @@ type ShellProps = {
   hideNavigation?: boolean;
 };
 
-const homeIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z" />
-  </svg>
-);
-
 const plansIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <rect x="4" y="5" width="16" height="14" rx="2" />
@@ -72,12 +66,10 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
   }, [pathname]);
 
   const guestTabs = [
-    { href: "/", label: copy.nav.home, icon: homeIcon },
     { href: "/plans", label: copy.nav.plans, icon: plansIcon },
   ];
 
   const appTabs = [
-    { href: "/", label: copy.nav.home, icon: homeIcon },
     { href: "/subscription", label: copy.nav.connect, icon: connectIcon },
     { href: "/plans", label: copy.nav.plans, icon: plansIcon },
   ];
