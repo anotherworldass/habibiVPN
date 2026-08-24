@@ -584,7 +584,15 @@ function SubscriptionContent() {
                   {copy.sub.refresh}
                 </button>
                 {selectedExpired && (
-                  <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+                  <p
+                    style={{
+                      margin: "10px 0 0",
+                      fontSize: 13,
+                      color: "var(--muted)",
+                      lineHeight: 1.5,
+                      textAlign: "center",
+                    }}
+                  >
                     {copy.sub.refreshDisabledExpired}
                   </p>
                 )}

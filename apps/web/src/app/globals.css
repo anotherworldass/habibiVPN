@@ -1891,6 +1891,21 @@ a.home-invite-banner {
   gap: 16px;
 }
 
+.payment-order-no {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.payment-order-no span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+  color: var(--ink-soft);
+}
+
 .payment-back-button {
   flex: 0 0 auto;
   min-height: 40px;

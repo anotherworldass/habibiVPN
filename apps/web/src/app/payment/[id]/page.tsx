@@ -72,12 +72,16 @@ export default function PaymentOrderPage() {
 
   const finished = order && ["provisioned", "failed", "cancelled"].includes(order.status);
   const hostedCheckout = order?.channel_method === "crypto";
+  const orderNo = order?.order_no || order?.id || params.id;
 
   return (
     <Shell>
       <div className="payment-page-head">
         <div className="page-head">
           <h1>{copy.payment.title}</h1>
+          <p className="payment-order-no">
+            {copy.payment.orderId}<span>{orderNo}</span>
+          </p>
           <p>{copy.payment.lead}</p>
         </div>
         <Link href="/plans" className="payment-back-button">
@@ -156,10 +160,6 @@ export default function PaymentOrderPage() {
               {copy.payment.refresh}
             </button>
           ) : null}
-
-          <p style={{ margin: "16px 0 0", color: "var(--muted)", fontSize: 12 }}>
-            {copy.payment.orderId}{order.order_no || order.id}
-          </p>
         </div>
       ) : null}
     </Shell>
