@@ -33,6 +33,12 @@ enum CommissionKind {
   renew
 }
 
+/// How a paid order should apply entitlement after payment.
+enum OrderProvisionMode {
+  renew
+  new_slot
+}
+
 enum UpstreamSlotStatus {
   active
   disabled
@@ -1233,7 +1239,7 @@ model UserUpstream {
 
   @@index([userId])
   @@index([planId])
-  @@unique([userId, planId])
+  @@index([userId, planId])
   @@map("user_upstreams")
 }
 
@@ -1415,6 +1421,10 @@ model Order {
   planId           String         @map("plan_id")
   paymentChannelId String?        @map("payment_channel_id")
   status           OrderStatus    @default(pending)
+  /// Explicit checkout intent. Null = legacy (same plan auto-renew).
+  provisionMode    OrderProvisionMode? @map("provision_mode")
+  /// Slot to extend when provisionMode=renew
+  targetSlotId     String?        @map("target_slot_id")
   /// Snapshot for commission: first charge vs renewal
   commissionKind   CommissionKind @default(first) @map("commission_kind")
   /// Catalog / list price before coupon (null = legacy orders; treat as amountCents)
@@ -1458,6 +1468,7 @@ model Order {
   @@index([status])
   @@index([paymentChannelId])
   @@index([couponId])
+  @@index([targetSlotId])
   @@unique([provider, providerRef])
   @@map("orders")
 }

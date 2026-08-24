@@ -9,7 +9,11 @@ import {
   reserveCouponRedemption,
   validateAndPriceCoupon,
 } from "./growth/coupons.js";
-import { createUpstreamSlot } from "./provision.js";
+import {
+  createUpstreamSlot,
+  updateUpstreamSlot,
+  assertSlotRenewableWithPlan,
+} from "./provision.js";
 import { settleCommissionsForOrder } from "./referral/commission.js";
 import { resolveCommissionKind } from "./referral/commission-kind.js";
 import {
@@ -57,6 +61,8 @@ export function publicOrder(order: Order) {
     paid_at: order.paidAt,
     provisioned_at: order.provisionedAt,
     created_at: order.createdAt,
+    provision_mode: order.provisionMode,
+    target_slot_id: order.targetSlotId,
   };
 }
 
@@ -122,6 +128,8 @@ export async function createPaymentOrder(input: {
   couponCode?: string | null;
   client?: ClientChannel;
   ip?: string | null;
+  provisionMode?: "renew" | "new_slot";
+  slotId?: string;
 }) {
   const [plan, channel, user] = await Promise.all([
     prisma.plan.findUnique({ where: { id: input.planId } }),
@@ -196,6 +204,29 @@ export async function createPaymentOrder(input: {
     throw Object.assign(new Error("payment.amount_out_of_range"), { statusCode: 400 });
   }
 
+  let provisionMode = input.provisionMode ?? null;
+  let targetSlotId: string | null = null;
+  if (provisionMode === "renew") {
+    const slotId = input.slotId?.trim() || "";
+    if (!slotId) {
+      throw Object.assign(new Error("subscription.slot_id_required"), {
+        statusCode: 400,
+      });
+    }
+    await assertSlotRenewableWithPlan({
+      userId: input.userId,
+      slotId,
+      plan,
+    });
+    targetSlotId = slotId;
+  } else if (provisionMode === "new_slot") {
+    targetSlotId = null;
+  } else if (input.slotId?.trim()) {
+    throw Object.assign(new Error("subscription.slot_id_requires_renew"), {
+      statusCode: 400,
+    });
+  }
+
   const reusable = await findReusablePendingOrder({
     projectId: user.projectId,
     userId: input.userId,
@@ -203,6 +234,8 @@ export async function createPaymentOrder(input: {
     paymentChannelId: channel.id,
     amountCents,
     couponCode,
+    provisionMode,
+    targetSlotId,
     policy: orderGuard,
   });
   if (reusable) return reusable;
@@ -223,6 +256,8 @@ export async function createPaymentOrder(input: {
       currency: plan.currency,
       provider: channel.provider.code,
       commissionKind,
+      provisionMode,
+      targetSlotId,
     },
   });
 
@@ -280,27 +315,51 @@ export async function provisionPaidOrder(orderId: string) {
     await settleCommissionsForOrder(orderId);
     const isIap =
       order.provider === "app_store" || order.provider === "google_play";
-    await createUpstreamSlot({
-      userId: order.userId,
-      planId: order.planId,
-      slotId: `uus_${order.id}`,
-      note: order.isTrialPeriod
-        ? `paid_order:${order.id};iap_trial`
-        : `paid_order:${order.id}`,
-      allowRenew: true,
-      // Prefer Apple subscription period end when present (trial + renewals)
-      ...(order.storeExpiresAt
-        ? { expireAt: order.storeExpiresAt.toISOString() }
-        : {}),
-      ledger: {
-        reason: isIap ? "iap" : "order_paid",
-        refType: "order",
-        refId: order.id,
-        actorType: "system",
-        actorId: order.provider || undefined,
-        idempotencyKey: `order:${order.id}`,
-      },
-    });
+    const expireAt = order.storeExpiresAt
+      ? { expireAt: order.storeExpiresAt.toISOString() }
+      : {};
+    const ledger = {
+      reason: isIap ? "iap" : "order_paid",
+      refType: "order",
+      refId: order.id,
+      actorType: "system",
+      actorId: order.provider || undefined,
+      idempotencyKey: `order:${order.id}`,
+    } as const;
+    const note = order.isTrialPeriod
+      ? `paid_order:${order.id};iap_trial`
+      : `paid_order:${order.id}`;
+    if (order.provisionMode === "renew" && order.targetSlotId) {
+      await updateUpstreamSlot({
+        userId: order.userId,
+        slotId: order.targetSlotId,
+        planId: order.planId,
+        note,
+        ledger,
+        ...expireAt,
+      });
+    } else if (order.provisionMode === "new_slot") {
+      await createUpstreamSlot({
+        userId: order.userId,
+        planId: order.planId,
+        slotId: `uus_${order.id}`,
+        note,
+        allowRenew: false,
+        skipPlanOwnedCheck: true,
+        ledger,
+        ...expireAt,
+      });
+    } else {
+      await createUpstreamSlot({
+        userId: order.userId,
+        planId: order.planId,
+        slotId: `uus_${order.id}`,
+        note,
+        allowRenew: true,
+        ledger,
+        ...expireAt,
+      });
+    }
     const saved = await prisma.order.update({
       where: { id: order.id },
       data: { status: "provisioned", provisionedAt: new Date(), provisionError: null },

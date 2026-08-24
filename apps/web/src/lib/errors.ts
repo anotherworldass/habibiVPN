@@ -3,6 +3,8 @@ import { resolveSiteLocale } from "./locale";
 const MAP_ZH: Record<string, string> = {
   "auth.email_taken": "该邮箱已注册，请直接登录",
   "auth.email_unverified": "邮箱尚未验证，暂不能用密码登录，请先完成邮箱验证",
+  "auth.required": "请先登录后再继续",
+  "auth.invalid_token": "登录已失效，请重新登录",
   "auth.verify_code_required": "请先获取并填写邮箱验证码",
   "auth.already_registered": "当前账号已绑定邮箱，请直接登录",
   "auth.invalid_credentials": "邮箱或密码不正确",
@@ -17,6 +19,10 @@ const MAP_ZH: Record<string, string> = {
   "plan.not_free_claimable": "该套餐不可免费领取",
   "subscription.plan_already_owned": "你已拥有该套餐",
   "subscription.not_found": "找不到该订阅",
+  "subscription.renew_incompatible": "该套餐规格不同，不能续费到所选连接，请改选新购或兼容套餐",
+  "subscription.renew_disabled": "该套餐已停用，无法续费",
+  "subscription.slot_id_required": "续费请选择要叠加的套餐",
+  "subscription.slot_id_requires_renew": "指定套餐槽位时请使用续费模式",
   "subscription.upstream_missing": "订阅尚未绑定上游，无法更新",
   "subscription.refresh_no_url": "更新成功但未返回新链接，请稍后刷新页面",
   "user.not_found": "用户不存在",
@@ -67,6 +73,8 @@ const MAP_EN: Record<string, string> = {
   "auth.email_taken": "This email is already registered. Please sign in.",
   "auth.email_unverified":
     "Email not verified. Use a verification code before signing in with a password.",
+  "auth.required": "Please sign in to continue",
+  "auth.invalid_token": "Session expired. Please sign in again.",
   "auth.verify_code_required": "Get and enter the email verification code first",
   "auth.already_registered": "This account already has an email. Please sign in.",
   "auth.invalid_credentials": "Incorrect email or password",
@@ -81,6 +89,10 @@ const MAP_EN: Record<string, string> = {
   "plan.not_free_claimable": "This plan cannot be claimed for free",
   "subscription.plan_already_owned": "You already have this plan",
   "subscription.not_found": "Subscription not found",
+  "subscription.renew_incompatible": "This plan does not match the selected connection. Buy a new plan or pick a compatible one.",
+  "subscription.renew_disabled": "This connection is disabled and cannot be renewed",
+  "subscription.slot_id_required": "Choose which plan to extend",
+  "subscription.slot_id_requires_renew": "A slot id requires renew mode",
   "subscription.upstream_missing": "Subscription is not bound yet and cannot be refreshed",
   "subscription.refresh_no_url":
     "Refresh succeeded but no new link was returned. Reload the page later.",
@@ -139,5 +151,9 @@ export function friendlyError(err: unknown, fallback?: string) {
       ? "Something went wrong. Please try again."
       : "操作失败，请稍后重试");
   const raw = err instanceof Error ? err.message : String(err || "");
-  return map[raw] || (raw.startsWith("http.") ? defaultFallback : raw || defaultFallback);
+  if (map[raw]) return map[raw];
+  if (!raw || raw.startsWith("http.") || /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/i.test(raw)) {
+    return defaultFallback;
+  }
+  return raw;
 }

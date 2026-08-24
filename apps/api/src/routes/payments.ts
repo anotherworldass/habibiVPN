@@ -19,6 +19,8 @@ const createOrderBody = z.object({
   plan_id: z.string().min(1),
   channel_id: z.string().min(1),
   coupon_code: z.string().min(1).max(64).optional(),
+  provision_mode: z.enum(["renew", "new_slot"]).optional(),
+  slot_id: z.string().min(1).optional(),
   client: z
     .enum([
       "ios_appstore",
@@ -133,6 +135,8 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
           client: parsed.data.client ?? headerClient ?? undefined,
           jumpUrl: parsed.data.jump_url,
           ip: req.ip,
+          provisionMode: parsed.data.provision_mode,
+          slotId: parsed.data.slot_id,
         });
         return reply.code(201).send({ order: publicOrder(order) });
       } catch (error) {

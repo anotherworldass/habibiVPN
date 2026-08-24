@@ -42,6 +42,7 @@ type Subscription = {
   online_ip_limit: number | null;
   next_plan_ref: string | null;
   upstream_username?: string;
+  can_renew?: boolean;
 };
 
 const THIRD_PARTY_CLIENTS: Array<{
@@ -457,11 +458,20 @@ function SubscriptionContent() {
                 limitBytes={selected.data_limit_bytes}
               />
 
+              {selected && selected.status !== "disabled" && selected.can_renew ? (
+                <Link
+                  href={`/plans?renew_slot=${encodeURIComponent(selected.id)}`}
+                  className="btn btn-primary btn-block"
+                  style={{ marginTop: 16 }}
+                >
+                  {copy.sub.renewCta}
+                </Link>
+              ) : null}
               {selectedExpired && (
                 <Link
                   href="/plans"
-                  className="btn btn-primary btn-block"
-                  style={{ marginTop: 16 }}
+                  className="btn btn-secondary btn-block"
+                  style={{ marginTop: 12 }}
                 >
                   {copy.sub.buyCta}
                 </Link>

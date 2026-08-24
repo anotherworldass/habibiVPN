@@ -11,6 +11,7 @@ import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
+import { slotCompatibleWithPlan, type RenewableSlot } from "../../lib/renew-compat";
 
 type Plan = {
   id: string;
@@ -23,6 +24,11 @@ type Plan = {
   currency: string;
   validity_seconds?: number | null;
   data_limit_bytes?: number | null;
+  device_slots?: number;
+  reset_policy?: string;
+  custom_reset_interval?: string | null;
+  upstream_plan_ref?: string | null;
+  fup_tiers?: unknown;
   is_free_claimable?: boolean;
   already_claimed?: boolean;
   group_id?: string | null;
@@ -213,11 +219,15 @@ function PaidPlanCards({
   loggedIn,
   showEmpty,
   freeCount,
+  checkoutQuery,
+  emptyMessage,
 }: {
   plans: Plan[];
   loggedIn: boolean;
   showEmpty: boolean;
   freeCount: number;
+  checkoutQuery: string;
+  emptyMessage?: string;
 }) {
   const messages = t(useLocale());
   const plansCopy = messages.plans;
@@ -230,8 +240,8 @@ function PaidPlanCards({
 
       {showEmpty && plans.length === 0 && (
         <div className="plans-empty">
-          {plansCopy.paidEmpty}
-          {freeCount > 0 ? plansCopy.paidEmptyFree : ""}
+          {emptyMessage ||
+            `${plansCopy.paidEmpty}${freeCount > 0 ? plansCopy.paidEmptyFree : ""}`}
         </div>
       )}
 
@@ -283,8 +293,8 @@ function PaidPlanCards({
                 <Link
                   href={
                     loggedIn
-                      ? `/checkout/${encodeURIComponent(p.id)}`
-                      : `/login?next=${encodeURIComponent(`/checkout/${p.id}`)}`
+                      ? `/checkout/${encodeURIComponent(p.id)}${checkoutQuery}`
+                      : `/login?next=${encodeURIComponent(`/checkout/${p.id}${checkoutQuery}`)}`
                   }
                   className="btn btn-primary"
                 >
@@ -306,6 +316,7 @@ function PlansContent() {
   const router = useLocaleRouter();
   const search = useSearchParams();
   const welcome = search.get("welcome") === "1";
+  const renewSlotId = search.get("renew_slot")?.trim() || "";
   const [plans, setPlans] = useState<Plan[]>([]);
   const [groups, setGroups] = useState<PlanGroup[]>([]);
   const [activeGroup, setActiveGroup] = useState<string>("");
@@ -313,14 +324,23 @@ function PlansContent() {
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<string | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [renewSlot, setRenewSlot] = useState<RenewableSlot | null>(null);
 
   useEffect(() => {
     setLoggedIn(!!getToken());
     setLoading(true);
-    apiFetch<{ plans: Plan[]; groups?: PlanGroup[] }>(
-      `/api/v1/plans?client=h5&locale=${encodeURIComponent(locale)}`,
-    )
-      .then((res) => {
+    const token = getToken();
+    Promise.all([
+      apiFetch<{ plans: Plan[]; groups?: PlanGroup[] }>(
+        `/api/v1/plans?client=h5&locale=${encodeURIComponent(locale)}`,
+      ),
+      token && renewSlotId
+        ? apiFetch<{ subscriptions: RenewableSlot[] }>("/api/v1/subscriptions").catch(
+            () => ({ subscriptions: [] as RenewableSlot[] }),
+          )
+        : Promise.resolve({ subscriptions: [] as RenewableSlot[] }),
+    ])
+      .then(([res, subRes]) => {
         const list = res.plans || [];
         const gs = res.groups || [];
         setPlans(list);
@@ -331,10 +351,13 @@ function PlansContent() {
             ? prev
             : visible[0]?.id || (list.some((p) => !p.group_id) ? "__ungrouped__" : ""),
         );
+        const slot =
+          subRes.subscriptions.find((s) => s.id === renewSlotId) || null;
+        setRenewSlot(slot);
       })
       .catch((e) => setError(friendlyError(e, messages.common.loadFailed)))
       .finally(() => setLoading(false));
-  }, [locale, messages.common.loadFailed]);
+  }, [locale, messages.common.loadFailed, renewSlotId]);
 
   async function claim(planId: string) {
     if (!getToken()) {
@@ -391,8 +414,17 @@ function PlansContent() {
       })),
     [displayPlans, locale],
   );
-  const freePlans = localizedDisplay.filter((p) => p.is_free_claimable);
-  const paidPlans = localizedDisplay.filter((p) => !p.is_free_claimable);
+  const freePlans = renewSlotId
+    ? []
+    : localizedDisplay.filter((p) => p.is_free_claimable);
+  const paidPlans = localizedDisplay.filter((p) => {
+    if (p.is_free_claimable) return false;
+    if (!renewSlot) return true;
+    return slotCompatibleWithPlan(renewSlot, p);
+  });
+  const checkoutQuery = renewSlotId
+    ? `?renew_slot=${encodeURIComponent(renewSlotId)}`
+    : "";
 
   const tabItems = showGroups
     ? [
@@ -426,6 +458,17 @@ function PlansContent() {
             {freePlans.length > 0 ? plansCopy.welcome : plansCopy.welcomePaid}
           </p>
         )}
+        {renewSlotId && !loading && renewSlot ? (
+          <p className="alert-ok" style={{ marginTop: 12 }}>
+            {plansCopy.renewBanner}
+            {renewSlot.plan_name ? ` (${renewSlot.plan_name})` : ""}
+          </p>
+        ) : null}
+        {renewSlotId && !loading && !renewSlot ? (
+          <p className="alert-error" style={{ marginTop: 12 }}>
+            {messages.common.loadFailed}
+          </p>
+        ) : null}
         {error && (
           <p className="alert-error" style={{ marginTop: 12 }}>
             {error}
@@ -470,6 +513,8 @@ function PlansContent() {
             loggedIn={loggedIn}
             showEmpty={!error}
             freeCount={freePlans.length}
+            checkoutQuery={checkoutQuery}
+            emptyMessage={renewSlotId ? plansCopy.renewEmpty : undefined}
           />
         )}
 

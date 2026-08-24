@@ -84,6 +84,8 @@ export async function findReusablePendingOrder(input: {
   paymentChannelId: string;
   amountCents: number;
   couponCode: string | null;
+  provisionMode?: "renew" | "new_slot" | null;
+  targetSlotId?: string | null;
   policy?: PaymentOrderGuardValue;
 }) {
   const policy =
@@ -96,6 +98,8 @@ export async function findReusablePendingOrder(input: {
       paymentChannelId: input.paymentChannelId,
       amountCents: input.amountCents,
       couponCode: input.couponCode,
+      provisionMode: input.provisionMode ?? null,
+      targetSlotId: input.targetSlotId ?? null,
       status: "pending",
       paymentUrl: { not: null },
       createdAt: {

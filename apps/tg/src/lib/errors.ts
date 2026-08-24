@@ -8,6 +8,8 @@ const MAP: Record<string, string> = {
   "auth.password_required": "请先设置密码后再获取验证码",
   "auth.code_cooldown": "验证码发送过于频繁，请稍后再试",
   "mail.ses.not_configured": "邮件服务未配置，请稍后重试或联系客服",
+  "auth.required": "登录状态未就绪，请稍后重试或重新打开小程序",
+  "auth.invalid_token": "登录已失效，请重新打开小程序",
   "auth.user_disabled": "账号已停用，请联系客服",
   "auth.anonymous_no_password": "请先绑定邮箱后再改密",
   "validation.failed": "请检查邮箱和密码格式",
@@ -21,6 +23,9 @@ const MAP: Record<string, string> = {
   "plan.not_free_claimable": "该套餐不可免费领取",
   "subscription.plan_already_owned": "你已拥有该套餐",
   "subscription.not_found": "找不到该订阅",
+  "subscription.renew_incompatible": "该套餐规格不同，不能续费到所选连接",
+  "subscription.renew_disabled": "该套餐已停用，无法续费",
+  "subscription.slot_id_required": "续费请选择要叠加的套餐",
   "user.not_found": "用户不存在",
   "user.disabled": "账号已停用",
   "invite.code_invalid": "邀请码无效或不存在，请核对；没有邀请码请留空",
@@ -44,7 +49,11 @@ const MAP: Record<string, string> = {
   "order.not_found": "订单不存在",
 };
 
+const ERROR_CODE_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/i;
+
 export function friendlyError(err: unknown, fallback = "操作失败，请稍后重试") {
   const raw = err instanceof Error ? err.message : String(err || "");
-  return MAP[raw] || (raw.startsWith("http.") ? fallback : raw || fallback);
+  if (MAP[raw]) return MAP[raw];
+  if (!raw || raw.startsWith("http.") || ERROR_CODE_RE.test(raw)) return fallback;
+  return raw;
 }

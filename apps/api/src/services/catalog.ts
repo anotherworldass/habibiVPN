@@ -186,6 +186,8 @@ export type PublicCatalogPlan = {
   payment_mode: OfferPaymentMode;
   /** Set only when the plan's group exists and is enabled */
   group_id: string | null;
+  upstream_plan_ref: string | null;
+  fup_tiers: unknown;
   store_product: {
     store: StorePlatform;
     product_id: string;
@@ -299,6 +301,8 @@ export async function listCatalogPlansForClient(input: {
       can_repurchase: !free,
       enabled: s.enabled,
       group_id: groupId,
+      upstream_plan_ref: o.plan.upstreamPlanRef ?? null,
+      fup_tiers: o.plan.fupTiers ?? null,
       // 商店端强制 IAP，忽略 Admin 误配的 web_only / iap_or_web。
       payment_mode:
         input.client === "ios_appstore" || input.client === "android_play"

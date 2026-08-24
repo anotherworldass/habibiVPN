@@ -3,16 +3,13 @@
 import { useEffect } from "react";
 import { apiFetch } from "../lib/api";
 import {
+  capturePendingInvite,
   consumeInviteCode,
   ensureSession,
   peekInviteCode,
-  saveInviteCode,
 } from "../lib/session";
 import { syncTelegramSubscriber } from "../lib/telegram-bind";
-import {
-  bootTelegramWebApp,
-  getTelegramStartParam,
-} from "../lib/telegram";
+import { bootTelegramWebApp, waitForTelegramContext } from "../lib/telegram";
 
 /** Bind invite for existing sessions (bootstrap only covers first JWT). */
 async function tryBindPendingInvite() {
@@ -33,17 +30,10 @@ export default function TelegramBoot() {
   useEffect(() => {
     bootTelegramWebApp();
 
-    const start = getTelegramStartParam()?.trim();
-    if (start) saveInviteCode(start);
-
-    try {
-      const ref = new URLSearchParams(window.location.search).get("ref");
-      if (ref) saveInviteCode(ref);
-    } catch {
-      /* ignore */
-    }
-
     void (async () => {
+      await waitForTelegramContext();
+      bootTelegramWebApp();
+      capturePendingInvite();
       await ensureSession();
       await tryBindPendingInvite();
       await syncTelegramSubscriber();

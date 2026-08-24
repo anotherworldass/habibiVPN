@@ -21,10 +21,28 @@ function clientHeaders(): Record<string, string> {
   return headers;
 }
 
+function isBootstrapPath(path: string) {
+  return path.includes("/auth/bootstrap");
+}
+
+function errorFromBody(data: unknown, status: number): Error {
+  const err =
+    data && typeof data === "object" && "error" in data
+      ? (data as { error?: unknown }).error
+      : null;
+  return new Error(typeof err === "string" ? err : `http.${status}`);
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   init?: RequestInit,
+  retried = false,
 ): Promise<T> {
+  if (!isBootstrapPath(path) && !getToken()) {
+    const { ensureSession } = await import("./session");
+    await ensureSession();
+  }
+
   const token = getToken();
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -45,15 +63,19 @@ export async function apiFetch<T = unknown>(
     }
   }
 
+  if (res.status === 401 && !isBootstrapPath(path) && !retried) {
+    const { refreshSession } = await import("./session");
+    const next = await refreshSession();
+    if (next) return apiFetch<T>(path, init, true);
+    clearToken();
+    throw errorFromBody(data, res.status);
+  }
+
   if (res.status === 401) {
     clearToken();
   }
   if (!res.ok) {
-    const err =
-      data && typeof data === "object" && "error" in data
-        ? (data as { error?: unknown }).error
-        : null;
-    throw new Error(typeof err === "string" ? err : `http.${res.status}`);
+    throw errorFromBody(data, res.status);
   }
   return data as T;
 }

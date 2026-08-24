@@ -83,6 +83,30 @@ export function getTelegramStartParam(): string {
   }
 }
 
+/**
+ * Direct-link startapp / initData can lag a tick behind telegram-web-app.js.
+ * Resolves as soon as context exists, or after timeout (browser preview).
+ */
+export function waitForTelegramContext(timeoutMs = 1200): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (getTelegramInitData() || getTelegramStartParam()) return Promise.resolve();
+  if (!getSdk()) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    const timer = window.setInterval(() => {
+      if (
+        getTelegramInitData() ||
+        getTelegramStartParam() ||
+        Date.now() >= deadline
+      ) {
+        window.clearInterval(timer);
+        resolve();
+      }
+    }, 40);
+  });
+}
+
 /** Expand viewport + force dark shell; safe outside Telegram. */
 export function bootTelegramWebApp() {
   const app = getSdk();

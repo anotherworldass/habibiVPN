@@ -2279,6 +2279,35 @@ a.home-invite-banner {
   text-align: center;
 }
 
+.checkout-intent {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.checkout-intent-locked {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.checkout-slot-pick {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.checkout-slot-pick select {
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 0 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.8);
+}
+
 .checkout-actions {
   margin-top: 22px;
   padding-top: 18px;

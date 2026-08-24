@@ -524,7 +524,7 @@ export default function SupportChatWidget({
         }
       } catch (e) {
         if (!opts?.silent) {
-          setError(e instanceof Error ? e.message : chat.loadFailed);
+          setError(friendlyError(e, chat.loadFailed));
         }
       }
     },

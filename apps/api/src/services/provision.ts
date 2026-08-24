@@ -22,6 +22,10 @@ import {
 } from "./fup.js";
 import { localizePlanCopy } from "./plan-i18n.js";
 import {
+  subscriptionCanRenewWithPaidPlans,
+  plansCompatibleForRenew,
+} from "./renew-compat.js";
+import {
   buildClientSubscriptionUrls,
   buildProfileTitle,
   resolveSubscriptionPublicOrigin,
@@ -190,6 +194,17 @@ export type SubscriptionView = {
   upstream_username: string;
   fup: FupView | null;
   fup_history: FupHistoryItem[];
+  /** True when at least one paid catalog SKU can extend this slot. */
+  can_renew: boolean;
+  /** Plan spec for checkout renew matching; null for campaign slots. */
+  renew_spec: {
+    data_limit_bytes: number | null;
+    device_slots: number;
+    reset_policy: string;
+    custom_reset_interval: string | null;
+    upstream_plan_ref: string | null;
+    fup_tiers: unknown;
+  } | null;
 };
 
 function upstreamUsernameFor(userId: string, slotKey: string, email?: string | null) {
@@ -857,6 +872,20 @@ function toSubscriptionView(
       nextResetAt,
     }),
     fup_history: [],
+    can_renew: false,
+    renew_spec: slot.plan
+      ? {
+          data_limit_bytes:
+            slot.plan.dataLimitBytes == null
+              ? null
+              : Number(slot.plan.dataLimitBytes),
+          device_slots: slot.plan.deviceSlots,
+          reset_policy: slot.plan.resetPolicy,
+          custom_reset_interval: slot.plan.customResetInterval,
+          upstream_plan_ref: slot.plan.upstreamPlanRef,
+          fup_tiers: slot.plan.fupTiers,
+        }
+      : null,
   };
 }
 
@@ -879,6 +908,87 @@ async function toSubscriptionViewAsync(
   return toSubscriptionView(slot, live, locale, origin);
 }
 
+export async function findLegacyRenewSlot(userId: string, planId: string) {
+  const slots = await prisma.userUpstream.findMany({
+    where: { userId, planId, status: { not: "disabled" } },
+  });
+  if (!slots.length) return null;
+  const now = Date.now();
+  const unexpired = slots.filter(
+    (s) => s.expiresAt && s.expiresAt.getTime() > now,
+  );
+  const pool = unexpired.length ? unexpired : slots;
+  pool.sort(
+    (a, b) => (b.expiresAt?.getTime() ?? 0) - (a.expiresAt?.getTime() ?? 0),
+  );
+  return pool[0] ?? null;
+}
+
+export async function assertSlotRenewableWithPlan(input: {
+  userId: string;
+  slotId: string;
+  plan: Plan;
+}) {
+  const slot = await prisma.userUpstream.findFirst({
+    where: { id: input.slotId, userId: input.userId },
+    include: { plan: true },
+  });
+  if (!slot) {
+    throw Object.assign(new Error("subscription.not_found"), { statusCode: 404 });
+  }
+  if (slot.status === "disabled") {
+    throw Object.assign(new Error("subscription.renew_disabled"), { statusCode: 400 });
+  }
+  if (slot.plan && !plansCompatibleForRenew(slot.plan, input.plan)) {
+    throw Object.assign(new Error("subscription.renew_incompatible"), {
+      statusCode: 400,
+    });
+  }
+  return slot;
+}
+
+async function attachCanRenew(
+  userId: string,
+  views: SubscriptionView[],
+  slots: Array<{
+    id: string;
+    status: string;
+    planId: string | null;
+    plan: Plan | null;
+  }>,
+) {
+  if (!views.length) return views;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { projectId: true },
+  });
+  if (!user) return views;
+  const paidPlans = await prisma.plan.findMany({
+    where: {
+      projectId: user.projectId,
+      enabled: true,
+      isFreeClaimable: false,
+    },
+  });
+  const byId = new Map(slots.map((s) => [s.id, s]));
+  return views.map((view) => {
+    const slot = byId.get(view.id);
+    return {
+      ...view,
+      can_renew: slot
+        ? subscriptionCanRenewWithPaidPlans(
+            {
+              status: view.status === "disabled" ? "disabled" : slot.status,
+              planId: slot.planId,
+              plan: slot.plan,
+            },
+            paidPlans,
+          )
+        : false,
+    };
+  });
+}
+
 /**
  * Create a NEW upstream customer slot for this user (new package).
  * Uses a unique WireRaw username; subscription URL is stored and kept stable on later updates.
@@ -898,6 +1008,8 @@ export async function createUpstreamSlot(input: {
   displayNameI18n?: Record<string, string> | null;
   /** If true and a slot for this plan already exists, renew/extend it instead of 409. */
   allowRenew?: boolean;
+  /** Paid checkout "new slot": create even if the same plan is already owned. */
+  skipPlanOwnedCheck?: boolean;
   /** When set, append entitlement ledger after successful create/renew. */
   ledger?: EntitlementLedgerContext;
 }) {
@@ -911,15 +1023,18 @@ export async function createUpstreamSlot(input: {
     ? await prisma.plan.findUnique({ where: { id: input.planId } })
     : null;
 
-  if (input.planId && plan) {
-    const existing = await prisma.userUpstream.findUnique({
-      where: { userId_planId: { userId: user.id, planId: plan.id } },
+  if (input.planId && plan && !input.skipPlanOwnedCheck) {
+    const existing = await prisma.userUpstream.findFirst({
+      where: { userId: user.id, planId: plan.id },
+      orderBy: { createdAt: "desc" },
     });
     if (existing) {
       if (input.allowRenew) {
+        const target =
+          (await findLegacyRenewSlot(user.id, plan.id)) || existing;
         const renewed = await updateUpstreamSlot({
           userId: input.userId,
-          slotId: existing.id,
+          slotId: target.id,
           planId: plan.id,
           upstreamPlanRef: input.upstreamPlanRef,
           validitySeconds: input.validitySeconds,
@@ -1068,16 +1183,6 @@ export async function updateUpstreamSlot(input: {
     ? await prisma.plan.findUnique({ where: { id: input.planId } })
     : slot.plan;
 
-  if (input.planId && plan && input.planId !== slot.planId) {
-    const clash = await prisma.userUpstream.findUnique({
-      where: { userId_planId: { userId: input.userId, planId: plan.id } },
-    });
-    if (clash && clash.id !== slot.id) {
-      throw Object.assign(new Error("subscription.plan_already_owned"), {
-        statusCode: 409,
-      });
-    }
-  }
 
   const status = input.status || "active";
   const planInput = {
@@ -1209,16 +1314,6 @@ export async function previewUpstreamSlotUpdate(input: {
     ? await prisma.plan.findUnique({ where: { id: input.planId } })
     : slot.plan;
 
-  if (input.planId && plan && input.planId !== slot.planId) {
-    const clash = await prisma.userUpstream.findUnique({
-      where: { userId_planId: { userId: input.userId, planId: plan.id } },
-    });
-    if (clash && clash.id !== slot.id) {
-      throw Object.assign(new Error("subscription.plan_already_owned"), {
-        statusCode: 409,
-      });
-    }
-  }
 
   if (
     !input.planId &&
@@ -1360,16 +1455,28 @@ export async function clawbackUpstreamForOrder(order: {
   planId: string;
   paidAt?: Date | null;
   storeExpiresAt?: Date | null;
+  targetSlotId?: string | null;
 }): Promise<EntitlementClawbackResult> {
-  let slot = await prisma.userUpstream.findUnique({
-    where: { userId_planId: { userId: order.userId, planId: order.planId } },
-    include: { plan: true },
-  });
+  let slot = order.targetSlotId
+    ? await prisma.userUpstream.findFirst({
+        where: { id: order.targetSlotId, userId: order.userId },
+        include: { plan: true },
+      })
+    : null;
   if (!slot) {
     slot = await prisma.userUpstream.findFirst({
       where: { id: `uus_${order.id}`, userId: order.userId },
       include: { plan: true },
     });
+  }
+  if (!slot) {
+    const legacy = await findLegacyRenewSlot(order.userId, order.planId);
+    slot = legacy
+      ? await prisma.userUpstream.findFirst({
+          where: { id: legacy.id },
+          include: { plan: true },
+        })
+      : null;
   }
   if (!slot) {
     return { ok: true, skipped: "no_slot" };
@@ -1704,8 +1811,8 @@ export async function syncUpstreamSlot(
   const raw = slot.upstreamId
     ? await wireraw.getCustomer(slot.upstreamId)
     : await wireraw.getCustomerByUsername(slot.upstreamUsername);
-  const view = normalizeCustomerView(raw);
-  const snap = liveSnapshotFields(view, {
+  const live = normalizeCustomerView(raw);
+  const snap = liveSnapshotFields(live, {
     fallbackUrl: slot.subscriptionUrl,
     fallbackExpiresAt: slot.expiresAt,
     fallbackUpstreamId: slot.upstreamId,
@@ -1720,7 +1827,9 @@ export async function syncUpstreamSlot(
   });
 
   scheduleInviteMilestoneForInvitee(userId);
-  return toSubscriptionViewAsync(saved, view, locale);
+  const view = await toSubscriptionViewAsync(saved, live, locale);
+  const [withRenew] = await attachCanRenew(userId, [view], [saved]);
+  return withRenew;
 }
 
 const DEFAULT_STALE_TTL_MS = 30_000;
@@ -1806,7 +1915,7 @@ export async function listUserSubscriptions(
         }
       }),
     );
-    return attachFupHistory(views);
+    return attachCanRenew(userId, await attachFupHistory(views), slots);
   }
 
   const staleIds = slots
@@ -1817,7 +1926,7 @@ export async function listUserSubscriptions(
   const cached = await Promise.all(
     slots.map((s) => toSubscriptionViewAsync(s, null, locale)),
   );
-  return attachFupHistory(cached);
+  return attachCanRenew(userId, await attachFupHistory(cached), slots);
 }
 
 /** @deprecated use createUpstreamSlot / updateUpstreamSlot */
