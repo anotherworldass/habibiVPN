@@ -2345,6 +2345,33 @@ a.home-invite-banner {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+textarea.sub-url {
+  resize: none;
+  margin: 0;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  min-height: 76px;
+  user-select: all;
+  -webkit-user-select: all;
+  cursor: text;
+}
+
+textarea.sub-url:focus {
+  border-color: color-mix(in srgb, var(--teal) 42%, transparent);
+  outline: none;
+}
+
+textarea.sub-url[data-manual="true"] {
+  border-color: color-mix(in srgb, var(--amber) 48%, transparent);
+}
+
+.sub-manual-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .client-import {
   margin-top: 14px;
   padding: 14px;
@@ -6464,6 +6491,15 @@ button.account-verify-toggle {
 .client-copy-btn[data-copied="true"] {
   border-color: color-mix(in srgb, var(--teal) 45%, var(--line));
   background: color-mix(in srgb, var(--teal) 10%, white);
+}
+
+.client-copy-btn[data-failed="true"] {
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--line));
+  background: color-mix(in srgb, var(--amber) 12%, white);
+}
+
+.client-copy-btn[data-failed="true"] span {
+  color: var(--amber);
 }
 
 .client-copy-generic-url {

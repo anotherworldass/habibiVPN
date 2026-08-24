@@ -9,6 +9,7 @@ import Shell from "../../components/Shell";
 import { TrafficUsage } from "../../components/TrafficUsage";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
+import { copyToClipboard } from "../../lib/clipboard";
 import { friendlyError } from "../../lib/errors";
 import { useLocale } from "../../components/LocaleProvider";
 import { t } from "../../lib/copy";
@@ -87,6 +88,12 @@ function SubscriptionContent() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [copiedClient, setCopiedClient] = useState<string | null>(null);
+  const [manualCopy, setManualCopy] = useState<{
+    key: keyof ClientUrls | "generic";
+    label: string;
+    url: string;
+  } | null>(null);
+  const manualUrlRef = useRef<HTMLTextAreaElement>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [confirmRefresh, setConfirmRefresh] = useState(false);
@@ -161,12 +168,27 @@ function SubscriptionContent() {
   const subscriptionUrl =
     selected?.client_urls?.v2ray || selected?.subscription_url || null;
   const selectedExpired = selected ? isExpired(selected) : false;
+  const displayUrl = manualCopy?.url || subscriptionUrl;
+
+  useEffect(() => {
+    if (!manualCopy) return;
+    const el = manualUrlRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.select();
+    try {
+      el.setSelectionRange(0, el.value.length);
+    } catch {
+      // some WebViews reject setSelectionRange
+    }
+  }, [manualCopy]);
 
   async function selectPlan(id: string) {
     if (id === selectedId) return;
     setSelectedId(id);
     setCopied(false);
     setCopiedClient(null);
+    setManualCopy(null);
     setQrSaved(false);
     setRefreshOk(false);
     setSyncing(true);
@@ -210,6 +232,7 @@ function SubscriptionContent() {
       setConfirmRefresh(false);
       setRefreshOk(true);
       setCopied(false);
+      setManualCopy(null);
       setTimeout(() => setRefreshOk(false), 4000);
     } catch (e) {
       setError(friendlyError(e, copy.sub.refreshFailed));
@@ -220,20 +243,46 @@ function SubscriptionContent() {
   }
 
   async function copyUrl() {
-    if (!subscriptionUrl) return;
-    await navigator.clipboard.writeText(subscriptionUrl);
-    setCopied(true);
+    const url = displayUrl;
+    if (!url) return;
+    const ok = await copyToClipboard(url);
+    if (ok) {
+      setCopied(true);
+      setCopiedClient(null);
+      setManualCopy(null);
+      setTimeout(() => setCopied(false), 1600);
+      return;
+    }
+    setCopied(false);
     setCopiedClient(null);
-    setTimeout(() => setCopied(false), 1600);
+    setLinkView("link");
+    setManualCopy({
+      key: "generic",
+      label: copy.sub.linkTitle,
+      url,
+    });
   }
 
   async function copyClientUrl(key: keyof ClientUrls) {
     const url = selected?.client_urls?.[key] || subscriptionUrl;
     if (!url) return;
-    await navigator.clipboard.writeText(url);
+    const client = THIRD_PARTY_CLIENTS.find((item) => item.key === key);
+    const ok = await copyToClipboard(url);
+    if (ok) {
+      setCopied(false);
+      setCopiedClient(key);
+      setManualCopy(null);
+      setTimeout(() => setCopiedClient(null), 1600);
+      return;
+    }
     setCopied(false);
-    setCopiedClient(key);
-    setTimeout(() => setCopiedClient(null), 1600);
+    setCopiedClient(null);
+    setLinkView("link");
+    setManualCopy({
+      key,
+      label: client?.label || key,
+      url,
+    });
   }
 
   function saveQr() {
@@ -527,7 +576,11 @@ function SubscriptionContent() {
                             className="btn btn-secondary btn-block"
                             onClick={() => void copyUrl()}
                           >
-                            {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
+                            {copied
+                              ? copy.sub.copiedPaste
+                              : manualCopy
+                                ? copy.sub.copyFailed
+                                : copy.sub.copyLink}
                           </button>
                         </div>
                       </div>
@@ -541,30 +594,69 @@ function SubscriptionContent() {
                         >
                           {THIRD_PARTY_CLIENTS.map(({ key, label }) => {
                             const justCopied = copiedClient === key;
+                            const copyFailed = manualCopy?.key === key;
                             return (
                               <button
                                 key={key}
                                 type="button"
                                 className="client-copy-btn"
                                 data-copied={justCopied}
+                                data-failed={copyFailed}
                                 onClick={() => void copyClientUrl(key)}
                               >
                                 <strong>{label}</strong>
-                                <span>{justCopied ? copy.sub.copiedShort : copy.sub.copyShort}</span>
+                                <span>
+                                  {justCopied
+                                    ? copy.sub.copiedShort
+                                    : copyFailed
+                                      ? copy.sub.copyFailed
+                                      : copy.sub.copyShort}
+                                </span>
                               </button>
                             );
                           })}
                         </div>
-                        <code className="sub-url client-copy-generic-url">
-                          {subscriptionUrl}
-                        </code>
+                        {manualCopy ? (
+                          <p className="client-copy-label">
+                            {copy.sub.manualCopyTitle(manualCopy.label)}
+                          </p>
+                        ) : null}
+                        <textarea
+                          ref={manualUrlRef}
+                          className="sub-url client-copy-generic-url"
+                          data-manual={Boolean(manualCopy)}
+                          readOnly
+                          rows={3}
+                          value={displayUrl || ""}
+                          aria-label={
+                            manualCopy?.key === "generic" || !manualCopy
+                              ? copy.sub.linkTitle
+                              : copy.sub.manualCopyTitle(manualCopy.label)
+                          }
+                          onClick={(e) => e.currentTarget.select()}
+                          onFocus={(e) => {
+                            e.currentTarget.select();
+                            try {
+                              e.currentTarget.setSelectionRange(0, e.currentTarget.value.length);
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                        />
+                        {manualCopy ? (
+                          <p className="sub-manual-hint">{copy.sub.manualCopyHint}</p>
+                        ) : null}
                         <button
                           type="button"
                           className="btn btn-primary btn-block"
                           style={{ marginTop: 10 }}
                           onClick={() => void copyUrl()}
                         >
-                          {copied ? copy.sub.copiedPaste : copy.sub.copyLink}
+                          {copied
+                            ? copy.sub.copiedPaste
+                            : manualCopy?.key === "generic"
+                              ? copy.sub.copyFailed
+                              : copy.sub.copyLink}
                         </button>
                       </>
                     )}
