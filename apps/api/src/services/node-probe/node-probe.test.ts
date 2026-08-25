@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { formatProbeDigest } from "./alerts-format.js";
 import { clashNameFor, targetFingerprint, truncateError } from "./fingerprint.js";
 import {
   classifyOverall,
@@ -73,5 +74,57 @@ describe("node-probe settings", () => {
 
   it("rejects too-frequent speed tests", () => {
     assert.throws(() => parseNodeProbeValue({ speedIntervalSec: 60 }));
+  });
+});
+
+describe("node-probe telegram digest", () => {
+  const regionName = (c: string) => (c === "HK" ? "香港" : c === "US" ? "美国" : c);
+
+  it("keeps a single item as one message", () => {
+    const s = formatProbeDigest({
+      emoji: "🐢",
+      title: "测速异常",
+      items: [{ region: "HK", line: "HK1 / vless · 1.2 Mbps" }],
+      regionName,
+    });
+    assert.match(s, /测速异常/);
+    assert.match(s, /香港/);
+    assert.match(s, /1\.2 Mbps/);
+    assert.doesNotMatch(s, /已合并/);
+  });
+
+  it("merges speed alerts into one message grouped by region", () => {
+    const s = formatProbeDigest({
+      emoji: "🐢",
+      title: "测速异常",
+      items: [
+        { region: "HK", line: "HK1 / vless · 1.2 Mbps" },
+        { region: "HK", line: "HK2 / hysteria2 · 0.8 Mbps" },
+        { region: "US", line: "US1 / vless · 2.0 Mbps" },
+      ],
+      regionName,
+    });
+    assert.match(s, /共 3 条/);
+    assert.match(s, /已合并/);
+    assert.match(s, /香港/);
+    assert.match(s, /美国/);
+    assert.match(s, /HK1/);
+    assert.match(s, /US1/);
+  });
+
+  it("collapses a region when many nodes fail", () => {
+    const s = formatProbeDigest({
+      emoji: "⚠️",
+      title: "节点 Down",
+      items: [
+        { region: "HK", line: "a" },
+        { region: "HK", line: "b" },
+        { region: "HK", line: "c" },
+      ],
+      regionName,
+      collapseRegionAt: 3,
+    });
+    assert.match(s, /香港.*3 条/);
+    assert.doesNotMatch(s, /· a/);
   });
 });

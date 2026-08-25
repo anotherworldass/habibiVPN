@@ -279,7 +279,11 @@ export default function NodeProbePage() {
                   >
                     <Input placeholder="槽位 ID（cuid）" />
                   </Form.Item>
-                  <Form.Item name="telegramChatId" label="运维群 chat_id">
+                  <Form.Item
+                    name="telegramChatId"
+                    label="运维群 chat_id"
+                    extra="同一条故障只推一次，恢复后再推；同轮测速异常会合并成一条。"
+                  >
                     <Input placeholder="-100xxxxxxxxxx" />
                   </Form.Item>
                   <Space wrap style={{ marginBottom: 16 }}>

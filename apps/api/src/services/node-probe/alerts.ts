@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma.js";
 import { regionZhName } from "../../lib/regions.js";
 import { sendMessage } from "../telegram/api.js";
 import { getBotTokenForProject } from "../telegram/bot-config.js";
+import { escapeHtml, formatProbeDigest } from "./alerts-format.js";
 import { consecutiveFailCount, percentile } from "./logic.js";
 import type { NodeProbeValue } from "./settings.js";
 
@@ -20,24 +21,21 @@ type LogFn = {
   warn?: (o: unknown, msg?: string) => void;
 };
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+type PendingKind = "down" | "unstable" | "slow" | "recovery";
 
-function cooldownOk(last: Date | null, sec: number): boolean {
-  if (!last) return true;
-  return Date.now() - last.getTime() >= sec * 1000;
-}
+type PendingAlert = {
+  incidentId: string | null;
+  kind: PendingKind;
+  region: string;
+  line: string;
+};
 
 async function openOrTouchIncident(input: {
   targetId: string;
   region: string;
   kind: string;
   summary: string;
-}): Promise<{ id: string; lastAlertAt: Date | null; openedNow: boolean }> {
+}): Promise<{ id: string; openedNow: boolean }> {
   const existing = await prisma.nodeProbeIncident.findFirst({
     where: { targetId: input.targetId, kind: input.kind, closedAt: null },
     orderBy: { openedAt: "desc" },
@@ -47,11 +45,7 @@ async function openOrTouchIncident(input: {
       where: { id: existing.id },
       data: { summary: input.summary },
     });
-    return {
-      id: existing.id,
-      lastAlertAt: existing.lastAlertAt,
-      openedNow: false,
-    };
+    return { id: existing.id, openedNow: false };
   }
   const row = await prisma.nodeProbeIncident.create({
     data: {
@@ -62,7 +56,7 @@ async function openOrTouchIncident(input: {
       openedAt: new Date(),
     },
   });
-  return { id: row.id, lastAlertAt: null, openedNow: true };
+  return { id: row.id, openedNow: true };
 }
 
 async function closeIncident(targetId: string, kind: string): Promise<boolean> {
@@ -97,14 +91,10 @@ export async function evaluateAndAlert(input: {
   const token = chatId ? await getBotTokenForProject(input.projectId) : null;
   const canSend = Boolean(chatId && token);
 
-  const pendingMessages: Array<{
-    incidentId: string;
-    region: string;
-    kind: string;
-    text: string;
-  }> = [];
+  const pending: PendingAlert[] = [];
 
   for (const item of input.round) {
+    const label = `${escapeHtml(item.name)} / ${escapeHtml(item.protocol)}`;
     const recent = await prisma.nodeProbeSample.findMany({
       where: { targetId: item.targetId },
       orderBy: { probedAt: "desc" },
@@ -120,22 +110,22 @@ export async function evaluateAndAlert(input: {
         kind: "down",
         summary: `${item.name} / ${item.protocol} 连续 ${fails} 次 URL-test 失败`,
       });
-      if (canSend && (inc.openedNow || cooldownOk(inc.lastAlertAt, input.cfg.alertCooldownSec))) {
-        pendingMessages.push({
+      if (canSend && inc.openedNow) {
+        pending.push({
           incidentId: inc.id,
-          region: item.region,
           kind: "down",
-          text: `⚠️ <b>节点 Down</b> · ${escapeHtml(regionZhName(item.region))}\n${escapeHtml(item.name)} / ${escapeHtml(item.protocol)}\n连续 ${fails} 次探测失败`,
+          region: item.region,
+          line: `${label} · 连续 ${fails} 次探测失败`,
         });
       }
     } else if (item.ok) {
       const closed = await closeIncident(item.targetId, "down");
       if (closed && canSend) {
-        pendingMessages.push({
-          incidentId: `recovery:${item.targetId}`,
-          region: item.region,
+        pending.push({
+          incidentId: null,
           kind: "recovery",
-          text: `✅ <b>节点恢复</b> · ${escapeHtml(regionZhName(item.region))}\n${escapeHtml(item.name)} / ${escapeHtml(item.protocol)}\n延迟 ${item.delayMs ?? "—"} ms`,
+          region: item.region,
+          line: `${label} · 延迟 ${item.delayMs ?? "—"} ms`,
         });
       }
     }
@@ -162,12 +152,12 @@ export async function evaluateAndAlert(input: {
           kind: "unstable",
           summary: `${item.name} 近 ${input.cfg.unstableWindowMin} 分钟成功率 ${(rate * 100).toFixed(0)}%${p95 != null ? `，p95 ${p95}ms` : ""}`,
         });
-        if (canSend && (inc.openedNow || cooldownOk(inc.lastAlertAt, input.cfg.alertCooldownSec))) {
-          pendingMessages.push({
+        if (canSend && inc.openedNow) {
+          pending.push({
             incidentId: inc.id,
-            region: item.region,
             kind: "unstable",
-            text: `🟠 <b>节点不稳</b> · ${escapeHtml(regionZhName(item.region))}\n${escapeHtml(item.name)} / ${escapeHtml(item.protocol)}\n成功率 ${(rate * 100).toFixed(0)}%${p95 != null ? ` · p95 ${p95}ms` : ""}`,
+            region: item.region,
+            line: `${label} · 成功率 ${(rate * 100).toFixed(0)}%${p95 != null ? ` · p95 ${p95}ms` : ""}`,
           });
         }
       } else if (!unstable) {
@@ -190,12 +180,12 @@ export async function evaluateAndAlert(input: {
           kind: "slow",
           summary: `${item.name} 连续 ${speeds.length} 次测速 < ${input.cfg.slowMbps} Mbps（最近 ${item.downloadMbps} Mbps）`,
         });
-        if (canSend && (inc.openedNow || cooldownOk(inc.lastAlertAt, input.cfg.alertCooldownSec))) {
-          pendingMessages.push({
+        if (canSend && inc.openedNow) {
+          pending.push({
             incidentId: inc.id,
-            region: item.region,
             kind: "slow",
-            text: `🐢 <b>速度异常</b> · ${escapeHtml(regionZhName(item.region))}\n${escapeHtml(item.name)} / ${escapeHtml(item.protocol)}\n${item.downloadMbps} Mbps（阈值 ${input.cfg.slowMbps}）`,
+            region: item.region,
+            line: `${label} · ${item.downloadMbps} Mbps（阈值 ${input.cfg.slowMbps}）`,
           });
         }
       } else if (item.downloadMbps >= input.cfg.slowMbps) {
@@ -204,53 +194,50 @@ export async function evaluateAndAlert(input: {
     }
   }
 
-  if (!canSend || !pendingMessages.length) return;
+  if (!canSend || !pending.length) return;
 
-  const downs = pendingMessages.filter((m) => m.kind === "down");
-  const byRegion = new Map<string, typeof downs>();
-  for (const m of downs) {
-    const list = byRegion.get(m.region) || [];
-    list.push(m);
-    byRegion.set(m.region, list);
-  }
-
-  const skipIds = new Set<string>();
-  const digestTexts: string[] = [];
-  for (const [region, list] of byRegion) {
-    if (list.length >= input.cfg.regionDigestMin) {
-      for (const m of list) skipIds.add(m.incidentId);
-      digestTexts.push(
-        `⚠️ <b>${escapeHtml(regionZhName(region))} 地区 ${list.length} 条入站探测失败</b>\n监测点：境外机房 · 已合并推送`,
-      );
-    }
-  }
-
-  const toSend = [
-    ...digestTexts.map((text) => ({ incidentId: null as string | null, text })),
-    ...pendingMessages
-      .filter((m) => !skipIds.has(m.incidentId))
-      .map((m) => ({ incidentId: m.incidentId.startsWith("recovery:") ? null : m.incidentId, text: m.text })),
+  const groups: Array<{
+    kind: PendingKind;
+    emoji: string;
+    title: string;
+    collapseRegionAt?: number;
+  }> = [
+    {
+      kind: "down",
+      emoji: "⚠️",
+      title: "节点 Down",
+      collapseRegionAt: input.cfg.regionDigestMin,
+    },
+    { kind: "unstable", emoji: "🟠", title: "节点不稳" },
+    { kind: "slow", emoji: "🐢", title: "测速异常" },
+    { kind: "recovery", emoji: "✅", title: "节点恢复" },
   ];
 
-  for (const msg of toSend) {
+  for (const g of groups) {
+    const items = pending.filter((p) => p.kind === g.kind);
+    if (!items.length) continue;
+    const text = formatProbeDigest({
+      emoji: g.emoji,
+      title: g.title,
+      items: items.map((p) => ({ region: p.region, line: p.line })),
+      regionName: regionZhName,
+      collapseRegionAt: g.collapseRegionAt,
+    });
     try {
       const sent = await sendMessage(token!, {
         chat_id: chatId!,
-        text: msg.text,
+        text,
         parse_mode: "HTML",
         disable_web_page_preview: true,
       });
-      if (msg.incidentId) {
-        await markAlerted(msg.incidentId, String(sent.message_id));
-      }
-      if (msg.text.includes("已合并推送")) {
-        for (const id of skipIds) {
-          await markAlerted(id, String(sent.message_id));
+      for (const p of items) {
+        if (p.incidentId) {
+          await markAlerted(p.incidentId, String(sent.message_id));
         }
       }
     } catch (err) {
       input.log?.warn?.(
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: err instanceof Error ? err.message : String(err), kind: g.kind },
         "node-probe telegram send failed",
       );
     }
