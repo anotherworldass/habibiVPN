@@ -466,6 +466,12 @@ export default function HabibiUsersPage() {
                 <Tag>{s.status || "active"}</Tag>
               </Space>
               <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+                槽位 ID：
+                <Typography.Text copyable={{ text: s.id }} style={{ fontSize: 12 }}>
+                  {s.id}
+                </Typography.Text>
+              </div>
+              <div style={{ fontSize: 12, color: "#666" }}>
                 上游：{s.upstream_username}
                 {s.upstream_id ? ` (${s.upstream_id})` : ""}
               </div>
