@@ -5,6 +5,7 @@ import { resolveAdminProjectId } from "../lib/admin-project.js";
 import { writeAudit } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProbeTelegramTest } from "../services/node-probe/alerts.js";
+import { resolveProbeSlot } from "../services/node-probe/inventory.js";
 import { getProbeLastRun, runNodeProbeRound } from "../services/node-probe/job.js";
 import {
   getNodeProbeConfig,
@@ -83,12 +84,13 @@ export const adminNodeProbeRoutes: FastifyPluginAsync = async (app) => {
       const projectId = await resolveAdminProjectId(req);
       const { enabled, remark, ...patch } = parsed.data;
       if (patch.probeSlotId) {
-        const slot = await prisma.userUpstream.findUnique({
-          where: { id: patch.probeSlotId },
-          select: { id: true },
-        });
-        if (!slot) {
-          return reply.code(400).send({ error: "node_probe.slot_not_found" });
+        try {
+          const slot = await resolveProbeSlot(patch.probeSlotId);
+          patch.probeSlotId = slot.id;
+        } catch (err) {
+          const code = err instanceof Error ? err.message : "node_probe.slot_not_found";
+          const status = (err as { statusCode?: number }).statusCode || 400;
+          return reply.code(status).send({ error: code });
         }
       }
       const saved = await upsertNodeProbeConfig({

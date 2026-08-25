@@ -2421,6 +2421,16 @@ export default function ReferralRelationsPage() {
                                 {s.revoked_at && <Tag color="error">已撤销</Tag>}
                               </Space>
                             </Descriptions.Item>
+                            <Descriptions.Item label="槽位 ID" span={2}>
+                              <Typography.Text copyable={{ text: s.id }}>
+                                {s.id}
+                              </Typography.Text>
+                              {!s.subscription_url && (
+                                <Tag color="warning" style={{ marginLeft: 8 }}>
+                                  无订阅链接
+                                </Tag>
+                              )}
+                            </Descriptions.Item>
                             <Descriptions.Item label="上游用户" span={2}>
                               <Typography.Text copyable>
                                 {s.upstream_username || "—"}

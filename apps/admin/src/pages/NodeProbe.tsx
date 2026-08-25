@@ -84,6 +84,22 @@ type IncidentRow = {
   target: { name: string; protocol: string; region: string } | null;
 };
 
+const PROBE_ERR: Record<string, string> = {
+  "node_probe.slot_not_found":
+    "找不到这条槽。请到用户「订阅详情」复制「槽位 ID」，不要复制用户 ID 或本地套餐 ID。",
+  "node_probe.got_plan_id":
+    "这是本地套餐 ID，不是槽位 ID。请到订阅详情复制「槽位 ID」。",
+  "node_probe.user_no_slot": "这个用户还没有套餐槽，先开通套餐再填。",
+  "node_probe.slot_no_subscription":
+    "槽找到了，但还没有订阅链接。请先同步/开通该槽。",
+  "node_probe.slot_disabled": "这条槽不是 active 状态。",
+  "node_probe.slot_missing": "还没配置探针槽位。",
+};
+
+function probeErrText(code: string) {
+  return PROBE_ERR[code] || code;
+}
+
 export default function NodeProbePage() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
@@ -163,7 +179,7 @@ export default function NodeProbePage() {
       message.success("已保存");
       await loadSettings();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : "保存失败");
+      message.error(e instanceof Error ? probeErrText(e.message) : "保存失败");
     } finally {
       setSaving(false);
     }
@@ -180,11 +196,11 @@ export default function NodeProbePage() {
       message.success(
         run.ok
           ? `探测完成：${run.delayOk} 通 / ${run.delayFail} 失败`
-          : run.error || "探测失败",
+          : probeErrText(run.error || "探测失败"),
       );
       await loadTables();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : "探测失败");
+      message.error(e instanceof Error ? probeErrText(e.message) : "探测失败");
     } finally {
       setRunning(false);
     }
@@ -231,7 +247,7 @@ export default function NodeProbePage() {
           showIcon
           style={{ marginBottom: 16 }}
           message={`上次探测 ${new Date(lastRun.at).toLocaleString()} · ${
-            lastRun.ok ? "成功" : lastRun.error || "失败"
+            lastRun.ok ? "成功" : probeErrText(lastRun.error || "失败")
           } · ${lastRun.delayOk}/${lastRun.targetCount} 通${
             lastRun.speedCount ? ` · 测速 ${lastRun.speedCount}` : ""
           }`}
@@ -251,10 +267,10 @@ export default function NodeProbePage() {
                   <Form.Item
                     name="probeSlotId"
                     label="探针槽位 ID"
-                    extra="内部 UserUpstream id，用高流量套餐，不要用真实用户。"
+                    extra="到 Habibi 用户 → 订阅详情，复制「槽位 ID」。不要复制用户 ID、本地套餐 ID、usr-xxx。槽必须是 active 且已有订阅链接。"
                     rules={[{ required: true, message: "填写探针槽位" }]}
                   >
-                    <Input placeholder="clxxxxxxxx" />
+                    <Input placeholder="槽位 ID（cuid）" />
                   </Form.Item>
                   <Form.Item name="telegramChatId" label="运维群 chat_id">
                     <Input placeholder="-100xxxxxxxxxx" />

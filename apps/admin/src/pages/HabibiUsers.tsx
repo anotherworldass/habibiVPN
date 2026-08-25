@@ -466,10 +466,15 @@ export default function HabibiUsersPage() {
                 <Tag>{s.status || "active"}</Tag>
               </Space>
               <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-                槽位 ID：
+                槽位 ID（探针用这个，不是用户 ID / 套餐 ID）：
                 <Typography.Text copyable={{ text: s.id }} style={{ fontSize: 12 }}>
                   {s.id}
                 </Typography.Text>
+                {!s.subscription_url && (
+                  <Tag color="warning" style={{ marginLeft: 8 }}>
+                    无订阅链接
+                  </Tag>
+                )}
               </div>
               <div style={{ fontSize: 12, color: "#666" }}>
                 上游：{s.upstream_username}

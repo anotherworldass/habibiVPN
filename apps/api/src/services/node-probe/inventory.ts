@@ -15,6 +15,52 @@ const proxyDispatcher = env.WIRERAW_HTTP_PROXY
   ? new ProxyAgent(env.WIRERAW_HTTP_PROXY)
   : undefined;
 
+function probeErr(code: string, statusCode = 400): Error {
+  return Object.assign(new Error(code), { statusCode });
+}
+
+/** Accept slot id, WireRaw usr- id / username, or Habibi user id. */
+export async function resolveProbeSlot(raw: string) {
+  const key = raw.trim().replace(/^['"]+|['"]+$/g, "");
+  if (!key) throw probeErr("node_probe.slot_not_found");
+
+  let slot = await prisma.userUpstream.findUnique({ where: { id: key } });
+  if (!slot) {
+    slot = await prisma.userUpstream.findFirst({
+      where: { OR: [{ upstreamId: key }, { upstreamUsername: key }] },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+  if (!slot) {
+    const user = await prisma.user.findUnique({
+      where: { id: key },
+      include: {
+        upstreams: { orderBy: { createdAt: "desc" } },
+      },
+    });
+    if (user) {
+      if (!user.upstreams.length) throw probeErr("node_probe.user_no_slot");
+      slot =
+        user.upstreams.find((s) => s.status === "active" && s.subscriptionUrl) ||
+        user.upstreams.find((s) => s.subscriptionUrl) ||
+        user.upstreams[0] ||
+        null;
+    }
+  }
+
+  if (!slot) {
+    const plan = await prisma.plan.findUnique({
+      where: { id: key },
+      select: { id: true },
+    });
+    if (plan) throw probeErr("node_probe.got_plan_id");
+    throw probeErr("node_probe.slot_not_found");
+  }
+  if (!slot.subscriptionUrl) throw probeErr("node_probe.slot_no_subscription");
+  if (slot.status !== "active") throw probeErr("node_probe.slot_disabled");
+  return slot;
+}
+
 export type ProbeInbound = {
   fingerprint: string;
   clashName: string;
@@ -117,19 +163,7 @@ function lookupRegion(
 }
 
 export async function loadProbeInbounds(probeSlotId: string): Promise<ProbeInbound[]> {
-  const slot = await prisma.userUpstream.findUnique({
-    where: { id: probeSlotId },
-  });
-  if (!slot?.subscriptionUrl) {
-    throw Object.assign(new Error("node_probe.slot_not_found"), {
-      statusCode: 400,
-    });
-  }
-  if (slot.status !== "active") {
-    throw Object.assign(new Error("node_probe.slot_disabled"), {
-      statusCode: 400,
-    });
-  }
+  const slot = await resolveProbeSlot(probeSlotId);
 
   const [body, hostRegions, nameByHost] = await Promise.all([
     fetchSubscriptionBody({
