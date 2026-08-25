@@ -115,6 +115,13 @@ function tickText(result: string) {
 }
 
 function probeErrText(code: string) {
+  if (
+    /Connection is closed|redis\.(connect_timeout|command_timeout|disconnected)|NOAUTH|HELLO must be called/i.test(
+      code,
+    )
+  ) {
+    return "Redis 连不上。生产 .env 把 REDIS_URL 写成 redis://:密码@127.0.0.1:6379（冒号不能少）后重新部署。探测本身已改为不依赖 Redis 锁。";
+  }
   const hit = Object.keys(PROBE_ERR)
     .sort((a, b) => b.length - a.length)
     .find((k) => code === k || code.startsWith(`${k}:`) || code.startsWith(`${k} `));

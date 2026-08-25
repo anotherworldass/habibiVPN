@@ -32,40 +32,64 @@ function redisTimeout(code: string): Promise<never> {
   });
 }
 
+function isClosed(r: Redis) {
+  return r.status === "end" || r.status === "close";
+}
+
+function createClient(): Redis {
+  const c = new Redis({
+    ...parseRedisUrl(env.REDIS_URL),
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: false,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+    connectTimeout: REDIS_OP_MS,
+    // v6 defaults to HELLO 3. Redis with requirepass rejects HELLO before AUTH.
+    protocol: 2,
+    retryStrategy(times) {
+      if (times > 8) return null;
+      return Math.min(times * 200, 2000);
+    },
+  });
+  c.on("error", (err: Error) => {
+    if (/NOAUTH|HELLO/i.test(err.message)) {
+      console.warn(
+        "[redis] 认证失败。若 Redis 开了 requirepass，REDIS_URL 写成 redis://:密码@127.0.0.1:6379（冒号不能少）",
+      );
+    } else if (!/Connection is closed/i.test(err.message)) {
+      console.warn("[redis]", err.message);
+    }
+  });
+  return c;
+}
+
+function discardClient() {
+  const old = client;
+  client = null;
+  if (!old) return;
+  try {
+    old.disconnect();
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Lazy singleton. Callers should tolerate connection errors. */
 export function getRedis(): Redis {
-  if (!client) {
-    client = new Redis({
-      ...parseRedisUrl(env.REDIS_URL),
-      maxRetriesPerRequest: 1,
-      enableReadyCheck: false,
-      enableOfflineQueue: false,
-      lazyConnect: true,
-      connectTimeout: REDIS_OP_MS,
-      // v6 defaults to HELLO 3. Redis with requirepass rejects HELLO before AUTH.
-      protocol: 2,
-      retryStrategy(times) {
-        if (times > 3) return null;
-        return Math.min(times * 150, 800);
-      },
-    });
-    client.on("error", (err: Error) => {
-      // Avoid unhandled error events crashing the process.
-      if (/NOAUTH|HELLO/i.test(err.message)) {
-        console.warn(
-          "[redis] 认证失败。若 Redis 开了 requirepass，REDIS_URL 写成 redis://:密码@127.0.0.1:6379（冒号不能少）",
-        );
-      }
-      console.warn("[redis]", err.message);
-    });
+  if (!client || isClosed(client)) {
+    discardClient();
+    client = createClient();
   }
   return client;
 }
 
 async function ensureConnected(r: Redis) {
   if (r.status === "ready") return;
+  if (isClosed(r)) {
+    throw new Error("redis.disconnected");
+  }
   const start = async () => {
-    if (r.status === "wait" || r.status === "end" || r.status === "close") {
+    if (r.status === "wait") {
       await r.connect();
       return;
     }
@@ -95,10 +119,30 @@ async function ensureConnected(r: Redis) {
   await Promise.race([start(), redisTimeout("redis.connect_timeout")]);
 }
 
+function isRedisDeadError(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Connection is closed|Stream isn't writeable|redis\.(disconnected|connect_timeout|command_timeout)|ECONNREFUSED|ENOTFOUND|NOAUTH|HELLO/i.test(
+    msg,
+  );
+}
+
 async function withRedis<T>(fn: (r: Redis) => Promise<T>): Promise<T> {
-  const r = getRedis();
-  await ensureConnected(r);
-  return Promise.race([fn(r), redisTimeout("redis.command_timeout")]);
+  const run = async () => {
+    const r = getRedis();
+    await ensureConnected(r);
+    return Promise.race([fn(r), redisTimeout("redis.command_timeout")]);
+  };
+  try {
+    return await run();
+  } catch (err) {
+    if (isRedisDeadError(err) && /Connection is closed|Stream isn't writeable|redis.disconnected/i.test(
+      err instanceof Error ? err.message : String(err),
+    )) {
+      discardClient();
+      return await run();
+    }
+    throw err;
+  }
 }
 
 const INCR_EXPIRE_LUA = `

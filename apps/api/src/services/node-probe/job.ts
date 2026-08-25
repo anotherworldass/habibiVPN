@@ -49,22 +49,28 @@ export type ProbeLastRun = {
   speedMs: number | null;
 };
 
-export async function getProbeLastRun(): Promise<ProbeLastRun | null> {
-  try {
-    const raw = await redisGet(LAST_RUN_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as ProbeLastRun;
-  } catch {
-    return null;
-  }
-}
-
 export type ProbeTick = {
   at: string;
   result: string;
 };
 
+let memoryLastRun: ProbeLastRun | null = null;
+let memoryTick: ProbeTick | null = null;
+
+export async function getProbeLastRun(): Promise<ProbeLastRun | null> {
+  try {
+    const raw = await redisGet(LAST_RUN_KEY);
+    if (!raw) return memoryLastRun;
+    const parsed = JSON.parse(raw) as ProbeLastRun;
+    memoryLastRun = parsed;
+    return parsed;
+  } catch {
+    return memoryLastRun;
+  }
+}
+
 async function saveLastRun(run: ProbeLastRun) {
+  memoryLastRun = run;
   try {
     await redisSetEx(LAST_RUN_KEY, 7 * 24 * 3600, JSON.stringify(run));
   } catch {
@@ -73,12 +79,9 @@ async function saveLastRun(run: ProbeLastRun) {
 }
 
 async function saveTick(result: string) {
+  memoryTick = { at: new Date().toISOString(), result };
   try {
-    await redisSetEx(
-      TICK_KEY,
-      7 * 24 * 3600,
-      JSON.stringify({ at: new Date().toISOString(), result } satisfies ProbeTick),
-    );
+    await redisSetEx(TICK_KEY, 7 * 24 * 3600, JSON.stringify(memoryTick));
   } catch {
     /* ignore */
   }
@@ -87,10 +90,12 @@ async function saveTick(result: string) {
 export async function getProbeTick(): Promise<ProbeTick | null> {
   try {
     const raw = await redisGet(TICK_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as ProbeTick;
+    if (!raw) return memoryTick;
+    const parsed = JSON.parse(raw) as ProbeTick;
+    memoryTick = parsed;
+    return parsed;
   } catch {
-    return null;
+    return memoryTick;
   }
 }
 
@@ -276,9 +281,19 @@ export async function runNodeProbeRound(input?: {
 
   const probeCfg = cfg;
 
-  const locked = await redisSetNxEx(LOCK_KEY, LOCK_TTL_SEC, String(Date.now()));
-  if (!locked) {
-    throw Object.assign(new Error("node_probe.busy"), { statusCode: 409 });
+  let holdRedisLock = false;
+  try {
+    const locked = await redisSetNxEx(LOCK_KEY, LOCK_TTL_SEC, String(Date.now()));
+    if (!locked) {
+      throw Object.assign(new Error("node_probe.busy"), { statusCode: 409 });
+    }
+    holdRedisLock = true;
+  } catch (err) {
+    if (err instanceof Error && err.message === "node_probe.busy") throw err;
+    input?.log?.warn?.(
+      { err: err instanceof Error ? err.message : String(err) },
+      "node-probe redis lock unavailable, continue",
+    );
   }
 
   const started = Date.now();
@@ -287,8 +302,8 @@ export async function runNodeProbeRound(input?: {
   let speedCount = 0;
   try {
     const now = Date.now();
-    const lastDelay = Number((await redisGet(LAST_DELAY_KEY)) || 0);
-    const lastSpeed = Number((await redisGet(LAST_SPEED_KEY)) || 0);
+    const lastDelay = Number((await redisGet(LAST_DELAY_KEY).catch(() => null)) || 0);
+    const lastSpeed = Number((await redisGet(LAST_SPEED_KEY).catch(() => null)) || 0);
     const delayDue =
       input?.force || !lastDelay || now - lastDelay >= probeCfg.delayIntervalSec * 1000;
     if (!delayDue) {
@@ -370,7 +385,7 @@ export async function runNodeProbeRound(input?: {
       });
     }
 
-    await redisSetEx(LAST_DELAY_KEY, 7 * 86400, String(Date.now()));
+    await redisSetEx(LAST_DELAY_KEY, 7 * 86400, String(Date.now())).catch(() => undefined);
 
     if (speedDue) {
       const speedStarted = Date.now();
@@ -414,7 +429,9 @@ export async function runNodeProbeRound(input?: {
           );
         }
       }
-      await redisSetEx(LAST_SPEED_KEY, 7 * 86400, String(Date.now()));
+      await redisSetEx(LAST_SPEED_KEY, 7 * 86400, String(Date.now())).catch(
+        () => undefined,
+      );
     }
 
     if (alertProjectId) {
@@ -459,7 +476,9 @@ export async function runNodeProbeRound(input?: {
     await saveTick(truncateError(err, 80));
     throw err;
   } finally {
-    await redisDel(LOCK_KEY).catch(() => undefined);
+    if (holdRedisLock) {
+      await redisDel(LOCK_KEY).catch(() => undefined);
+    }
   }
 }
 
