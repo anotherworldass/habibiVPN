@@ -61,3 +61,25 @@ export async function redisTtl(key: string): Promise<number> {
   await ensureConnected(r);
   return r.ttl(key);
 }
+
+export async function redisGet(key: string): Promise<string | null> {
+  const r = getRedis();
+  await ensureConnected(r);
+  return r.get(key);
+}
+
+export async function redisSetEx(
+  key: string,
+  ttlSeconds: number,
+  value: string,
+): Promise<void> {
+  const r = getRedis();
+  await ensureConnected(r);
+  await r.set(key, value, "EX", ttlSeconds);
+}
+
+export async function redisDel(key: string): Promise<void> {
+  const r = getRedis();
+  await ensureConnected(r);
+  await r.del(key);
+}

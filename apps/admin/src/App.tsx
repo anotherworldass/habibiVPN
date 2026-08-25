@@ -35,6 +35,7 @@ import {
   SendOutlined,
   CustomerServiceOutlined,
   RobotOutlined,
+  RadarChartOutlined,
   SettingOutlined,
   MailOutlined,
   CloudUploadOutlined,
@@ -52,6 +53,7 @@ import CatalogPreviewPage from "./pages/CatalogPreview";
 import ProjectsPage from "./pages/Projects";
 import BandwidthPlansPage from "./pages/BandwidthPlans";
 import NodesPage from "./pages/Nodes";
+import NodeProbePage from "./pages/NodeProbe";
 import TrafficPage from "./pages/Traffic";
 import HabibiUsersPage from "./pages/HabibiUsers";
 import EntitlementLedgerPage from "./pages/EntitlementLedger";
@@ -275,6 +277,7 @@ function ProtectedLayout() {
               { path: "/upstream-plans", name: "上游套餐(只读)", icon: <CloudServerOutlined /> },
               { path: "/bandwidth-plans", name: "上游限速档", icon: <ThunderboltOutlined /> },
               { path: "/nodes", name: "节点", icon: <CloudServerOutlined /> },
+              { path: "/node-probe", name: "节点探测", icon: <RadarChartOutlined /> },
               { path: "/traffic", name: "流量对账", icon: <LineChartOutlined /> },
             ],
           },
@@ -392,6 +395,7 @@ function ProtectedLayout() {
         <Route path="/plans" element={<Navigate to="/upstream-plans" replace />} />
         <Route path="/bandwidth-plans" element={<BandwidthPlansPage />} />
         <Route path="/nodes" element={<NodesPage />} />
+        <Route path="/node-probe" element={<NodeProbePage />} />
         <Route path="/dial" element={<Navigate to="/" replace />} />
         <Route path="/traffic" element={<TrafficPage />} />
         <Route path="/referral/config" element={<ReferralConfigPage />} />

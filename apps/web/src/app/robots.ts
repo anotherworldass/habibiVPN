@@ -19,8 +19,12 @@ export default function robots(): MetadataRoute.Robots {
     "/api/",
     "/invite",
     "/invite/",
+    "/status",
+    "/status/",
     ...privateSuffixes,
     ...privateSuffixes.flatMap((p) => [`/zh${p}`, `/en${p}`]),
+    "/zh/status",
+    "/en/status",
   ];
 
   return {

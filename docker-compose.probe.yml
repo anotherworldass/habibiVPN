@@ -1,0 +1,18 @@
+# 节点探测用 Clash 内核。与网站蓝绿发布无关，单独常驻一份。
+# 启动：docker compose -f docker-compose.probe.yml up -d
+# 控制面只听 127.0.0.1:19090，代理口 127.0.0.1:17890。
+#
+# API 探测循环通过 Admin「节点探测」配置 mihomo API / secret。
+# 默认 secret 与下面 config.yaml、Admin 默认值均为 habibi-probe。
+
+services:
+  mihomo:
+    image: metacubex/mihomo:latest
+    container_name: habibi-mihomo
+    restart: unless-stopped
+    network_mode: host
+    cpus: "1.0"
+    mem_limit: 512m
+    volumes:
+      - ./deploy/mihomo:/root/.config/mihomo:ro
+    command: ["-d", "/root/.config/mihomo"]

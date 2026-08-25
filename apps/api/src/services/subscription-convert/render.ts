@@ -93,9 +93,13 @@ function clashProxy(node: ProxyNode): string {
   return lines.join("\n");
 }
 
+export function renderClashProxyBlock(nodes: ProxyNode[]): string {
+  return nodes.map(clashProxy).join("\n");
+}
+
 export function renderClashYaml(nodes: ProxyNode[], profileName: string): string {
   const names = nodes.map((n) => n.name);
-  const proxies = nodes.map(clashProxy).join("\n");
+  const proxies = renderClashProxyBlock(nodes);
   return [
     `# ${profileName}`,
     `mixed-port: 7890`,

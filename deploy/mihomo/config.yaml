@@ -1,0 +1,19 @@
+mixed-port: 17890
+bind-address: 127.0.0.1
+allow-lan: false
+mode: global
+log-level: warning
+ipv6: true
+external-controller: 127.0.0.1:19090
+secret: "habibi-probe"
+
+proxies: []
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - DIRECT
+
+rules:
+  - MATCH,PROXY

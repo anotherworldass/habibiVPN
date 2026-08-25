@@ -28,6 +28,8 @@ export const SETTING_KEYS = {
   SIGNUP_TRIAL: "signup.trial",
   /** Create-order anti-abuse caps (pending orders, cooldown, Redis counters). */
   PAYMENT_ORDER_GUARD: "payment.order_guard",
+  /** Node connectivity probe (mihomo URL-test / speed / TG ops alerts). */
+  NODE_PROBE: "node.probe",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */

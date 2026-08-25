@@ -1813,3 +1813,90 @@ model UserAuthEvent {
   @@index([deviceIdHash, createdAt])
   @@map("user_auth_events")
 }
+
+/// One inbound (protocol + host + port) from the probe subscription.
+model NodeProbeTarget {
+  id                String    @id @default(cuid())
+  fingerprint       String    @unique
+  name              String
+  region            String    @default("UN")
+  protocol          String
+  server            String
+  port              Int
+  wirerawName       String?   @map("wireraw_name")
+  clashName         String    @map("clash_name")
+  lastSeenAt        DateTime  @map("last_seen_at")
+  lastOk            Boolean?  @map("last_ok")
+  lastTcpMs         Int?      @map("last_tcp_ms")
+  lastDelayMs       Int?      @map("last_delay_ms")
+  lastDownloadMbps  Float?    @map("last_download_mbps")
+  lastError         String?   @map("last_error") @db.VarChar(255)
+  lastProbedAt      DateTime? @map("last_probed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  samples   NodeProbeSample[]
+  hourlies  NodeProbeHourly[]
+  incidents NodeProbeIncident[]
+
+  @@index([region])
+  @@index([lastSeenAt])
+  @@map("node_probe_targets")
+}
+
+model NodeProbeSample {
+  id           String   @id @default(cuid())
+  targetId     String   @map("target_id")
+  probedAt     DateTime @map("probed_at")
+  ok           Boolean
+  tcpMs        Int?     @map("tcp_ms")
+  delayMs      Int?     @map("delay_ms")
+  downloadMbps Float?   @map("download_mbps")
+  error        String?  @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  target NodeProbeTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, probedAt])
+  @@index([probedAt])
+  @@map("node_probe_samples")
+}
+
+model NodeProbeHourly {
+  targetId    String   @map("target_id")
+  hour        DateTime
+  okCount     Int      @default(0) @map("ok_count")
+  failCount   Int      @default(0) @map("fail_count")
+  delaySumMs  Int      @default(0) @map("delay_sum_ms")
+  delayCount  Int      @default(0) @map("delay_count")
+  mbpsSum     Float    @default(0) @map("mbps_sum")
+  mbpsCount   Int      @default(0) @map("mbps_count")
+
+  target NodeProbeTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([targetId, hour])
+  @@index([hour])
+  @@map("node_probe_hourly")
+}
+
+/// kind: down | unstable | slow
+model NodeProbeIncident {
+  id                String    @id @default(cuid())
+  targetId          String?   @map("target_id")
+  region            String?
+  kind              String
+  summary           String    @db.VarChar(512)
+  openedAt          DateTime  @map("opened_at")
+  closedAt          DateTime? @map("closed_at")
+  lastAlertAt       DateTime? @map("last_alert_at")
+  telegramMessageId String?   @map("telegram_message_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  target NodeProbeTarget? @relation(fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([closedAt, openedAt])
+  @@index([targetId, kind, closedAt])
+  @@index([region, kind, closedAt])
+  @@map("node_probe_incidents")
+}

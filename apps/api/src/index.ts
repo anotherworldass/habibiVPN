@@ -8,6 +8,7 @@ import { startCommissionSettleJob } from "./services/referral/settle-job.js";
 import { startFupBandwidthJob } from "./services/fup-job.js";
 import { startPendingOrderExpireJob } from "./services/payments-expire-job.js";
 import { startTelegramBroadcastWorker } from "./services/telegram/broadcast-worker.js";
+import { startNodeProbeJob } from "./services/node-probe/job.js";
 
 await seedAdminIfNeeded();
 await seedReferralConfigIfNeeded();
@@ -22,6 +23,7 @@ try {
   startFupBandwidthJob(app.log);
   startPendingOrderExpireJob(app.log);
   startTelegramBroadcastWorker(app.log);
+  startNodeProbeJob(app.log);
   app.log.info(`Habibi API listening on http://${env.API_HOST}:${env.API_PORT}`);
 } catch (err) {
   app.log.error(err);
