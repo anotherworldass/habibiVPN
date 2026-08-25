@@ -9,7 +9,7 @@ import {
   parseShareUri,
   type ProxyNode,
 } from "../subscription-convert/parse.js";
-import { clashNameFor, targetFingerprint } from "./fingerprint.js";
+import { clashNameFor, targetFingerprint, wrapProbeError } from "./fingerprint.js";
 
 const proxyDispatcher = env.WIRERAW_HTTP_PROXY
   ? new ProxyAgent(env.WIRERAW_HTTP_PROXY)
@@ -134,21 +134,28 @@ async function fetchSubscriptionBody(slot: {
       /* fall through to public URL */
     }
   }
-  const res = await undiciFetch(slot.subscriptionUrl, {
-    method: "GET",
-    headers: {
-      Accept: "*/*",
-      "User-Agent": "v2rayN/6.45",
-    },
-    ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw Object.assign(new Error("node_probe.subscription_fetch_failed"), {
-      statusCode: 502,
+  try {
+    const res = await undiciFetch(slot.subscriptionUrl, {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        "User-Agent": "v2rayN/6.45",
+      },
+      ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
     });
+    const text = await res.text();
+    if (!res.ok) {
+      throw Object.assign(new Error("node_probe.subscription_fetch_failed"), {
+        statusCode: 502,
+      });
+    }
+    return text;
+  } catch (err) {
+    if (err instanceof Error && err.message === "node_probe.subscription_fetch_failed") {
+      throw err;
+    }
+    throw wrapProbeError("node_probe.subscription_fetch_failed", err);
   }
-  return text;
 }
 
 function lookupRegion(

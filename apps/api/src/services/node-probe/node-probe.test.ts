@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { clashNameFor, targetFingerprint } from "./fingerprint.js";
+import { clashNameFor, targetFingerprint, truncateError } from "./fingerprint.js";
 import {
   classifyOverall,
   classifyRegion,
@@ -24,6 +24,17 @@ describe("node-probe fingerprint", () => {
     const c = targetFingerprint("vless", "1.2.3.4", 8443);
     assert.notEqual(a, b);
     assert.notEqual(a, c);
+  });
+
+  it("includes fetch cause in truncateError", () => {
+    const err = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:19090"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    const s = truncateError(err);
+    assert.match(s, /fetch failed/);
+    assert.match(s, /ECONNREFUSED/);
   });
 });
 

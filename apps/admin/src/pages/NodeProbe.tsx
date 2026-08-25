@@ -94,10 +94,17 @@ const PROBE_ERR: Record<string, string> = {
     "槽找到了，但还没有订阅链接。请先同步/开通该槽。",
   "node_probe.slot_disabled": "这条槽不是 active 状态。",
   "node_probe.slot_missing": "还没配置探针槽位。",
+  "node_probe.mihomo_unreachable":
+    "连不上本机 mihomo（默认 127.0.0.1:19090）。在仓库根目录执行：docker compose -f docker-compose.probe.yml up -d",
+  "node_probe.subscription_fetch_failed": "拉不到探针槽的订阅内容。",
+  "node_probe.empty_subscription": "订阅里没有可用节点。",
 };
 
 function probeErrText(code: string) {
-  return PROBE_ERR[code] || code;
+  const hit = Object.keys(PROBE_ERR)
+    .sort((a, b) => b.length - a.length)
+    .find((k) => code === k || code.startsWith(`${k}:`) || code.startsWith(`${k} `));
+  return hit ? PROBE_ERR[hit] : code;
 }
 
 export default function NodeProbePage() {

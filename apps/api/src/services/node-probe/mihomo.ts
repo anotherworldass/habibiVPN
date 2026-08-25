@@ -1,5 +1,5 @@
 import { ProxyAgent, fetch as undiciFetch } from "undici";
-import { truncateError } from "./fingerprint.js";
+import { truncateError, wrapProbeError } from "./fingerprint.js";
 
 type DelayResult = { ok: true; delayMs: number } | { ok: false; error: string };
 
@@ -16,30 +16,44 @@ export class MihomoClient {
   }
 
   async ping(): Promise<void> {
-    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/version`, {
-      headers: this.headers(),
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) {
-      throw new Error(`mihomo.unavailable.${res.status}`);
+    try {
+      const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/version`, {
+        headers: this.headers(),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!res.ok) {
+        throw new Error(`mihomo.unavailable.${res.status}`);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("mihomo.unavailable.")) {
+        throw err;
+      }
+      throw wrapProbeError("node_probe.mihomo_unreachable", err);
     }
   }
 
   async putConfig(yaml: string): Promise<void> {
-    const res = await fetch(
-      `${this.baseUrl.replace(/\/$/, "")}/configs?force=true`,
-      {
-        method: "PUT",
-        headers: { ...this.headers(), "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: yaml }),
-        signal: AbortSignal.timeout(20_000),
-      },
-    );
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        truncateError(`mihomo.put_config.${res.status} ${text}`, 200),
+    try {
+      const res = await fetch(
+        `${this.baseUrl.replace(/\/$/, "")}/configs?force=true`,
+        {
+          method: "PUT",
+          headers: { ...this.headers(), "Content-Type": "application/json" },
+          body: JSON.stringify({ payload: yaml }),
+          signal: AbortSignal.timeout(20_000),
+        },
       );
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          truncateError(`mihomo.put_config.${res.status} ${text}`, 200),
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("mihomo.put_config.")) {
+        throw err;
+      }
+      throw wrapProbeError("node_probe.mihomo_unreachable", err);
     }
   }
 
