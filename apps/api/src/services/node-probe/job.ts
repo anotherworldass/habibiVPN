@@ -22,6 +22,7 @@ const LOCK_KEY = "node-probe:lock";
 const LAST_DELAY_KEY = "node-probe:last-delay";
 const LAST_SPEED_KEY = "node-probe:last-speed";
 const LAST_RUN_KEY = "node-probe:last-run";
+const TICK_KEY = "node-probe:last-tick";
 const LOCK_TTL_SEC = 12 * 60;
 const TICK_MS = 20_000;
 const SAMPLE_TTL_DAYS = 14;
@@ -58,12 +59,62 @@ export async function getProbeLastRun(): Promise<ProbeLastRun | null> {
   }
 }
 
+export type ProbeTick = {
+  at: string;
+  result: string;
+};
+
 async function saveLastRun(run: ProbeLastRun) {
   try {
     await redisSetEx(LAST_RUN_KEY, 7 * 24 * 3600, JSON.stringify(run));
   } catch {
     /* ignore */
   }
+}
+
+async function saveTick(result: string) {
+  try {
+    await redisSetEx(
+      TICK_KEY,
+      7 * 24 * 3600,
+      JSON.stringify({ at: new Date().toISOString(), result } satisfies ProbeTick),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getProbeTick(): Promise<ProbeTick | null> {
+  try {
+    const raw = await redisGet(TICK_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ProbeTick;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProbeSchedule(delayIntervalSec: number): Promise<{
+  last_tick: ProbeTick | null;
+  next_probe_at: string | null;
+}> {
+  const lastTick = await getProbeTick();
+  let lastDelay = 0;
+  try {
+    lastDelay = Number((await redisGet(LAST_DELAY_KEY)) || 0);
+  } catch {
+    lastDelay = 0;
+  }
+  const nextMs = lastDelay > 0 ? lastDelay + delayIntervalSec * 1000 : Date.now();
+  return {
+    last_tick: lastTick,
+    next_probe_at: new Date(Math.max(nextMs, Date.now())).toISOString(),
+  };
+}
+
+/** Next scheduled tick probes immediately instead of waiting out the interval. */
+export async function resetProbeDelaySchedule() {
+  await redisDel(LAST_DELAY_KEY).catch(() => undefined);
 }
 
 async function mapPool<T, R>(
@@ -186,6 +237,7 @@ export async function runNodeProbeRound(input?: {
   } else {
     const runtime = await resolveProbeRuntime();
     if (!runtime && !input?.force) {
+      await saveTick("disabled");
       return {
         at: new Date().toISOString(),
         ok: true,
@@ -220,6 +272,7 @@ export async function runNodeProbeRound(input?: {
       speedMs: null,
     };
     await saveLastRun(run);
+    await saveTick("slot_missing");
     return run;
   }
 
@@ -241,6 +294,7 @@ export async function runNodeProbeRound(input?: {
     const delayDue =
       input?.force || !lastDelay || now - lastDelay >= probeCfg.delayIntervalSec * 1000;
     if (!delayDue) {
+      await saveTick("skipped_interval");
       return {
         at: new Date().toISOString(),
         ok: true,
@@ -386,6 +440,7 @@ export async function runNodeProbeRound(input?: {
       speedMs: Date.now() - started,
     };
     await saveLastRun(run);
+    await saveTick("ok");
     input?.log?.info?.(
       { targetCount: targets.length, delayOk, delayFail, speedCount },
       "node-probe round ok",
@@ -403,6 +458,7 @@ export async function runNodeProbeRound(input?: {
       speedMs: Date.now() - started,
     };
     await saveLastRun(run);
+    await saveTick(truncateError(err, 80));
     throw err;
   } finally {
     await redisDel(LOCK_KEY).catch(() => undefined);
@@ -418,7 +474,9 @@ export function startNodeProbeJob(log?: LogFn) {
       await runNodeProbeRound({ log });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg !== "node_probe.busy") {
+      if (msg === "node_probe.busy") {
+        await saveTick("busy");
+      } else {
         log?.error?.({ err: msg }, "node-probe job error");
         console.error("[node-probe]", msg);
       }

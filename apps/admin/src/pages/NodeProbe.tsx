@@ -30,10 +30,16 @@ type LastRun = {
   speedMs: number | null;
 };
 
+type ProbeSchedule = {
+  last_tick: { at: string; result: string } | null;
+  next_probe_at: string | null;
+};
+
 type ProbeSettings = {
   enabled: boolean;
   remark: string | null;
   last_run: LastRun | null;
+  schedule?: ProbeSchedule;
   probeSlotId: string | null;
   delayIntervalSec: number;
   speedIntervalSec: number;
@@ -98,7 +104,15 @@ const PROBE_ERR: Record<string, string> = {
     "连不上本机 mihomo（默认 127.0.0.1:19090）。在仓库根目录执行：docker compose -f docker-compose.probe.yml up -d",
   "node_probe.subscription_fetch_failed": "拉不到探针槽的订阅内容。",
   "node_probe.empty_subscription": "订阅里没有可用节点。",
+  disabled: "定时探测未启用（请保存开关）",
+  skipped_interval: "间隔未到，本轮跳过",
+  busy: "上一轮还在跑",
 };
+
+function tickText(result: string) {
+  if (result === "ok") return "已完成一轮";
+  return probeErrText(result);
+}
 
 function probeErrText(code: string) {
   const hit = Object.keys(PROBE_ERR)
@@ -113,6 +127,7 @@ export default function NodeProbePage() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<LastRun | null>(null);
+  const [schedule, setSchedule] = useState<ProbeSchedule | null>(null);
   const [targets, setTargets] = useState<TargetRow[]>([]);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
 
@@ -126,6 +141,7 @@ export default function NodeProbePage() {
     try {
       const cfg = await adminFetch<ProbeSettings>("/admin/v1/node-probe/settings");
       setLastRun(cfg.last_run);
+      setSchedule(cfg.schedule || null);
       form.setFieldsValue({
         enabled: cfg.enabled,
         remark: cfg.remark || "",
@@ -165,10 +181,29 @@ export default function NodeProbePage() {
     }
   }, []);
 
+  const loadStatus = useCallback(async () => {
+    if (!getProjectId()) return;
+    try {
+      const cfg = await adminFetch<ProbeSettings>("/admin/v1/node-probe/settings");
+      setLastRun(cfg.last_run);
+      setSchedule(cfg.schedule || null);
+    } catch {
+      /* ignore poll errors */
+    }
+  }, []);
+
   useEffect(() => {
     void loadSettings();
     void loadTables();
   }, [loadSettings, loadTables]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void loadStatus();
+      void loadTables();
+    }, 20_000);
+    return () => window.clearInterval(id);
+  }, [loadStatus, loadTables]);
 
   const onSave = async () => {
     const values = await form.validateFields();
@@ -183,7 +218,9 @@ export default function NodeProbePage() {
           remark: values.remark?.trim() || null,
         }),
       });
-      message.success("已保存");
+      message.success(
+        values.enabled ? "已保存，约 20 秒内会自动跑第一轮" : "已保存",
+      );
       await loadSettings();
     } catch (e) {
       message.error(e instanceof Error ? probeErrText(e.message) : "保存失败");
@@ -231,7 +268,14 @@ export default function NodeProbePage() {
       title="节点探测"
       extra={
         <Space>
-          <Button onClick={() => void loadTables()}>刷新结果</Button>
+          <Button
+            onClick={() => {
+              void loadStatus();
+              void loadTables();
+            }}
+          >
+            刷新结果
+          </Button>
           <Button loading={running} onClick={() => void runNow(false)}>
             立即探测
           </Button>
@@ -248,6 +292,20 @@ export default function NodeProbePage() {
         style={{ marginBottom: 16 }}
         message="境外机房经本机 mihomo 做协议 URL-test。测的是节点自身是否健康，不是国内用户翻墙质量。H5 /status 未挂导航，仅内部观察。"
       />
+      {schedule?.last_tick && (
+        <Alert
+          type={schedule.last_tick.result === "disabled" ? "warning" : "info"}
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`定时任务心跳 ${new Date(schedule.last_tick.at).toLocaleString()} · ${tickText(
+            schedule.last_tick.result,
+          )}${
+            schedule.next_probe_at
+              ? ` · 下次探测约 ${new Date(schedule.next_probe_at).toLocaleString()}`
+              : ""
+          }`}
+        />
+      )}
       {lastRun && (
         <Alert
           type={lastRun.ok ? "success" : "warning"}
@@ -268,7 +326,12 @@ export default function NodeProbePage() {
             children: (
               <Card loading={loading}>
                 <Form form={form} layout="vertical" onFinish={() => void onSave()}>
-                  <Form.Item name="enabled" label="启用定时探测" valuePropName="checked">
+                  <Form.Item
+                    name="enabled"
+                    label="启用定时探测"
+                    extra="保存打开后约 20 秒内会跑第一轮，之后按「延迟间隔」自动探测。上次探测不会在间隔内重复刷。"
+                    valuePropName="checked"
+                  >
                     <Switch />
                   </Form.Item>
                   <Form.Item

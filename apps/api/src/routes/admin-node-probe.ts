@@ -6,7 +6,7 @@ import { writeAudit } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProbeTelegramTest } from "../services/node-probe/alerts.js";
 import { resolveProbeSlot } from "../services/node-probe/inventory.js";
-import { getProbeLastRun, runNodeProbeRound } from "../services/node-probe/job.js";
+import { getProbeLastRun, getProbeSchedule, resetProbeDelaySchedule, runNodeProbeRound } from "../services/node-probe/job.js";
 import {
   getNodeProbeConfig,
   maskNodeProbeValue,
@@ -61,11 +61,13 @@ export const adminNodeProbeRoutes: FastifyPluginAsync = async (app) => {
       const projectId = await resolveAdminProjectId(req);
       const cfg = await getNodeProbeConfig(projectId);
       const lastRun = await getProbeLastRun();
+      const schedule = await getProbeSchedule(cfg.value.delayIntervalSec);
       return {
         project_id: projectId,
         enabled: cfg.enabled,
         remark: cfg.remark,
         last_run: lastRun,
+        schedule,
         ...maskNodeProbeValue(cfg.value),
       };
     } catch (err) {
@@ -99,6 +101,9 @@ export const adminNodeProbeRoutes: FastifyPluginAsync = async (app) => {
         remark,
         patch,
       });
+      if (saved.enabled) {
+        await resetProbeDelaySchedule();
+      }
       await writeAudit({
         actorType: "admin",
         actorId: req.admin?.sub,
