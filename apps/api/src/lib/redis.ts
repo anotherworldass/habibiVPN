@@ -3,16 +3,45 @@ import { env } from "../config.js";
 
 let client: Redis | null = null;
 
+/** Parse REDIS_URL; `redis://password@host` is treated as the password. */
+function parseRedisUrl(raw: string) {
+  const u = new URL(raw);
+  let username = decodeURIComponent(u.username);
+  let password = decodeURIComponent(u.password);
+  if (username && !password) {
+    password = username;
+    username = "";
+  }
+  const pathDb = u.pathname.replace(/^\//, "");
+  const db = pathDb ? Number.parseInt(pathDb, 10) : 0;
+  return {
+    host: u.hostname || "127.0.0.1",
+    port: Number(u.port) || 6379,
+    username: username || undefined,
+    password: password || undefined,
+    db: Number.isFinite(db) ? db : 0,
+    tls: u.protocol === "rediss:" ? {} : undefined,
+  };
+}
+
 /** Lazy singleton. Callers should tolerate connection errors. */
 export function getRedis(): Redis {
   if (!client) {
-    client = new Redis(env.REDIS_URL, {
+    client = new Redis({
+      ...parseRedisUrl(env.REDIS_URL),
       maxRetriesPerRequest: 1,
       enableReadyCheck: true,
       lazyConnect: true,
+      // v6 defaults to HELLO 3. Redis with requirepass rejects HELLO before AUTH.
+      protocol: 2,
     });
     client.on("error", (err: Error) => {
       // Avoid unhandled error events crashing the process.
+      if (/NOAUTH|HELLO/i.test(err.message)) {
+        console.warn(
+          "[redis] 认证失败。若 Redis 开了 requirepass，REDIS_URL 写成 redis://:密码@127.0.0.1:6379（冒号不能少）",
+        );
+      }
       console.warn("[redis]", err.message);
     });
   }
