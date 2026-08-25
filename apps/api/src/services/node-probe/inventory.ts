@@ -56,9 +56,10 @@ export async function resolveProbeSlot(raw: string) {
     if (plan) throw probeErr("node_probe.got_plan_id");
     throw probeErr("node_probe.slot_not_found");
   }
-  if (!slot.subscriptionUrl) throw probeErr("node_probe.slot_no_subscription");
+  const subscriptionUrl = slot.subscriptionUrl;
+  if (!subscriptionUrl) throw probeErr("node_probe.slot_no_subscription");
   if (slot.status !== "active") throw probeErr("node_probe.slot_disabled");
-  return slot;
+  return { ...slot, subscriptionUrl };
 }
 
 export type ProbeInbound = {
