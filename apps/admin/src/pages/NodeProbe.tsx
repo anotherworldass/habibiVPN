@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageContainer } from "@ant-design/pro-components";
 import {
   Alert,
@@ -139,7 +139,9 @@ export default function NodeProbePage() {
     }
     setLoading(true);
     try {
-      const cfg = await adminFetch<ProbeSettings>("/admin/v1/node-probe/settings");
+      const cfg = await adminFetch<ProbeSettings>("/admin/v1/node-probe/settings", {
+        signal: AbortSignal.timeout(12_000),
+      });
       setLastRun(cfg.last_run);
       setSchedule(cfg.schedule || null);
       form.setFieldsValue({
@@ -181,14 +183,20 @@ export default function NodeProbePage() {
     }
   }, []);
 
+  const statusInflight = useRef(false);
   const loadStatus = useCallback(async () => {
-    if (!getProjectId()) return;
+    if (!getProjectId() || statusInflight.current) return;
+    statusInflight.current = true;
     try {
-      const cfg = await adminFetch<ProbeSettings>("/admin/v1/node-probe/settings");
+      const cfg = await adminFetch<ProbeSettings>("/admin/v1/node-probe/settings", {
+        signal: AbortSignal.timeout(8_000),
+      });
       setLastRun(cfg.last_run);
       setSchedule(cfg.schedule || null);
     } catch {
       /* ignore poll errors */
+    } finally {
+      statusInflight.current = false;
     }
   }, []);
 

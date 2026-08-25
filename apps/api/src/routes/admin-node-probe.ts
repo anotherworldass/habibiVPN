@@ -60,8 +60,10 @@ export const adminNodeProbeRoutes: FastifyPluginAsync = async (app) => {
     try {
       const projectId = await resolveAdminProjectId(req);
       const cfg = await getNodeProbeConfig(projectId);
-      const lastRun = await getProbeLastRun();
-      const schedule = await getProbeSchedule(cfg.value.delayIntervalSec);
+      const [lastRun, schedule] = await Promise.all([
+        getProbeLastRun(),
+        getProbeSchedule(cfg.value.delayIntervalSec),
+      ]);
       return {
         project_id: projectId,
         enabled: cfg.enabled,

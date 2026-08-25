@@ -98,13 +98,11 @@ export async function getProbeSchedule(delayIntervalSec: number): Promise<{
   last_tick: ProbeTick | null;
   next_probe_at: string | null;
 }> {
-  const lastTick = await getProbeTick();
-  let lastDelay = 0;
-  try {
-    lastDelay = Number((await redisGet(LAST_DELAY_KEY)) || 0);
-  } catch {
-    lastDelay = 0;
-  }
+  const [lastTick, lastDelayRaw] = await Promise.all([
+    getProbeTick(),
+    redisGet(LAST_DELAY_KEY).catch(() => null),
+  ]);
+  const lastDelay = Number(lastDelayRaw || 0);
   const nextMs = lastDelay > 0 ? lastDelay + delayIntervalSec * 1000 : Date.now();
   return {
     last_tick: lastTick,
