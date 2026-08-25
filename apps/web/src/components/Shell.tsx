@@ -21,6 +21,13 @@ type ShellProps = {
   hideNavigation?: boolean;
 };
 
+const homeIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M4.5 11.5 12 5l7.5 6.5" />
+    <path d="M6.5 10.5V19h11v-8.5" />
+  </svg>
+);
+
 const plansIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <rect x="4" y="5" width="16" height="14" rx="2" />
@@ -81,7 +88,8 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
   };
 
   const desktopTabs = loggedIn ? appTabs : guestTabs;
-  const mobileTabs = [...desktopTabs, accountTab];
+  const homeTab = { href: "/", label: copy.nav.home, icon: homeIcon };
+  const mobileTabs = [homeTab, ...desktopTabs, accountTab];
   const showBrandBar = !isInvitePath(pathname);
 
   const shellClass = [

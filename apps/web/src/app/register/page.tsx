@@ -27,6 +27,7 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteLocked, setInviteLocked] = useState(false);
@@ -185,19 +186,49 @@ function RegisterForm() {
           />
         </label>
 
-        <label className="field" style={{ display: "block", marginBottom: 14 }}>
-          <span className="field-label">{registerCopy.passwordLabel}</span>
-          <input
-            className="field-input"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={registerCopy.passwordPh}
-          />
-        </label>
+        <div className="field" style={{ display: "block", marginBottom: 14 }}>
+          <label className="field-label" htmlFor="register-password">
+            {registerCopy.passwordLabel}
+          </label>
+          <div className="field-input-wrap">
+            <input
+              id="register-password"
+              className="field-input"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={registerCopy.passwordPh}
+            />
+            <button
+              type="button"
+              className="field-password-toggle"
+              aria-label={
+                showPassword
+                  ? messages.common.hidePassword
+                  : messages.common.showPassword
+              }
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((v) => !v)}
+            >
+              {showPassword ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M3 3l18 18" />
+                  <path d="M10.6 10.7a2 2 0 0 0 2.8 2.8" />
+                  <path d="M9.9 5.2A10.5 10.5 0 0 1 12 5c5.5 0 9.5 4.5 10.5 7-.4 1-1.1 2.2-2.1 3.4" />
+                  <path d="M6.7 6.7C4.8 8.1 3.5 9.9 2.5 12c1 2.5 5 7 9.5 7 1.6 0 3.1-.4 4.4-1.1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M2.5 12c1-2.5 5-7 9.5-7s8.5 4.5 9.5 7c-1 2.5-5 7-9.5 7s-8.5-4.5-9.5-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
 
         {requireCode ? (
         <label className="field" style={{ display: "block", marginBottom: 14 }}>

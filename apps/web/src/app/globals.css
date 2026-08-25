@@ -381,6 +381,85 @@ input {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 16%, transparent);
 }
 
+.field-input-wrap {
+  position: relative;
+}
+
+.field-input-wrap .field-input {
+  padding-right: 48px;
+}
+
+.field-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.field-password-toggle:hover,
+.field-password-toggle:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.field-password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.field-input-wrap {
+  position: relative;
+}
+
+.field-input-wrap .field-input {
+  padding-right: 48px;
+}
+
+.field-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.field-password-toggle:hover,
+.field-password-toggle:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+}
+
+.field-password-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 16%, transparent);
+}
+
+.field-password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
 .alert-error {
   padding: 12px 14px 12px 16px;
   border-radius: 12px;
