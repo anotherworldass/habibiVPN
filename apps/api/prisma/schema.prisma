@@ -1890,6 +1890,8 @@ model NodeProbeIncident {
   closedAt          DateTime? @map("closed_at")
   lastAlertAt       DateTime? @map("last_alert_at")
   telegramMessageId String?   @map("telegram_message_id")
+  /// Set while open (`targetId:kind`); cleared on close so MySQL unique allows many closed rows.
+  openKey           String?   @unique @map("open_key") @db.VarChar(191)
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -1899,4 +1901,13 @@ model NodeProbeIncident {
   @@index([targetId, kind, closedAt])
   @@index([region, kind, closedAt])
   @@map("node_probe_incidents")
+}
+
+/// Cross-slot mutex so blue/green API processes do not probe at the same time.
+model NodeProbeLease {
+  id        String   @id
+  owner     String
+  expiresAt DateTime @map("expires_at")
+
+  @@map("node_probe_leases")
 }

@@ -7,7 +7,11 @@ import {
   classifyRegion,
   consecutiveFailCount,
   consecutiveOkCount,
+  foldDuplicateIncidents,
+  isUnstableWindow,
   percentile,
+  shouldRecoverDown,
+  shouldSkipSpeedRound,
   successRate,
 } from "./logic.js";
 import { parseNodeProbeValue } from "./settings.js";
@@ -66,6 +70,30 @@ describe("node-probe logic", () => {
     assert.equal(percentile([10, 20, 30, 40, 50], 95), 50);
     assert.equal(successRate(8, 2), 0.8);
     assert.equal(successRate(0, 0), null);
+    assert.equal(shouldRecoverDown(1), false);
+    assert.equal(shouldRecoverDown(2), true);
+    assert.equal(isUnstableWindow(5, 1, 0.8), false);
+    assert.equal(isUnstableWindow(5, 3, 0.8), true);
+    assert.equal(isUnstableWindow(4, 2, 0.8), false);
+    assert.equal(shouldSkipSpeedRound(8, 2), false);
+    assert.equal(shouldSkipSpeedRound(6, 4), true);
+    assert.equal(
+      foldDuplicateIncidents([
+        {
+          kind: "down",
+          summary: "a",
+          opened_at: "2026-08-26T12:21:22.001Z",
+          closed_at: null,
+        },
+        {
+          kind: "down",
+          summary: "a",
+          opened_at: "2026-08-26T12:21:22.009Z",
+          closed_at: null,
+        },
+      ]).length,
+      1,
+    );
   });
 });
 

@@ -1,15 +1,15 @@
 import { prisma } from "../../lib/prisma.js";
 import {
-  redisDel,
   redisGet,
   redisSetEx,
-  redisSetNxEx,
+  redisDel,
 } from "../../lib/redis.js";
 import { DEFAULT_PROJECT_ID } from "../project.js";
 import { renderProbeClashYaml } from "./clash.js";
 import { evaluateAndAlert, type ProbeRoundSample } from "./alerts.js";
 import { truncateError } from "./fingerprint.js";
 import { loadProbeInbounds, upsertProbeTargets } from "./inventory.js";
+import { shouldSkipSpeedRound } from "./logic.js";
 import { downloadViaMixedPort, MihomoClient } from "./mihomo.js";
 import {
   getNodeProbeConfig,
@@ -18,7 +18,6 @@ import {
 } from "./settings.js";
 import { tcpConnectMs } from "./tcp.js";
 
-const LOCK_KEY = "node-probe:lock";
 const LAST_DELAY_KEY = "node-probe:last-delay";
 const LAST_SPEED_KEY = "node-probe:last-speed";
 const LAST_RUN_KEY = "node-probe:last-run";
@@ -56,6 +55,39 @@ export type ProbeTick = {
 
 let memoryLastRun: ProbeLastRun | null = null;
 let memoryTick: ProbeTick | null = null;
+let memoryLastDelay = 0;
+let memoryLastSpeed = 0;
+
+const LEASE_ID = "probe";
+
+function busyError() {
+  return Object.assign(new Error("node_probe.busy"), { statusCode: 409 });
+}
+
+async function acquireDbLease(owner: string, ttlSec: number): Promise<boolean> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlSec * 1000);
+  const updated = await prisma.nodeProbeLease.updateMany({
+    where: { id: LEASE_ID, OR: [{ expiresAt: { lt: now } }, { owner }] },
+    data: { owner, expiresAt },
+  });
+  if (updated.count === 1) return true;
+  try {
+    await prisma.nodeProbeLease.create({
+      data: { id: LEASE_ID, owner, expiresAt },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function releaseDbLease(owner: string) {
+  await prisma.nodeProbeLease.updateMany({
+    where: { id: LEASE_ID, owner },
+    data: { expiresAt: new Date() },
+  });
+}
 
 export async function getProbeLastRun(): Promise<ProbeLastRun | null> {
   try {
@@ -179,9 +211,9 @@ async function persistSample(input: {
       lastOk: input.ok,
       lastTcpMs: input.tcpMs,
       lastDelayMs: input.delayMs,
-      lastDownloadMbps: input.downloadMbps,
       lastError: input.error,
       lastProbedAt: input.probedAt,
+      ...(input.downloadMbps != null ? { lastDownloadMbps: input.downloadMbps } : {}),
     },
   });
   const hour = hourBucket(input.probedAt);
@@ -281,20 +313,9 @@ export async function runNodeProbeRound(input?: {
 
   const probeCfg = cfg;
 
-  let holdRedisLock = false;
-  try {
-    const locked = await redisSetNxEx(LOCK_KEY, LOCK_TTL_SEC, String(Date.now()));
-    if (!locked) {
-      throw Object.assign(new Error("node_probe.busy"), { statusCode: 409 });
-    }
-    holdRedisLock = true;
-  } catch (err) {
-    if (err instanceof Error && err.message === "node_probe.busy") throw err;
-    input?.log?.warn?.(
-      { err: err instanceof Error ? err.message : String(err) },
-      "node-probe redis lock unavailable, continue",
-    );
-  }
+  const dbLeaseOwner = `${process.pid}:${Date.now()}`;
+  const gotDb = await acquireDbLease(dbLeaseOwner, LOCK_TTL_SEC).catch(() => false);
+  if (!gotDb) throw busyError();
 
   const started = Date.now();
   let delayOk = 0;
@@ -302,8 +323,12 @@ export async function runNodeProbeRound(input?: {
   let speedCount = 0;
   try {
     const now = Date.now();
-    const lastDelay = Number((await redisGet(LAST_DELAY_KEY).catch(() => null)) || 0);
-    const lastSpeed = Number((await redisGet(LAST_SPEED_KEY).catch(() => null)) || 0);
+    const lastDelay = Number(
+      (await redisGet(LAST_DELAY_KEY).catch(() => null)) || memoryLastDelay || 0,
+    );
+    const lastSpeed = Number(
+      (await redisGet(LAST_SPEED_KEY).catch(() => null)) || memoryLastSpeed || 0,
+    );
     const delayDue =
       input?.force || !lastDelay || now - lastDelay >= probeCfg.delayIntervalSec * 1000;
     if (!delayDue) {
@@ -386,8 +411,17 @@ export async function runNodeProbeRound(input?: {
     }
 
     await redisSetEx(LAST_DELAY_KEY, 7 * 86400, String(Date.now())).catch(() => undefined);
+    memoryLastDelay = Date.now();
 
-    if (speedDue) {
+    const skipSpeed = shouldSkipSpeedRound(delayOk, delayFail);
+    if (speedDue && skipSpeed) {
+      input?.log?.warn?.(
+        { delayOk, delayFail },
+        "node-probe skip speed; delay round too lossy",
+      );
+    }
+
+    if (speedDue && !skipSpeed) {
       const speedStarted = Date.now();
       for (const row of delayResults) {
         if (Date.now() - speedStarted > SPEED_ROUND_BUDGET_MS) break;
@@ -432,6 +466,7 @@ export async function runNodeProbeRound(input?: {
       await redisSetEx(LAST_SPEED_KEY, 7 * 86400, String(Date.now())).catch(
         () => undefined,
       );
+      memoryLastSpeed = Date.now();
     }
 
     await evaluateAndAlert({
@@ -475,8 +510,8 @@ export async function runNodeProbeRound(input?: {
     await saveTick(truncateError(err, 80));
     throw err;
   } finally {
-    if (holdRedisLock) {
-      await redisDel(LOCK_KEY).catch(() => undefined);
+    if (dbLeaseOwner) {
+      await releaseDbLease(dbLeaseOwner).catch(() => undefined);
     }
   }
 }

@@ -10,6 +10,7 @@ import {
 import {
   classifyOverall,
   classifyRegion,
+  foldDuplicateIncidents,
   median,
   successRate,
   type OverallStatus,
@@ -204,13 +205,15 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
       region_count: regions.length,
     },
     regions,
-    incidents: incidentRows.map((r) => ({
-      kind: r.kind,
-      region: r.region,
-      region_name: r.region ? regionZhName(r.region) : null,
-      summary: r.summary,
-      opened_at: r.openedAt.toISOString(),
-      closed_at: r.closedAt?.toISOString() ?? null,
-    })),
+    incidents: foldDuplicateIncidents(
+      incidentRows.map((r) => ({
+        kind: r.kind,
+        region: r.region,
+        region_name: r.region ? regionZhName(r.region) : null,
+        summary: r.summary,
+        opened_at: r.openedAt.toISOString(),
+        closed_at: r.closedAt?.toISOString() ?? null,
+      })),
+    ),
   };
 }

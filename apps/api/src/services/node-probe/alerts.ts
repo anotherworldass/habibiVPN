@@ -3,7 +3,7 @@ import { regionZhName } from "../../lib/regions.js";
 import { sendMessage } from "../telegram/api.js";
 import { getBotTokenForProject } from "../telegram/bot-config.js";
 import { escapeHtml, formatProbeDigest } from "./alerts-format.js";
-import { consecutiveFailCount, consecutiveOkCount, percentile } from "./logic.js";
+import { consecutiveFailCount, consecutiveOkCount, isUnstableWindow, percentile, shouldRecoverDown } from "./logic.js";
 import type { NodeProbeValue } from "./settings.js";
 
 export type ProbeRoundSample = {
@@ -36,27 +36,45 @@ async function openOrTouchIncident(input: {
   kind: string;
   summary: string;
 }): Promise<{ id: string; openedNow: boolean }> {
+  const openKey = `${input.targetId}:${input.kind}`;
   const existing = await prisma.nodeProbeIncident.findFirst({
-    where: { targetId: input.targetId, kind: input.kind, closedAt: null },
+    where: {
+      OR: [{ openKey }, { targetId: input.targetId, kind: input.kind, closedAt: null }],
+    },
     orderBy: { openedAt: "desc" },
   });
-  if (existing) {
+  if (existing && !existing.closedAt) {
     await prisma.nodeProbeIncident.update({
       where: { id: existing.id },
-      data: { summary: input.summary },
+      data: { summary: input.summary, openKey },
     });
     return { id: existing.id, openedNow: false };
   }
-  const row = await prisma.nodeProbeIncident.create({
-    data: {
-      targetId: input.targetId,
-      region: input.region,
-      kind: input.kind,
-      summary: input.summary,
-      openedAt: new Date(),
-    },
-  });
-  return { id: row.id, openedNow: true };
+  try {
+    const row = await prisma.nodeProbeIncident.create({
+      data: {
+        targetId: input.targetId,
+        region: input.region,
+        kind: input.kind,
+        summary: input.summary,
+        openedAt: new Date(),
+        openKey,
+      },
+    });
+    return { id: row.id, openedNow: true };
+  } catch {
+    const raced = await prisma.nodeProbeIncident.findFirst({
+      where: { openKey },
+    });
+    if (raced && !raced.closedAt) {
+      await prisma.nodeProbeIncident.update({
+        where: { id: raced.id },
+        data: { summary: input.summary },
+      });
+      return { id: raced.id, openedNow: false };
+    }
+    throw new Error("node_probe.incident_open_failed");
+  }
 }
 
 async function closeIncident(targetId: string, kind: string): Promise<boolean> {
@@ -66,7 +84,7 @@ async function closeIncident(targetId: string, kind: string): Promise<boolean> {
   if (!existing) return false;
   await prisma.nodeProbeIncident.update({
     where: { id: existing.id },
-    data: { closedAt: new Date() },
+    data: { closedAt: new Date(), openKey: null },
   });
   return true;
 }
@@ -96,12 +114,20 @@ async function closeLingeringIncidents(
     if (!row.targetId || !row.target) {
       await prisma.nodeProbeIncident.update({
         where: { id: row.id },
-        data: { closedAt: new Date() },
+        data: { closedAt: new Date(), openKey: null },
       });
       continue;
     }
     if (row.kind === "down" && row.target.lastOk) {
-      await closeIncident(row.targetId, "down");
+      const recent = await prisma.nodeProbeSample.findMany({
+        where: { targetId: row.targetId },
+        orderBy: { probedAt: "desc" },
+        take: 2,
+        select: { ok: true },
+      });
+      if (consecutiveOkCount(recent) >= 2) {
+        await closeIncident(row.targetId, "down");
+      }
       continue;
     }
     if (row.kind === "unstable" && row.target.lastOk) {
@@ -168,7 +194,7 @@ export async function evaluateAndAlert(input: {
           line: `${label} · 连续 ${fails} 次探测失败`,
         });
       }
-    } else if (item.ok || oks > 0) {
+    } else if (shouldRecoverDown(oks)) {
       const closed = await closeIncident(item.targetId, "down");
       if (closed && canSend) {
         pending.push({
@@ -185,16 +211,17 @@ export async function evaluateAndAlert(input: {
       where: { targetId: item.targetId, probedAt: { gte: since } },
       select: { ok: true, delayMs: true },
     });
-    if (window.length >= 3 && item.ok) {
+    if (window.length >= 6 && item.ok) {
       const okN = window.filter((s) => s.ok).length;
+      const failN = window.length - okN;
       const rate = okN / window.length;
       const delays = window
         .map((s) => s.delayMs)
         .filter((n): n is number => n != null);
       const p95 = percentile(delays, 95);
       const unstable =
-        rate < input.cfg.unstableSuccessRate ||
-        (p95 != null && p95 > input.cfg.delayP95Ms);
+        isUnstableWindow(okN, failN, input.cfg.unstableSuccessRate) ||
+        (p95 != null && delays.length >= 6 && p95 > input.cfg.delayP95Ms);
       if (unstable && fails < input.cfg.downFailStreak && oks < 3) {
         const inc = await openOrTouchIncident({
           targetId: item.targetId,

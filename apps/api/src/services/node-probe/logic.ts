@@ -57,6 +57,51 @@ export function successRate(ok: number, fail: number): number | null {
   return ok / n;
 }
 
+export const DOWN_RECOVER_OKS = 2;
+export const UNSTABLE_MIN_SAMPLES = 6;
+export const UNSTABLE_MIN_FAILS = 3;
+export const SPEED_SKIP_FAIL_RATIO = 0.35;
+
+/** Down closes only after two consecutive successes, not the first blip. */
+export function shouldRecoverDown(consecutiveOks: number): boolean {
+  return consecutiveOks >= DOWN_RECOVER_OKS;
+}
+
+/** Unstable needs a real cluster of failures, not 1–2 URL-test timeouts. */
+export function isUnstableWindow(
+  ok: number,
+  fail: number,
+  rateThreshold: number,
+): boolean {
+  const n = ok + fail;
+  if (n < UNSTABLE_MIN_SAMPLES || fail < UNSTABLE_MIN_FAILS) return false;
+  return ok / n < rateThreshold;
+}
+
+/** Skip the serial speed pass when this delay round already looks contested. */
+export function shouldSkipSpeedRound(delayOk: number, delayFail: number): boolean {
+  const n = delayOk + delayFail;
+  if (n <= 0) return true;
+  return delayFail / n >= SPEED_SKIP_FAIL_RATIO;
+}
+
+export function foldDuplicateIncidents<T extends {
+  kind: string;
+  summary: string;
+  opened_at: string;
+  closed_at: string | null;
+}>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const r of rows) {
+    const k = `${r.kind}|${r.summary}|${r.opened_at.slice(0, 19)}|${r.closed_at?.slice(0, 19) ?? ""}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+
 export function hoursAgo(date: Date, hours: number): boolean {
   return Date.now() - date.getTime() >= hours * 3600_000;
 }

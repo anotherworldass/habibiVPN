@@ -20,7 +20,7 @@ export const DEFAULT_NODE_PROBE_VALUE = {
   speedEnabled: true,
   delayTimeoutMs: 5000,
   speedTimeoutMs: 10_000,
-  delayConcurrency: 8,
+  delayConcurrency: 4,
   downFailStreak: 3,
   unstableWindowMin: 15,
   unstableSuccessRate: 0.8,
