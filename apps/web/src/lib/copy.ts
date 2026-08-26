@@ -362,6 +362,11 @@ const zh = {
     statusActive: "正常",
     statusPartial: "部分可用",
     statusOffline: "离线",
+    historyLegend: "近 90 天，每格一天。绿正常 · 黄波动 · 红故障 · 灰无数据",
+    historyUp: "正常",
+    historyPartial: "波动",
+    historyDown: "故障",
+    historyEmpty: "无数据",
   },
   common: {
     loading: "加载中…",
@@ -1291,6 +1296,11 @@ const en = {
     statusActive: "OK",
     statusPartial: "Partial",
     statusOffline: "Offline",
+    historyLegend: "Last 90 days, one cell per day. Green up · amber degraded · red down · gray no data",
+    historyUp: "Up",
+    historyPartial: "Degraded",
+    historyDown: "Down",
+    historyEmpty: "No data",
   },
   common: {
     loading: "Loading…",

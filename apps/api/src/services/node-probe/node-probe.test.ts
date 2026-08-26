@@ -10,6 +10,10 @@ import {
   successRate,
 } from "./logic.js";
 import { parseNodeProbeValue } from "./settings.js";
+import {
+  buildHistoryString,
+  classifyHistoryDay,
+} from "./history.js";
 
 describe("node-probe fingerprint", () => {
   it("is stable for the same inbound", () => {
@@ -126,5 +130,32 @@ describe("node-probe telegram digest", () => {
     });
     assert.match(s, /香港.*3 条/);
     assert.doesNotMatch(s, /· a/);
+  });
+});
+
+describe("node-probe history bar", () => {
+  it("classifies a day from ok/fail counts", () => {
+    assert.equal(classifyHistoryDay(0, 0), "-");
+    assert.equal(classifyHistoryDay(10, 0), "g");
+    assert.equal(classifyHistoryDay(0, 4), "r");
+    assert.equal(classifyHistoryDay(9, 1), "y");
+    assert.equal(classifyHistoryDay(19, 1), "g");
+    assert.equal(classifyHistoryDay(6, 4), "y");
+    assert.equal(classifyHistoryDay(2, 8), "r");
+  });
+
+  it("builds 90 cells oldest to newest", () => {
+    const now = new Date("2026-08-26T12:00:00.000Z");
+    const s = buildHistoryString(
+      [
+        { hour: new Date("2026-08-26T01:00:00.000Z"), okCount: 10, failCount: 0 },
+        { hour: new Date("2026-08-25T01:00:00.000Z"), okCount: 0, failCount: 5 },
+      ],
+      90,
+      now,
+    );
+    assert.equal(s.length, 90);
+    assert.equal(s.endsWith("rg"), true);
+    assert.equal(s.slice(0, 88), "-".repeat(88));
   });
 });

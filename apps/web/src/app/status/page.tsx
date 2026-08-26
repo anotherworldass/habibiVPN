@@ -7,6 +7,15 @@ import { apiFetch } from "../../lib/api";
 import { t } from "../../lib/copy";
 import { friendlyError } from "../../lib/errors";
 
+type StatusNode = {
+  name: string;
+  protocol: string;
+  last_ok: boolean | null;
+  last_delay_ms: number | null;
+  uptime_90d: number | null;
+  history: string;
+};
+
 type RegionRow = {
   region: string;
   region_name: string;
@@ -16,6 +25,7 @@ type RegionRow = {
   status: "active" | "partial" | "offline";
   uptime_90d: number | null;
   median_delay_ms: number | null;
+  nodes: StatusNode[];
 };
 
 type Incident = {
@@ -31,6 +41,7 @@ type StatusResponse = {
   overall: "operational" | "degraded" | "outage";
   vantage_note: string;
   updated_at: string | null;
+  history_days: number;
   summary: {
     total: number;
     up: number;
@@ -57,6 +68,52 @@ function regionLabel(
   if (s === "active") return copy.statusActive;
   if (s === "partial") return copy.statusPartial;
   return copy.statusOffline;
+}
+
+function historyDay(index: number, days: number) {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - (days - 1 - index));
+  return d.toISOString().slice(0, 10);
+}
+
+function historyTitle(
+  cell: string,
+  day: string,
+  copy: ReturnType<typeof t>["status"],
+) {
+  const label =
+    cell === "g"
+      ? copy.historyUp
+      : cell === "y"
+        ? copy.historyPartial
+        : cell === "r"
+          ? copy.historyDown
+          : copy.historyEmpty;
+  return `${day} · ${label}`;
+}
+
+function UptimeBar({
+  history,
+  days,
+  copy,
+}: {
+  history: string;
+  days: number;
+  copy: ReturnType<typeof t>["status"];
+}) {
+  const cells = history.padEnd(days, "-").slice(0, days).split("");
+  return (
+    <div className="status-uptime-bar" aria-hidden="true">
+      {cells.map((cell, i) => (
+        <span
+          key={i}
+          className={`status-uptime-cell status-uptime-cell--${cell === "g" || cell === "y" || cell === "r" ? cell : "n"}`}
+          title={historyTitle(cell, historyDay(i, days), copy)}
+        />
+      ))}
+    </div>
+  );
 }
 
 export default function StatusPage() {
@@ -164,7 +221,10 @@ export default function StatusPage() {
             </button>
           </div>
 
-          <div className="node-region-list" style={{ marginTop: 18 }}>
+          <p className="status-uptime-legend" style={{ marginTop: 16 }}>
+            {copy.historyLegend}
+          </p>
+          <div className="node-region-list" style={{ marginTop: 10 }}>
             {data.regions.map((r) => (
               <div key={r.region} className="node-region-card">
                 <div className="node-region-top">
@@ -187,6 +247,32 @@ export default function StatusPage() {
                     </span>
                   </div>
                 </div>
+                <ul className="status-node-list">
+                  {(r.nodes || []).map((n) => (
+                    <li key={`${r.region}-${n.protocol}-${n.name}`} className="status-node-row">
+                      <div className="status-node-meta">
+                        <span className="status-node-name">{n.name}</span>
+                        <span className="status-node-sub">
+                          {n.protocol}
+                          {n.last_delay_ms != null ? ` · ${Math.round(n.last_delay_ms)} ms` : ""}
+                          {n.uptime_90d != null ? ` · ${n.uptime_90d}%` : ""}
+                        </span>
+                      </div>
+                      <span
+                        className={`node-status node-status--${
+                          n.last_ok ? "active" : n.last_ok === false ? "offline" : "partial"
+                        }`}
+                      >
+                        {n.last_ok ? copy.online : n.last_ok === false ? copy.offline : "—"}
+                      </span>
+                      <UptimeBar
+                        history={n.history || ""}
+                        days={data.history_days || 90}
+                        copy={copy}
+                      />
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
