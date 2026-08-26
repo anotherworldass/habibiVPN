@@ -15,6 +15,10 @@ function releaseActionUrl(pkg: AppPackage, release: AppPackageRelease | null): s
   return resolveDownloadActionUrl(pkg, release);
 }
 
+function toIso(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null;
+}
+
 function publicDownload(pkg: DownloadPackage) {
   const release = pkg.releases[0] ?? null;
   const actionUrl = releaseActionUrl(pkg, release);
@@ -25,6 +29,7 @@ function publicDownload(pkg: DownloadPackage) {
     platform: pkg.platform,
     client: pkg.client,
     version_name: release?.versionName ?? null,
+    updated_at: toIso(release?.publishedAt ?? release?.updatedAt),
     action_url: actionUrl,
     store: pkg.client === "ios_appstore" || pkg.client === "android_play",
   };

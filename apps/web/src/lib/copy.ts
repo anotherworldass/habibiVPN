@@ -862,6 +862,7 @@ const zh = {
     ctaWindows: "下载 Windows 版",
     ctaMac: "下载 macOS 版",
     hintDesktop: "桌面安装包",
+    updatedAt: "更新于",
   },
   invite: {
     validLead: "好友邀请你加入。下载 App 或网页注册，即可领取套餐。",
@@ -1799,6 +1800,7 @@ const en = {
     ctaWindows: "Get Windows",
     ctaMac: "Get macOS",
     hintDesktop: "Desktop installer",
+    updatedAt: "Updated",
   },
   invite: {
     validLead: "A friend invited you. Download the app or sign up on the web to claim a plan.",

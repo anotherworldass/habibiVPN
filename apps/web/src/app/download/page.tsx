@@ -12,10 +12,26 @@ import {
   fetchPublicDownloads,
   type DownloadItem,
 } from "../../lib/downloads";
+import type { SiteLocale } from "../../lib/locale";
 import { downloadPlatforms } from "../../lib/site";
 
+function formatUpdatedAt(iso: string | null | undefined, locale: SiteLocale): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(locale === "en" ? "en-US" : "zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function DownloadPage() {
-  const messages = t(useLocale());
+  const locale = useLocale();
+  const messages = t(locale);
   const copy = messages.download;
   const platformCopy = {
     ios: { cta: messages.downloadUi.ctaIos },
@@ -67,12 +83,18 @@ export default function DownloadPage() {
                 const placeholder = !download?.action_url;
                 const href = download ? downloadActionHref(download) : "#";
                 const extra = platformCopy[item.id];
+                const updatedAt = formatUpdatedAt(download?.updated_at, locale);
                 return (
                   <div key={item.id} className="download-card">
                     <div className="download-card-icon">{platformIcons[item.id]}</div>
                     <div className="download-card-copy">
                       <h2>{item.label}</h2>
                       <p>{"hint" in extra ? extra.hint : item.hint}</p>
+                      {updatedAt && download?.updated_at ? (
+                        <time className="download-card-updated" dateTime={download.updated_at}>
+                          {messages.downloadUi.updatedAt} {updatedAt}
+                        </time>
+                      ) : null}
                     </div>
                     {placeholder ? (
                       <button

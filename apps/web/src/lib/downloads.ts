@@ -10,6 +10,7 @@ export type DownloadItem = {
   platform: DownloadPlatformId;
   client: string;
   version_name: string | null;
+  updated_at: string | null;
   action_url: string | null;
   store: boolean;
 };
