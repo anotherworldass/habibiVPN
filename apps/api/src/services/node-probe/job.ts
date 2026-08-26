@@ -439,7 +439,7 @@ export async function runNodeProbeRound(input?: {
       cfg: probeCfg,
       round,
       log: input?.log,
-      notify: Boolean(alertProjectId),
+      notify: Boolean(alertProjectId) && probeCfg.telegramEnabled,
     });
     await cleanupOldRows().catch(() => undefined);
 

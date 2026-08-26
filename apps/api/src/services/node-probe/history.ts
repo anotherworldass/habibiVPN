@@ -1,4 +1,5 @@
 export const STATUS_HISTORY_DAYS = 90;
+export const STATUS_TODAY_HOURS = 24;
 
 /** g = up, y = partial, r = down, - = no samples */
 export type HistoryCell = "g" | "y" | "r" | "-";
@@ -47,4 +48,32 @@ export function historyDayLabels(days = STATUS_HISTORY_DAYS, now = new Date()): 
     out.push(utcDayKey(new Date(today - i * 86400_000)));
   }
   return out;
+}
+
+/** 24 cells for the current UTC day, oldest hour first. Hours after `now` stay empty. */
+export function buildTodayHourString(
+  hourlies: Array<{ hour: Date; okCount: number; failCount: number }>,
+  now = new Date(),
+): string {
+  const day = utcDayKey(now);
+  const currentHour = now.getUTCHours();
+  const byHour = new Map<number, { ok: number; fail: number }>();
+  for (const h of hourlies) {
+    if (utcDayKey(h.hour) !== day) continue;
+    const hr = h.hour.getUTCHours();
+    const cur = byHour.get(hr) || { ok: 0, fail: 0 };
+    cur.ok += h.okCount;
+    cur.fail += h.failCount;
+    byHour.set(hr, cur);
+  }
+  const cells: HistoryCell[] = [];
+  for (let hr = 0; hr < STATUS_TODAY_HOURS; hr++) {
+    if (hr > currentHour) {
+      cells.push("-");
+      continue;
+    }
+    const stats = byHour.get(hr) || { ok: 0, fail: 0 };
+    cells.push(classifyHistoryDay(stats.ok, stats.fail));
+  }
+  return cells.join("");
 }

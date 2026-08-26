@@ -61,6 +61,7 @@ type ProbeSettings = {
   mihomoApiUrl: string;
   mihomoSecret: string;
   mixedPort: number;
+  telegramEnabled: boolean;
   telegramChatId: string | null;
 };
 
@@ -155,6 +156,7 @@ export default function NodeProbePage() {
         enabled: cfg.enabled,
         remark: cfg.remark || "",
         probeSlotId: cfg.probeSlotId || "",
+        telegramEnabled: cfg.telegramEnabled !== false,
         telegramChatId: cfg.telegramChatId || "",
         delayUrl: cfg.delayUrl,
         speedUrl: cfg.speedUrl || "",
@@ -356,6 +358,14 @@ export default function NodeProbePage() {
                     rules={[{ required: true, message: "填写探针槽位" }]}
                   >
                     <Input placeholder="槽位 ID（cuid）" />
+                  </Form.Item>
+                  <Form.Item
+                    name="telegramEnabled"
+                    label="Bot 推送"
+                    extra="关闭后仍定时探测、仍记事故，只是不往运维群发。测试消息可照常发。"
+                    valuePropName="checked"
+                  >
+                    <Switch />
                   </Form.Item>
                   <Form.Item
                     name="telegramChatId"

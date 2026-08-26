@@ -32,6 +32,7 @@ export const DEFAULT_NODE_PROBE_VALUE = {
   mihomoApiUrl: "http://127.0.0.1:19090",
   mihomoSecret: "habibi-probe",
   mixedPort: 17890,
+  telegramEnabled: true,
   telegramChatId: null as string | null,
 };
 
@@ -59,6 +60,7 @@ const schema = z.object({
   mihomoApiUrl: z.string().url().max(200),
   mihomoSecret: z.string().max(128),
   mixedPort: z.number().int().min(1024).max(65535),
+  telegramEnabled: z.boolean(),
   telegramChatId: z.string().max(64).nullable(),
 });
 
@@ -110,6 +112,7 @@ export function parseNodeProbeValue(raw: unknown): NodeProbeValue {
     mihomoApiUrl: strOrNull(o.mihomoApiUrl) || d.mihomoApiUrl,
     mihomoSecret: typeof o.mihomoSecret === "string" ? o.mihomoSecret : d.mihomoSecret,
     mixedPort: num(o.mixedPort, d.mixedPort),
+    telegramEnabled: bool(o.telegramEnabled, d.telegramEnabled),
     telegramChatId: strOrNull(o.telegramChatId),
   };
   const parsed = schema.safeParse(merged);

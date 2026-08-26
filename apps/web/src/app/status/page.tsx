@@ -13,7 +13,9 @@ type StatusNode = {
   last_ok: boolean | null;
   last_delay_ms: number | null;
   uptime_90d: number | null;
+  uptime_today: number | null;
   history: string;
+  history_today: string;
 };
 
 type RegionRow = {
@@ -37,11 +39,15 @@ type Incident = {
   closed_at: string | null;
 };
 
+type StatusCopy = ReturnType<typeof t>["status"];
+
 type StatusResponse = {
   overall: "operational" | "degraded" | "outage";
   vantage_note: string;
   updated_at: string | null;
   history_days: number;
+  history_today_hours: number;
+  today_hour: number;
   summary: {
     total: number;
     up: number;
@@ -52,19 +58,13 @@ type StatusResponse = {
   incidents: Incident[];
 };
 
-function overallLabel(
-  s: StatusResponse["overall"],
-  copy: ReturnType<typeof t>["status"],
-) {
+function overallLabel(s: StatusResponse["overall"], copy: StatusCopy) {
   if (s === "operational") return copy.operational;
   if (s === "degraded") return copy.degraded;
   return copy.outage;
 }
 
-function regionLabel(
-  s: RegionRow["status"],
-  copy: ReturnType<typeof t>["status"],
-) {
+function regionLabel(s: RegionRow["status"], copy: StatusCopy) {
   if (s === "active") return copy.statusActive;
   if (s === "partial") return copy.statusPartial;
   return copy.statusOffline;
@@ -77,41 +77,59 @@ function historyDay(index: number, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-function historyTitle(
-  cell: string,
-  day: string,
-  copy: ReturnType<typeof t>["status"],
-) {
-  const label =
-    cell === "g"
-      ? copy.historyUp
-      : cell === "y"
-        ? copy.historyPartial
-        : cell === "r"
-          ? copy.historyDown
-          : copy.historyEmpty;
-  return `${day} · ${label}`;
+function cellLabel(cell: string, copy: ReturnType<typeof t>["status"], future: boolean) {
+  if (future) return copy.historyFuture;
+  if (cell === "g") return copy.historyUp;
+  if (cell === "y") return copy.historyPartial;
+  if (cell === "r") return copy.historyDown;
+  return copy.historyEmpty;
+}
+
+function hourRangeLabel(hourUtc: number) {
+  const start = new Date();
+  start.setUTCHours(hourUtc, 0, 0, 0);
+  const end = new Date(start.getTime() + 3600_000);
+  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  return `${start.toLocaleTimeString(undefined, opts)}–${end.toLocaleTimeString(undefined, opts)}`;
+}
+
+function pctText(n: number | null | undefined) {
+  return n == null ? "—" : `${n}%`;
 }
 
 function UptimeBar({
   history,
-  days,
+  cells: cellCount,
   copy,
+  mode,
+  todayHour,
 }: {
   history: string;
-  days: number;
+  cells: number;
   copy: ReturnType<typeof t>["status"];
+  mode: "day" | "hour";
+  todayHour?: number;
 }) {
-  const cells = history.padEnd(days, "-").slice(0, days).split("");
+  const items = history.padEnd(cellCount, "-").slice(0, cellCount).split("");
   return (
-    <div className="status-uptime-bar" aria-hidden="true">
-      {cells.map((cell, i) => (
-        <span
-          key={i}
-          className={`status-uptime-cell status-uptime-cell--${cell === "g" || cell === "y" || cell === "r" ? cell : "n"}`}
-          title={historyTitle(cell, historyDay(i, days), copy)}
-        />
-      ))}
+    <div
+      className={`status-uptime-bar${mode === "hour" ? " status-uptime-bar--today" : ""}`}
+      aria-hidden="true"
+    >
+      {items.map((cell, i) => {
+        const future = mode === "hour" && todayHour != null && i > todayHour;
+        const tone =
+          future ? "f" : cell === "g" || cell === "y" || cell === "r" ? cell : "n";
+        const when =
+          mode === "hour" ? hourRangeLabel(i) : historyDay(i, cellCount);
+        return (
+          <span
+            key={i}
+            className={`status-uptime-cell status-uptime-cell--${tone}`}
+            title={`${when} · ${cellLabel(cell, copy, future)}`}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -255,7 +273,6 @@ export default function StatusPage() {
                         <span className="status-node-sub">
                           {n.protocol}
                           {n.last_delay_ms != null ? ` · ${Math.round(n.last_delay_ms)} ms` : ""}
-                          {n.uptime_90d != null ? ` · ${n.uptime_90d}%` : ""}
                         </span>
                       </div>
                       <span
@@ -265,11 +282,29 @@ export default function StatusPage() {
                       >
                         {n.last_ok ? copy.online : n.last_ok === false ? copy.offline : "—"}
                       </span>
-                      <UptimeBar
-                        history={n.history || ""}
-                        days={data.history_days || 90}
-                        copy={copy}
-                      />
+                      <div className="status-uptime-track">
+                        <div className="status-uptime-row">
+                          <span className="status-uptime-label">{copy.historyToday}</span>
+                          <UptimeBar
+                            history={n.history_today || ""}
+                            cells={data.history_today_hours || 24}
+                            copy={copy}
+                            mode="hour"
+                            todayHour={data.today_hour}
+                          />
+                          <span className="status-uptime-pct">{pctText(n.uptime_today)}</span>
+                        </div>
+                        <div className="status-uptime-row">
+                          <span className="status-uptime-label">{copy.history90d}</span>
+                          <UptimeBar
+                            history={n.history || ""}
+                            cells={data.history_days || 90}
+                            copy={copy}
+                            mode="day"
+                          />
+                          <span className="status-uptime-pct">{pctText(n.uptime_90d)}</span>
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ul>

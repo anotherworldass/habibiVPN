@@ -3032,11 +3032,39 @@ textarea.sub-url[data-manual="true"] {
 }
 
 .status-uptime-bar {
-  grid-column: 1 / -1;
   display: flex;
   gap: 1px;
-  height: 18px;
+  height: 14px;
   width: 100%;
+}
+
+.status-uptime-track {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+}
+
+.status-uptime-row {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) 3.4em;
+  column-gap: 8px;
+  align-items: center;
+}
+
+.status-uptime-label,
+.status-uptime-pct {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.status-uptime-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-uptime-bar--today {
+  height: 18px;
 }
 
 .status-uptime-cell {
@@ -3059,6 +3087,10 @@ textarea.sub-url[data-manual="true"] {
 
 .status-uptime-cell--n {
   background: color-mix(in srgb, var(--ink) 10%, white);
+}
+
+.status-uptime-cell--f {
+  background: color-mix(in srgb, var(--ink) 5%, white);
 }
 
 .view-toggle {

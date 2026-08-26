@@ -13,6 +13,7 @@ import {
 import { parseNodeProbeValue } from "./settings.js";
 import {
   buildHistoryString,
+  buildTodayHourString,
   classifyHistoryDay,
 } from "./history.js";
 
@@ -77,6 +78,8 @@ describe("node-probe settings", () => {
     assert.equal(v.delayIntervalSec, 120);
     assert.equal(v.mixedPort, 17890);
     assert.equal(v.probeSlotId, null);
+    assert.equal(v.telegramEnabled, true);
+    assert.equal(parseNodeProbeValue({ telegramEnabled: false }).telegramEnabled, false);
   });
 
   it("rejects too-frequent speed tests", () => {
@@ -160,5 +163,24 @@ describe("node-probe history bar", () => {
     assert.equal(s.length, 90);
     assert.equal(s.endsWith("rg"), true);
     assert.equal(s.slice(0, 88), "-".repeat(88));
+  });
+
+  it("builds 24 hourly cells for today and leaves future hours empty", () => {
+    const now = new Date("2026-08-26T07:30:00.000Z");
+    const s = buildTodayHourString(
+      [
+        { hour: new Date("2026-08-26T01:00:00.000Z"), okCount: 10, failCount: 0 },
+        { hour: new Date("2026-08-26T02:00:00.000Z"), okCount: 1, failCount: 4 },
+        { hour: new Date("2026-08-25T23:00:00.000Z"), okCount: 0, failCount: 9 },
+        { hour: new Date("2026-08-26T10:00:00.000Z"), okCount: 0, failCount: 3 },
+      ],
+      now,
+    );
+    assert.equal(s.length, 24);
+    assert.equal(s[1], "g");
+    assert.equal(s[2], "r");
+    assert.equal(s[7], "-");
+    assert.equal(s[10], "-");
+    assert.equal(s.slice(8), "-".repeat(16));
   });
 });

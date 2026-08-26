@@ -1,6 +1,12 @@
 import { prisma } from "../../lib/prisma.js";
 import { regionZhName } from "../../lib/regions.js";
-import { buildHistoryString, STATUS_HISTORY_DAYS } from "./history.js";
+import {
+  buildHistoryString,
+  buildTodayHourString,
+  STATUS_HISTORY_DAYS,
+  STATUS_TODAY_HOURS,
+  utcDayKey,
+} from "./history.js";
 import {
   classifyOverall,
   classifyRegion,
@@ -17,7 +23,9 @@ export type PublicStatusNode = {
   last_ok: boolean | null;
   last_delay_ms: number | null;
   uptime_90d: number | null;
+  uptime_today: number | null;
   history: string;
+  history_today: string;
 };
 
 export type PublicStatusResponse = {
@@ -26,6 +34,8 @@ export type PublicStatusResponse = {
   vantage_note: string;
   updated_at: string | null;
   history_days: number;
+  history_today_hours: number;
+  today_hour: number;
   summary: {
     total: number;
     up: number;
@@ -101,13 +111,25 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
     const ok = rows.reduce((n, r) => n + r.okCount, 0);
     const fail = rows.reduce((n, r) => n + r.failCount, 0);
     const rate = successRate(ok, fail);
+    const day = utcDayKey(now);
+    const todayOk = rows.reduce(
+      (n, r) => n + (utcDayKey(r.hour) === day ? r.okCount : 0),
+      0,
+    );
+    const todayFail = rows.reduce(
+      (n, r) => n + (utcDayKey(r.hour) === day ? r.failCount : 0),
+      0,
+    );
+    const todayRate = successRate(todayOk, todayFail);
     const node: NodeAcc = {
       name: t.name,
       protocol: t.protocol,
       last_ok: t.lastOk,
       last_delay_ms: t.lastDelayMs,
       uptime_90d: rate == null ? null : Math.round(rate * 1000) / 10,
+      uptime_today: todayRate == null ? null : Math.round(todayRate * 1000) / 10,
       history: buildHistoryString(rows, STATUS_HISTORY_DAYS, now),
+      history_today: buildTodayHourString(rows, now),
       delays: t.lastOk && t.lastDelayMs != null ? [t.lastDelayMs] : [],
     };
     const bucket = byRegion.get(t.region) || { nodes: [] };
@@ -173,6 +195,8 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
     vantage_note: "监测点位于境外机房，反映节点自身协议/出口是否健康，不代表国内用户可达性。",
     updated_at: updatedAt?.toISOString() ?? null,
     history_days: STATUS_HISTORY_DAYS,
+    history_today_hours: STATUS_TODAY_HOURS,
+    today_hour: now.getUTCHours(),
     summary: {
       total: targets.length,
       up,

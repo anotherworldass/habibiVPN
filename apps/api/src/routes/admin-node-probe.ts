@@ -48,6 +48,7 @@ const settingsPatch = z
     mihomoApiUrl: z.string().max(200).optional(),
     mihomoSecret: z.string().max(128).optional(),
     mixedPort: z.number().int().optional(),
+    telegramEnabled: z.boolean().optional(),
     telegramChatId: z.string().max(64).nullable().optional(),
   })
   .strip();
