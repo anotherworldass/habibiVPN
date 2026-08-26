@@ -2,8 +2,12 @@ import { prisma } from "../../lib/prisma.js";
 import { regionZhName } from "../../lib/regions.js";
 import {
   buildHistoryString,
+  buildLastHourString,
   buildTodayHourString,
+  lastHourWindow,
   STATUS_HISTORY_DAYS,
+  STATUS_HOUR_CELLS,
+  STATUS_HOUR_STEP_MS,
   STATUS_TODAY_HOURS,
   utcDayKey,
 } from "./history.js";
@@ -25,8 +29,10 @@ export type PublicStatusNode = {
   last_delay_ms: number | null;
   uptime_90d: number | null;
   uptime_today: number | null;
+  uptime_hour: number | null;
   history: string;
   history_today: string;
+  history_hour: string;
 };
 
 export type PublicStatusResponse = {
@@ -36,6 +42,9 @@ export type PublicStatusResponse = {
   updated_at: string | null;
   history_days: number;
   history_today_hours: number;
+  history_hour_cells: number;
+  history_hour_step_ms: number;
+  history_hour_from: string;
   today_hour: number;
   summary: {
     total: number;
@@ -80,21 +89,37 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
     orderBy: [{ region: "asc" }, { name: "asc" }],
   });
 
-  const hourFrom = new Date(Date.now() - STATUS_HISTORY_DAYS * 86400_000);
-  const hourlies = targets.length
-    ? await prisma.nodeProbeHourly.findMany({
-        where: {
-          targetId: { in: targets.map((t) => t.id) },
-          hour: { gte: hourFrom },
-        },
-        select: {
-          targetId: true,
-          hour: true,
-          okCount: true,
-          failCount: true,
-        },
-      })
-    : [];
+  const now = new Date();
+  const hourFrom = new Date(now.getTime() - STATUS_HISTORY_DAYS * 86400_000);
+  const hourWin = lastHourWindow(now);
+  const targetIds = targets.map((t) => t.id);
+  const [hourlies, recentSamples] = targets.length
+    ? await Promise.all([
+        prisma.nodeProbeHourly.findMany({
+          where: {
+            targetId: { in: targetIds },
+            hour: { gte: hourFrom },
+          },
+          select: {
+            targetId: true,
+            hour: true,
+            okCount: true,
+            failCount: true,
+          },
+        }),
+        prisma.nodeProbeSample.findMany({
+          where: {
+            targetId: { in: targetIds },
+            probedAt: { gte: hourWin.start },
+          },
+          select: {
+            targetId: true,
+            probedAt: true,
+            ok: true,
+          },
+        }),
+      ])
+    : [[], []];
 
   const hoursByTarget = new Map<string, typeof hourlies>();
   for (const h of hourlies) {
@@ -103,7 +128,14 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
     hoursByTarget.set(h.targetId, list);
   }
 
-  const now = new Date();
+  const samplesByTarget = new Map<string, typeof recentSamples>();
+  for (const s of recentSamples) {
+    const list = samplesByTarget.get(s.targetId) || [];
+    list.push(s);
+    samplesByTarget.set(s.targetId, list);
+  }
+
+  const hourWinMs = { start: hourWin.start.getTime(), end: hourWin.end.getTime() };
   type NodeAcc = PublicStatusNode & { delays: number[] };
   const byRegion = new Map<string, { nodes: NodeAcc[] }>();
 
@@ -122,6 +154,16 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
       0,
     );
     const todayRate = successRate(todayOk, todayFail);
+    const samples = samplesByTarget.get(t.id) || [];
+    let hourOk = 0;
+    let hourFail = 0;
+    for (const s of samples) {
+      const at = s.probedAt.getTime();
+      if (at < hourWinMs.start || at >= hourWinMs.end) continue;
+      if (s.ok) hourOk += 1;
+      else hourFail += 1;
+    }
+    const hourRate = successRate(hourOk, hourFail);
     const node: NodeAcc = {
       name: t.name,
       protocol: t.protocol,
@@ -129,8 +171,10 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
       last_delay_ms: t.lastDelayMs,
       uptime_90d: rate == null ? null : Math.round(rate * 1000) / 10,
       uptime_today: todayRate == null ? null : Math.round(todayRate * 1000) / 10,
+      uptime_hour: hourRate == null ? null : Math.round(hourRate * 1000) / 10,
       history: buildHistoryString(rows, STATUS_HISTORY_DAYS, now),
       history_today: buildTodayHourString(rows, now),
+      history_hour: buildLastHourString(samples, now),
       delays: t.lastOk && t.lastDelayMs != null ? [t.lastDelayMs] : [],
     };
     const bucket = byRegion.get(t.region) || { nodes: [] };
@@ -197,6 +241,9 @@ export async function getPublicProbeStatus(): Promise<PublicStatusResponse> {
     updated_at: updatedAt?.toISOString() ?? null,
     history_days: STATUS_HISTORY_DAYS,
     history_today_hours: STATUS_TODAY_HOURS,
+    history_hour_cells: STATUS_HOUR_CELLS,
+    history_hour_step_ms: STATUS_HOUR_STEP_MS,
+    history_hour_from: hourWin.start.toISOString(),
     today_hour: now.getUTCHours(),
     summary: {
       total: targets.length,

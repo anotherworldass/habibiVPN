@@ -17,8 +17,10 @@ import {
 import { parseNodeProbeValue } from "./settings.js";
 import {
   buildHistoryString,
+  buildLastHourString,
   buildTodayHourString,
   classifyHistoryDay,
+  lastHourWindow,
 } from "./history.js";
 
 describe("node-probe fingerprint", () => {
@@ -220,5 +222,24 @@ describe("node-probe history bar", () => {
     assert.equal(s[7], "-");
     assert.equal(s[10], "-");
     assert.equal(s.slice(8), "-".repeat(16));
+  });
+
+  it("builds 12 five-minute cells for the last hour", () => {
+    const now = new Date("2026-08-26T12:07:00.000Z");
+    const { start, end } = lastHourWindow(now);
+    assert.equal(start.toISOString(), "2026-08-26T11:10:00.000Z");
+    assert.equal(end.toISOString(), "2026-08-26T12:10:00.000Z");
+    const s = buildLastHourString(
+      [
+        { probedAt: new Date("2026-08-26T11:12:00.000Z"), ok: true },
+        { probedAt: new Date("2026-08-26T12:06:00.000Z"), ok: false },
+        { probedAt: new Date("2026-08-26T11:00:00.000Z"), ok: false },
+      ],
+      now,
+    );
+    assert.equal(s.length, 12);
+    assert.equal(s[0], "g");
+    assert.equal(s[11], "r");
+    assert.equal(s.slice(1, 11), "-".repeat(10));
   });
 });

@@ -1,5 +1,7 @@
 export const STATUS_HISTORY_DAYS = 90;
 export const STATUS_TODAY_HOURS = 24;
+export const STATUS_HOUR_CELLS = 12;
+export const STATUS_HOUR_STEP_MS = 5 * 60_000;
 
 /** g = up, y = partial, r = down, - = no samples */
 export type HistoryCell = "g" | "y" | "r" | "-";
@@ -76,4 +78,36 @@ export function buildTodayHourString(
     cells.push(classifyHistoryDay(stats.ok, stats.fail));
   }
   return cells.join("");
+}
+
+export function lastHourWindow(now = new Date()): { start: Date; end: Date } {
+  const end =
+    Math.floor(now.getTime() / STATUS_HOUR_STEP_MS) * STATUS_HOUR_STEP_MS +
+    STATUS_HOUR_STEP_MS;
+  const start = end - STATUS_HOUR_CELLS * STATUS_HOUR_STEP_MS;
+  return { start: new Date(start), end: new Date(end) };
+}
+
+/** 12 cells for the last hour, oldest first. Each cell is a 5-minute wall-clock bucket. */
+export function buildLastHourString(
+  samples: Array<{ probedAt: Date; ok: boolean }>,
+  now = new Date(),
+): string {
+  const { start, end } = lastHourWindow(now);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const buckets = Array.from({ length: STATUS_HOUR_CELLS }, () => ({
+    ok: 0,
+    fail: 0,
+  }));
+  for (const s of samples) {
+    const t = s.probedAt.getTime();
+    if (t < startMs || t >= endMs) continue;
+    const i = Math.floor((t - startMs) / STATUS_HOUR_STEP_MS);
+    if (i < 0 || i >= STATUS_HOUR_CELLS) continue;
+    const b = buckets[i]!;
+    if (s.ok) b.ok += 1;
+    else b.fail += 1;
+  }
+  return buckets.map((b) => classifyHistoryDay(b.ok, b.fail)).join("");
 }

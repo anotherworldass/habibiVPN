@@ -14,8 +14,10 @@ type StatusNode = {
   last_delay_ms: number | null;
   uptime_90d: number | null;
   uptime_today: number | null;
+  uptime_hour: number | null;
   history: string;
   history_today: string;
+  history_hour: string;
 };
 
 type RegionRow = {
@@ -47,6 +49,9 @@ type StatusResponse = {
   updated_at: string | null;
   history_days: number;
   history_today_hours: number;
+  history_hour_cells: number;
+  history_hour_step_ms: number;
+  history_hour_from: string;
   today_hour: number;
   summary: {
     total: number;
@@ -74,7 +79,11 @@ function historyDay(index: number, days: number) {
   const d = new Date();
   d.setUTCHours(0, 0, 0, 0);
   d.setUTCDate(d.getUTCDate() - (days - 1 - index));
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function cellLabel(cell: string, copy: ReturnType<typeof t>["status"], future: boolean) {
@@ -85,12 +94,25 @@ function cellLabel(cell: string, copy: ReturnType<typeof t>["status"], future: b
   return copy.historyEmpty;
 }
 
+function formatClock(d: Date) {
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
 function hourRangeLabel(hourUtc: number) {
   const start = new Date();
   start.setUTCHours(hourUtc, 0, 0, 0);
   const end = new Date(start.getTime() + 3600_000);
-  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
-  return `${start.toLocaleTimeString(undefined, opts)}–${end.toLocaleTimeString(undefined, opts)}`;
+  const day = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${day} ${formatClock(start)}–${formatClock(end)}`;
+}
+
+function slotRangeLabel(fromIso: string | undefined, index: number, stepMs: number) {
+  const startMs = fromIso ? Date.parse(fromIso) : NaN;
+  const start = Number.isFinite(startMs)
+    ? new Date(startMs + index * stepMs)
+    : new Date(Date.now() - (12 - index) * stepMs);
+  const end = new Date(start.getTime() + stepMs);
+  return `${formatClock(start)}–${formatClock(end)}`;
 }
 
 function pctText(n: number | null | undefined) {
@@ -103,33 +125,68 @@ function UptimeBar({
   copy,
   mode,
   todayHour,
+  hourFrom,
+  hourStepMs,
 }: {
   history: string;
   cells: number;
   copy: ReturnType<typeof t>["status"];
-  mode: "day" | "hour";
+  mode: "day" | "today" | "hour";
   todayHour?: number;
+  hourFrom?: string;
+  hourStepMs?: number;
 }) {
   const items = history.padEnd(cellCount, "-").slice(0, cellCount).split("");
+  const [tip, setTip] = useState<{ text: string; x: number; y: number; below: boolean } | null>(
+    null,
+  );
+
   return (
-    <div
-      className={`status-uptime-bar${mode === "hour" ? " status-uptime-bar--today" : ""}`}
-      aria-hidden="true"
-    >
-      {items.map((cell, i) => {
-        const future = mode === "hour" && todayHour != null && i > todayHour;
-        const tone =
-          future ? "f" : cell === "g" || cell === "y" || cell === "r" ? cell : "n";
-        const when =
-          mode === "hour" ? hourRangeLabel(i) : historyDay(i, cellCount);
-        return (
-          <span
-            key={i}
-            className={`status-uptime-cell status-uptime-cell--${tone}`}
-            title={`${when} · ${cellLabel(cell, copy, future)}`}
-          />
-        );
-      })}
+    <div className="status-uptime-bar-wrap">
+      <div
+        className={`status-uptime-bar${mode === "day" ? "" : " status-uptime-bar--today"}${mode === "hour" ? " status-uptime-bar--hour" : ""}`}
+      >
+        {items.map((cell, i) => {
+          const future = mode === "today" && todayHour != null && i > todayHour;
+          const tone =
+            future ? "f" : cell === "g" || cell === "y" || cell === "r" ? cell : "n";
+          const when =
+            mode === "hour"
+              ? slotRangeLabel(hourFrom, i, hourStepMs || 300_000)
+              : mode === "today"
+                ? hourRangeLabel(i)
+                : historyDay(i, cellCount);
+          const text = `${when} · ${cellLabel(cell, copy, future)}`;
+          return (
+            <span
+              key={i}
+              className={`status-uptime-cell status-uptime-cell--${tone}`}
+              aria-label={text}
+              onPointerEnter={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                const pad = 72;
+                const below = r.top < 44;
+                setTip({
+                  text,
+                  x: Math.min(Math.max(r.left + r.width / 2, pad), window.innerWidth - pad),
+                  y: below ? r.bottom : r.top,
+                  below,
+                });
+              }}
+              onPointerLeave={() => setTip(null)}
+            />
+          );
+        })}
+      </div>
+      {tip ? (
+        <span
+          className={`status-uptime-tip${tip.below ? " status-uptime-tip--below" : ""}`}
+          style={{ left: tip.x, top: tip.y }}
+          role="tooltip"
+        >
+          {tip.text}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -284,12 +341,24 @@ export default function StatusPage() {
                       </span>
                       <div className="status-uptime-track">
                         <div className="status-uptime-row">
+                          <span className="status-uptime-label">{copy.historyHour}</span>
+                          <UptimeBar
+                            history={n.history_hour || ""}
+                            cells={data.history_hour_cells || 12}
+                            copy={copy}
+                            mode="hour"
+                            hourFrom={data.history_hour_from}
+                            hourStepMs={data.history_hour_step_ms || 300_000}
+                          />
+                          <span className="status-uptime-pct">{pctText(n.uptime_hour)}</span>
+                        </div>
+                        <div className="status-uptime-row">
                           <span className="status-uptime-label">{copy.historyToday}</span>
                           <UptimeBar
                             history={n.history_today || ""}
                             cells={data.history_today_hours || 24}
                             copy={copy}
-                            mode="hour"
+                            mode="today"
                             todayHour={data.today_hour}
                           />
                           <span className="status-uptime-pct">{pctText(n.uptime_today)}</span>
