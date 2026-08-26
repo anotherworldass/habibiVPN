@@ -107,7 +107,17 @@ describe("node-probe settings", () => {
     assert.equal(v.mixedPort, 17890);
     assert.equal(v.probeSlotId, null);
     assert.equal(v.telegramEnabled, true);
+    assert.equal(v.delayUrl, "https://www.gstatic.com/generate_204");
+    assert.equal(v.delayTimeoutMs, 8000);
+    assert.equal(v.delayConcurrency, 4);
     assert.equal(parseNodeProbeValue({ telegramEnabled: false }).telegramEnabled, false);
+    assert.equal(
+      parseNodeProbeValue({ delayUrl: "http://www.gstatic.com/generate_204" }).delayUrl,
+      "https://www.gstatic.com/generate_204",
+    );
+    assert.equal(parseNodeProbeValue({ delayTimeoutMs: 5000 }).delayTimeoutMs, 8000);
+    assert.equal(parseNodeProbeValue({ delayConcurrency: 8 }).delayConcurrency, 4);
+    assert.equal(parseNodeProbeValue({ delayConcurrency: 3 }).delayConcurrency, 3);
   });
 
   it("rejects too-frequent speed tests", () => {

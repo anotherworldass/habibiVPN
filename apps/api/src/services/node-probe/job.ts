@@ -27,6 +27,9 @@ const TICK_MS = 20_000;
 const SAMPLE_TTL_DAYS = 14;
 const HOURLY_TTL_DAYS = 90;
 const SPEED_ROUND_BUDGET_MS = 8 * 60_000;
+const PUT_CONFIG_SETTLE_MS = 500;
+
+let lastProbeYaml = "";
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -168,6 +171,10 @@ async function mapPool<T, R>(
   });
   await Promise.all(workers);
   return out;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function hourBucket(d: Date): Date {
@@ -369,7 +376,16 @@ export async function runNodeProbeRound(input?: {
       controllerHost: controllerHost(probeCfg.mihomoApiUrl),
       secret: probeCfg.mihomoSecret,
     });
-    await mihomo.putConfig(yaml);
+    const loaded = await mihomo.listProxyNames().catch(() => null);
+    const missing =
+      loaded != null
+        ? targets.some((t) => !loaded.has(t.clashName))
+        : yaml !== lastProbeYaml;
+    if (yaml !== lastProbeYaml || missing) {
+      await mihomo.putConfig(yaml);
+      lastProbeYaml = yaml;
+      await sleep(PUT_CONFIG_SETTLE_MS);
+    }
 
     const probedAt = new Date();
     const round: ProbeRoundSample[] = [];
@@ -380,7 +396,11 @@ export async function runNodeProbeRound(input?: {
       async (t) => {
         const [tcp, delay] = await Promise.all([
           tcpConnectMs(t.server, t.port, 3000),
-          mihomo.proxyDelay(t.clashName, probeCfg.delayUrl, probeCfg.delayTimeoutMs),
+          mihomo.proxyDelayWithRetry(
+            t.clashName,
+            probeCfg.delayUrl,
+            probeCfg.delayTimeoutMs,
+          ),
         ]);
         return { t, tcp, delay };
       },

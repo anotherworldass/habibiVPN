@@ -14,11 +14,11 @@ export const DEFAULT_NODE_PROBE_VALUE = {
   probeSlotId: null as string | null,
   delayIntervalSec: 120,
   speedIntervalSec: 900,
-  delayUrl: "http://www.gstatic.com/generate_204",
+  delayUrl: "https://www.gstatic.com/generate_204",
   speedUrl: "",
   speedBytes: 1_048_576,
   speedEnabled: true,
-  delayTimeoutMs: 5000,
+  delayTimeoutMs: 8000,
   speedTimeoutMs: 10_000,
   delayConcurrency: 4,
   downFailStreak: 3,
@@ -77,6 +77,18 @@ function strOrNull(v: unknown): string | null {
   return s ? s : null;
 }
 
+/** HTTP generate_204 + HEAD is a common false-fail; keep the HTTPS check URL. */
+export function normalizeDelayUrl(url: string): string {
+  const u = url.trim();
+  if (
+    u === "http://www.gstatic.com/generate_204" ||
+    u === "https://www.gstatic.com/generate_204"
+  ) {
+    return DEFAULT_NODE_PROBE_VALUE.delayUrl;
+  }
+  return u;
+}
+
 function num(v: unknown, fallback: number): number {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -94,13 +106,19 @@ export function parseNodeProbeValue(raw: unknown): NodeProbeValue {
     probeSlotId: strOrNull(o.probeSlotId),
     delayIntervalSec: num(o.delayIntervalSec, d.delayIntervalSec),
     speedIntervalSec: num(o.speedIntervalSec, d.speedIntervalSec),
-    delayUrl: strOrNull(o.delayUrl) || d.delayUrl,
+    delayUrl: normalizeDelayUrl(strOrNull(o.delayUrl) || d.delayUrl),
     speedUrl: speedUrlRaw,
     speedBytes: num(o.speedBytes, d.speedBytes),
     speedEnabled: bool(o.speedEnabled, d.speedEnabled),
-    delayTimeoutMs: num(o.delayTimeoutMs, d.delayTimeoutMs),
+    delayTimeoutMs:
+      num(o.delayTimeoutMs, d.delayTimeoutMs) === 5000
+        ? d.delayTimeoutMs
+        : num(o.delayTimeoutMs, d.delayTimeoutMs),
     speedTimeoutMs: num(o.speedTimeoutMs, d.speedTimeoutMs),
-    delayConcurrency: num(o.delayConcurrency, d.delayConcurrency),
+    delayConcurrency:
+      num(o.delayConcurrency, d.delayConcurrency) === 8
+        ? d.delayConcurrency
+        : num(o.delayConcurrency, d.delayConcurrency),
     downFailStreak: num(o.downFailStreak, d.downFailStreak),
     unstableWindowMin: num(o.unstableWindowMin, d.unstableWindowMin),
     unstableSuccessRate: num(o.unstableSuccessRate, d.unstableSuccessRate),

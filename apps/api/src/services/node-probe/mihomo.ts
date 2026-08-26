@@ -77,6 +77,7 @@ export class MihomoClient {
     const q = new URLSearchParams({
       url,
       timeout: String(timeoutMs),
+      expected: "204,200",
     });
     const encoded = encodeURIComponent(name);
     try {
@@ -102,6 +103,29 @@ export class MihomoClient {
     } catch (err) {
       return { ok: false, error: truncateError(err) };
     }
+  }
+
+  async proxyDelayWithRetry(
+    name: string,
+    url: string,
+    timeoutMs: number,
+  ): Promise<DelayResult> {
+    const first = await this.proxyDelay(name, url, timeoutMs);
+    if (first.ok) return first;
+    await new Promise((r) => setTimeout(r, 400));
+    return this.proxyDelay(name, url, timeoutMs);
+  }
+
+  async listProxyNames(): Promise<Set<string>> {
+    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/proxies`, {
+      headers: this.headers(),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return new Set();
+    const data = (await res.json().catch(() => null)) as {
+      proxies?: Record<string, unknown>;
+    } | null;
+    return new Set(Object.keys(data?.proxies || {}));
   }
 
   async selectGlobal(name: string): Promise<void> {
