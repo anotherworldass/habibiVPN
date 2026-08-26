@@ -3,7 +3,7 @@ import { regionZhName } from "../../lib/regions.js";
 import { sendMessage } from "../telegram/api.js";
 import { getBotTokenForProject } from "../telegram/bot-config.js";
 import { escapeHtml, formatProbeDigest } from "./alerts-format.js";
-import { consecutiveFailCount, percentile } from "./logic.js";
+import { consecutiveFailCount, consecutiveOkCount, percentile } from "./logic.js";
 import type { NodeProbeValue } from "./settings.js";
 
 export type ProbeRoundSample = {
@@ -81,19 +81,68 @@ async function markAlerted(id: string, telegramMessageId?: string | null) {
   });
 }
 
+async function closeLingeringIncidents(
+  cfg: NodeProbeValue,
+  alreadyHandled: Set<string>,
+) {
+  const open = await prisma.nodeProbeIncident.findMany({
+    where: { closedAt: null },
+    include: {
+      target: { select: { lastOk: true, lastDownloadMbps: true } },
+    },
+  });
+  for (const row of open) {
+    if (row.targetId && alreadyHandled.has(row.targetId)) continue;
+    if (!row.targetId || !row.target) {
+      await prisma.nodeProbeIncident.update({
+        where: { id: row.id },
+        data: { closedAt: new Date() },
+      });
+      continue;
+    }
+    if (row.kind === "down" && row.target.lastOk) {
+      await closeIncident(row.targetId, "down");
+      continue;
+    }
+    if (row.kind === "unstable" && row.target.lastOk) {
+      const recent = await prisma.nodeProbeSample.findMany({
+        where: { targetId: row.targetId },
+        orderBy: { probedAt: "desc" },
+        take: 3,
+        select: { ok: true },
+      });
+      if (consecutiveOkCount(recent) >= 3) {
+        await closeIncident(row.targetId, "unstable");
+      }
+      continue;
+    }
+    if (row.kind === "slow" && row.target.lastOk) {
+      const mbps = row.target.lastDownloadMbps;
+      if (mbps == null || mbps >= cfg.slowMbps) {
+        await closeIncident(row.targetId, "slow");
+      }
+    }
+  }
+}
+
 export async function evaluateAndAlert(input: {
   projectId: string;
   cfg: NodeProbeValue;
   round: ProbeRoundSample[];
   log?: LogFn;
+  /** When false, still open/close incidents but do not Telegram. */
+  notify?: boolean;
 }): Promise<void> {
+  const notify = input.notify !== false;
   const chatId = input.cfg.telegramChatId?.trim();
   const token = chatId ? await getBotTokenForProject(input.projectId) : null;
-  const canSend = Boolean(chatId && token);
+  const canSend = Boolean(notify && chatId && token);
 
   const pending: PendingAlert[] = [];
+  const handled = new Set<string>();
 
   for (const item of input.round) {
+    handled.add(item.targetId);
     const label = `${escapeHtml(item.name)} / ${escapeHtml(item.protocol)}`;
     const recent = await prisma.nodeProbeSample.findMany({
       where: { targetId: item.targetId },
@@ -103,6 +152,7 @@ export async function evaluateAndAlert(input: {
     });
 
     const fails = consecutiveFailCount(recent);
+    const oks = consecutiveOkCount(recent);
     if (fails >= input.cfg.downFailStreak) {
       const inc = await openOrTouchIncident({
         targetId: item.targetId,
@@ -118,7 +168,7 @@ export async function evaluateAndAlert(input: {
           line: `${label} · 连续 ${fails} 次探测失败`,
         });
       }
-    } else if (item.ok) {
+    } else if (item.ok || oks > 0) {
       const closed = await closeIncident(item.targetId, "down");
       if (closed && canSend) {
         pending.push({
@@ -145,7 +195,7 @@ export async function evaluateAndAlert(input: {
       const unstable =
         rate < input.cfg.unstableSuccessRate ||
         (p95 != null && p95 > input.cfg.delayP95Ms);
-      if (unstable && fails < input.cfg.downFailStreak) {
+      if (unstable && fails < input.cfg.downFailStreak && oks < 3) {
         const inc = await openOrTouchIncident({
           targetId: item.targetId,
           region: item.region,
@@ -160,9 +210,11 @@ export async function evaluateAndAlert(input: {
             line: `${label} · 成功率 ${(rate * 100).toFixed(0)}%${p95 != null ? ` · p95 ${p95}ms` : ""}`,
           });
         }
-      } else if (!unstable) {
+      } else if (!unstable || oks >= 3) {
         await closeIncident(item.targetId, "unstable");
       }
+    } else if (oks >= 3) {
+      await closeIncident(item.targetId, "unstable");
     }
 
     if (item.ok && item.downloadMbps != null) {
@@ -191,8 +243,15 @@ export async function evaluateAndAlert(input: {
       } else if (item.downloadMbps >= input.cfg.slowMbps) {
         await closeIncident(item.targetId, "slow");
       }
+    } else if (item.ok) {
+      const lastSpeed = recent.find((s) => s.downloadMbps != null)?.downloadMbps;
+      if (lastSpeed == null || lastSpeed >= input.cfg.slowMbps) {
+        await closeIncident(item.targetId, "slow");
+      }
     }
   }
+
+  await closeLingeringIncidents(input.cfg, handled);
 
   if (!canSend || !pending.length) return;
 

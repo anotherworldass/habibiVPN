@@ -1,9 +1,14 @@
 # 节点探测用 Clash 内核。与网站蓝绿发布无关，单独常驻一份。
-# 启动：docker compose -f docker-compose.probe.yml up -d
+# 启动：docker compose -p habibivpn-probe -f docker-compose.probe.yml up -d
 # 控制面只听 127.0.0.1:19090，代理口 127.0.0.1:17890。
+#
+# 必须用独立项目名 habibivpn-probe。若只在仓库根目录 `docker compose -f ... up -d`，
+# Compose 会用目录名 habibivpn，随后蓝绿 `down --remove-orphans` 会把它当孤儿删掉。
 #
 # API 探测循环通过 Admin「节点探测」配置 mihomo API / secret。
 # 默认 secret 与下面 config.yaml、Admin 默认值均为 habibi-probe。
+
+name: habibivpn-probe
 
 services:
   mihomo:

@@ -10,6 +10,15 @@ export function consecutiveFailCount(samplesNewestFirst: Array<{ ok: boolean }>)
   return n;
 }
 
+export function consecutiveOkCount(samplesNewestFirst: Array<{ ok: boolean }>): number {
+  let n = 0;
+  for (const s of samplesNewestFirst) {
+    if (!s.ok) break;
+    n += 1;
+  }
+  return n;
+}
+
 export function percentile(values: number[], p: number): number | null {
   if (!values.length) return null;
   const sorted = [...values].filter((n) => Number.isFinite(n)).sort((a, b) => a - b);

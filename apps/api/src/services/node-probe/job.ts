@@ -434,14 +434,13 @@ export async function runNodeProbeRound(input?: {
       );
     }
 
-    if (alertProjectId) {
-      await evaluateAndAlert({
-        projectId: alertProjectId,
-        cfg: probeCfg,
-        round,
-        log: input?.log,
-      });
-    }
+    await evaluateAndAlert({
+      projectId: alertProjectId || projectId || DEFAULT_PROJECT_ID,
+      cfg: probeCfg,
+      round,
+      log: input?.log,
+      notify: Boolean(alertProjectId),
+    });
     await cleanupOldRows().catch(() => undefined);
 
     const run: ProbeLastRun = {

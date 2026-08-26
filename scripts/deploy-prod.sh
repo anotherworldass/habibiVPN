@@ -24,6 +24,7 @@ REV_FILE="$ROOT/.deploy-rev"
 UPSTREAM_SRC="$ROOT/deploy/openresty/habibi-upstreams.conf"
 EDGE_CONF="$ROOT/deploy/nginx-edge.conf"
 EDGE_COMPOSE="$ROOT/docker-compose.edge.yml"
+PROBE_COMPOSE="$ROOT/docker-compose.probe.yml"
 DRAIN_SECONDS="${DRAIN_SECONDS:-5}"
 UPSTREAM_HOST="${HABIBI_UPSTREAM_HOST:-127.0.0.1}"
 MODE="${1:-deploy}"
@@ -77,6 +78,34 @@ compose() {
     --env-file "$ROOT/.env" \
     --env-file "$ROOT/deploy/slots/${slot}.env" \
     "$@"
+}
+
+# mihomo 必须挂在 habibivpn-probe，不能跟目录名 habibivpn 混用。
+# 否则 stop_slot blue 里的 `docker compose -p habibivpn ... down --remove-orphans`
+# 会把 habibi-mihomo 当孤儿删掉。
+ensure_probe() {
+  local proj running
+  if [[ ! -f "$PROBE_COMPOSE" ]]; then
+    return 0
+  fi
+  if docker inspect habibi-mihomo >/dev/null 2>&1; then
+    proj="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' habibi-mihomo 2>/dev/null || true)"
+    running="$(docker inspect -f '{{.State.Running}}' habibi-mihomo 2>/dev/null || true)"
+    if [[ "$proj" == "habibivpn-probe" && "$running" == "true" ]]; then
+      return 0
+    fi
+    if [[ "$proj" != "habibivpn-probe" ]]; then
+      echo "[deploy] moving habibi-mihomo from project ${proj:-unknown} to habibivpn-probe"
+      docker rm -f habibi-mihomo >/dev/null 2>&1 || true
+    fi
+  fi
+  echo "[deploy] ensuring mihomo probe"
+  if docker compose -p habibivpn-probe -f "$PROBE_COMPOSE" up -d; then
+    echo "[deploy] mihomo probe is up"
+  else
+    echo "[deploy] mihomo probe failed to start (site deploy continues)" >&2
+    docker compose -p habibivpn-probe -f "$PROBE_COMPOSE" logs --tail 40 || true
+  fi
 }
 
 url_ok() {
@@ -430,8 +459,11 @@ fi
 
 if [[ "$need_build" -eq 0 ]]; then
   echo "[deploy] already up to date (${local_rev:0:8} live)"
+  ensure_probe
   exit 0
 fi
+
+ensure_probe
 
 live="$(detect_live_slot)"
 if [[ "$live" == "none" ]]; then
@@ -479,6 +511,7 @@ if [[ "$live" == "none" ]]; then
   printf '%s\n' "$target" > "$SLOT_FILE"
   git rev-parse HEAD > "$REV_FILE" 2>/dev/null || true
   compose "$target" ps
+  ensure_probe
   echo "[deploy] first slot $target is live"
   exit 0
 fi
@@ -500,4 +533,5 @@ fi
 printf '%s\n' "$target" > "$SLOT_FILE"
 git rev-parse HEAD > "$REV_FILE" 2>/dev/null || true
 compose "$target" ps
+ensure_probe
 echo "[deploy] switched $live -> $target"

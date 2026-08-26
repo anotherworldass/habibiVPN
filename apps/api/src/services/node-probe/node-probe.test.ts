@@ -6,6 +6,7 @@ import {
   classifyOverall,
   classifyRegion,
   consecutiveFailCount,
+  consecutiveOkCount,
   percentile,
   successRate,
 } from "./logic.js";
@@ -47,6 +48,8 @@ describe("node-probe logic", () => {
   it("counts consecutive failures from newest", () => {
     assert.equal(consecutiveFailCount([{ ok: false }, { ok: false }, { ok: true }]), 2);
     assert.equal(consecutiveFailCount([{ ok: true }, { ok: false }]), 0);
+    assert.equal(consecutiveOkCount([{ ok: true }, { ok: true }, { ok: false }]), 2);
+    assert.equal(consecutiveOkCount([{ ok: false }, { ok: true }]), 0);
   });
 
   it("classifies overall and region health", () => {

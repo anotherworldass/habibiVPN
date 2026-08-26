@@ -101,7 +101,7 @@ const PROBE_ERR: Record<string, string> = {
   "node_probe.slot_disabled": "这条槽不是 active 状态。",
   "node_probe.slot_missing": "还没配置探针槽位。",
   "node_probe.mihomo_unreachable":
-    "连不上本机 mihomo（默认 127.0.0.1:19090）。在仓库根目录执行：docker compose -f docker-compose.probe.yml up -d",
+    "连不上本机 mihomo（默认 127.0.0.1:19090）。生产机仓库根目录执行：docker compose -p habibivpn-probe -f docker-compose.probe.yml up -d",
   "node_probe.subscription_fetch_failed": "拉不到探针槽的订阅内容。",
   "node_probe.empty_subscription": "订阅里没有可用节点。",
   disabled: "定时探测未启用（请保存开关）",
@@ -469,15 +469,26 @@ export default function NodeProbePage() {
           },
           {
             key: "incidents",
-            label: `未关闭事故 (${incidents.length})`,
+            label: `进行中 (${incidents.length})`,
             children: (
+              <>
+                <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+                  这是还没关掉的告警单，不是「现在一定挂了」。类型
+                  Down：连续探测失败；不稳：近 15 分钟窗口里波动，当前可能已通；慢速：等下次测速合格才关。节点恢复后 Down 会自动关掉。
+                </Typography.Paragraph>
               <Table
                 rowKey="id"
                 size="small"
                 dataSource={incidents}
                 pagination={false}
                 columns={[
-                  { title: "类型", dataIndex: "kind", width: 90 },
+                  {
+                    title: "类型",
+                    dataIndex: "kind",
+                    width: 90,
+                    render: (k: string) =>
+                      k === "down" ? "Down" : k === "unstable" ? "不稳" : k === "slow" ? "慢速" : k,
+                  },
                   { title: "地区", dataIndex: "region", width: 72 },
                   {
                     title: "节点",
@@ -493,6 +504,7 @@ export default function NodeProbePage() {
                   },
                 ]}
               />
+              </>
             ),
           },
         ]}
