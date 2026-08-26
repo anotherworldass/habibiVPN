@@ -105,6 +105,11 @@ const PROBE_ERR: Record<string, string> = {
     "连不上本机 mihomo（默认 127.0.0.1:19090）。生产机仓库根目录执行：docker compose -p habibivpn-probe -f docker-compose.probe.yml up -d",
   "node_probe.subscription_fetch_failed": "拉不到探针槽的订阅内容。",
   "node_probe.empty_subscription": "订阅里没有可用节点。",
+  "urltest.failed":
+    "URL-test 没跑通：协议握手失败、连接被重置，或 generate_204 没有正常返回。不一定是节点完全挂了。",
+  "urltest.timeout": "URL-test 超时，这轮没测到延迟。",
+  "An error occurred in the delay test":
+    "URL-test 没跑通：协议握手失败、连接被重置，或 generate_204 没有正常返回。不一定是节点完全挂了。",
   disabled: "定时探测未启用（请保存开关）",
   skipped_interval: "间隔未到，本轮跳过",
   busy: "上一轮还在跑",
@@ -465,7 +470,12 @@ export default function NodeProbePage() {
                   { title: "延迟 ms", dataIndex: "last_delay_ms", width: 90 },
                   { title: "TCP ms", dataIndex: "last_tcp_ms", width: 80 },
                   { title: "Mbps", dataIndex: "last_download_mbps", width: 80 },
-                  { title: "错误", dataIndex: "last_error", ellipsis: true },
+                  {
+                    title: "错误",
+                    dataIndex: "last_error",
+                    ellipsis: true,
+                    render: (v: string | null) => (v ? probeErrText(v) : "—"),
+                  },
                   {
                     title: "探测时间",
                     dataIndex: "last_probed_at",

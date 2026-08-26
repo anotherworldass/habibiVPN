@@ -3,6 +3,18 @@ import { truncateError, wrapProbeError } from "./fingerprint.js";
 
 type DelayResult = { ok: true; delayMs: number } | { ok: false; error: string };
 
+function delayTestError(status: number, message?: string): string {
+  const msg = (message || "").trim();
+  if (status === 504 || /timeout/i.test(msg)) return "urltest.timeout";
+  if (
+    status === 503 ||
+    /an error occurred in the delay test/i.test(msg)
+  ) {
+    return "urltest.failed";
+  }
+  return truncateError(msg || `delay.${status}`);
+}
+
 export class MihomoClient {
   constructor(
     private readonly baseUrl: string,
@@ -85,7 +97,7 @@ export class MihomoClient {
       }
       return {
         ok: false,
-        error: truncateError(data?.message || `delay.${res.status}`),
+        error: delayTestError(res.status, data?.message),
       };
     } catch (err) {
       return { ok: false, error: truncateError(err) };
