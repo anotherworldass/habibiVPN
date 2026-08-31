@@ -9,6 +9,7 @@ const zh = {
   nav: {
     home: "首页",
     plans: "套餐",
+    download: "下载",
     connect: "连接",
     account: "我的",
     userCenter: "用户中心",
@@ -420,7 +421,7 @@ const zh = {
     paidEmptyFree: "，可先领取上方免费试用",
     perDay: (price: string, currency: string) => `约 ${price} ${currency} / 天`,
     buyNow: "立即购买",
-    renewBanner: "正在为当前套餐选择续费时长，支付后叠加到同一条连接。",
+    renewBanner: (id: string) => `正在为 ${id} 续费时长`,
     renewEmpty: "没有与当前套餐规格相同的可续费选项，请返回新购或换一条连接。",
     inviteTitle: "邀请好友得奖励",
     inviteDesc: "分享邀请链接，好友付费你拿佣金",
@@ -941,6 +942,7 @@ const en = {
   nav: {
     home: "Home",
     plans: "Plans",
+    download: "Download",
     connect: "Connect",
     account: "Account",
     userCenter: "Account center",
@@ -1363,7 +1365,7 @@ const en = {
     paidEmptyFree: " — you can claim a free trial above",
     perDay: (price: string, currency: string) => `About ${price} ${currency} / day`,
     buyNow: "Buy now",
-    renewBanner: "Choose a duration to extend this connection. The subscription link stays the same.",
+    renewBanner: (id: string) => `Renewing duration for ${id}`,
     renewEmpty: "No compatible paid plan to renew this connection. Go back and buy a new plan instead.",
     inviteTitle: "Invite friends for rewards",
     inviteDesc: "Share your invite link and earn commission when they pay",

@@ -49,11 +49,44 @@ export function slotStatusAllowsRenew(status: string) {
   return status !== "disabled";
 }
 
+/** View `expired` or past `expiresAt`. Missing expiry is not expired. */
+export function slotIsExpired(slot: {
+  status?: string | null;
+  expiresAt?: Date | string | null;
+}) {
+  if (slot.status === "expired") return true;
+  if (slot.expiresAt == null) return false;
+  const t =
+    slot.expiresAt instanceof Date
+      ? slot.expiresAt.getTime()
+      : Date.parse(String(slot.expiresAt));
+  return Number.isFinite(t) && t < Date.now();
+}
+
+export function slotAllowsRenewWithPlan(
+  slot: {
+    status: string;
+    expiresAt?: Date | string | null;
+    plan: RenewPlanSpec | null | undefined;
+  },
+  purchasedPlan: RenewPlanSpec,
+) {
+  if (!slotStatusAllowsRenew(slot.status)) return false;
+  if (slotIsExpired(slot)) return true;
+  return plansCompatibleForRenew(slot.plan, purchasedPlan);
+}
+
 export function subscriptionCanRenewWithPaidPlans(
-  slot: { status: string; planId: string | null; plan: RenewPlanSpec | null },
+  slot: {
+    status: string;
+    planId: string | null;
+    plan: RenewPlanSpec | null;
+    expiresAt?: Date | string | null;
+  },
   paidPlans: RenewPlanSpec[],
 ) {
   if (!slotStatusAllowsRenew(slot.status)) return false;
   if (!slot.planId || !slot.plan) return paidPlans.length > 0;
+  if (slotIsExpired(slot)) return paidPlans.length > 0;
   return paidPlans.some((p) => plansCompatibleForRenew(slot.plan, p));
 }

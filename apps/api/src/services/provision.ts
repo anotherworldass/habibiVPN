@@ -23,7 +23,7 @@ import {
 import { localizePlanCopy } from "./plan-i18n.js";
 import {
   subscriptionCanRenewWithPaidPlans,
-  plansCompatibleForRenew,
+  slotAllowsRenewWithPlan,
 } from "./renew-compat.js";
 import {
   buildClientSubscriptionUrls,
@@ -939,7 +939,16 @@ export async function assertSlotRenewableWithPlan(input: {
   if (slot.status === "disabled") {
     throw Object.assign(new Error("subscription.renew_disabled"), { statusCode: 400 });
   }
-  if (slot.plan && !plansCompatibleForRenew(slot.plan, input.plan)) {
+  if (
+    !slotAllowsRenewWithPlan(
+      {
+        status: slot.status,
+        expiresAt: slot.expiresAt,
+        plan: slot.plan,
+      },
+      input.plan,
+    )
+  ) {
     throw Object.assign(new Error("subscription.renew_incompatible"), {
       statusCode: 400,
     });
@@ -978,9 +987,13 @@ async function attachCanRenew(
       can_renew: slot
         ? subscriptionCanRenewWithPaidPlans(
             {
-              status: view.status === "disabled" ? "disabled" : slot.status,
+              status:
+                view.status === "disabled" || view.status === "expired"
+                  ? view.status
+                  : slot.status,
               planId: slot.planId,
               plan: slot.plan,
+              expiresAt: view.expires_at,
             },
             paidPlans,
           )

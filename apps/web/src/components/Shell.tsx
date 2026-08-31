@@ -35,6 +35,14 @@ const plansIcon = (
   </svg>
 );
 
+const downloadIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M12 3.5v11" strokeLinecap="round" />
+    <path d="m8 11.5 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5 19.5h14" strokeLinecap="round" />
+  </svg>
+);
+
 const connectIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <circle cx="12" cy="12" r="3" />
@@ -72,13 +80,21 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
     setLoggedIn(!!getToken());
   }, [pathname]);
 
+  const downloadTab = {
+    href: "/download",
+    label: copy.nav.download,
+    icon: downloadIcon,
+  };
+
   const guestTabs = [
     { href: "/plans", label: copy.nav.plans, icon: plansIcon },
+    downloadTab,
   ];
 
   const appTabs = [
     { href: "/subscription", label: copy.nav.connect, icon: connectIcon },
     { href: "/plans", label: copy.nav.plans, icon: plansIcon },
+    downloadTab,
   ];
 
   const accountTab = {
@@ -145,24 +161,24 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
                 <LanguageSwitch />
               </Suspense>
             </div>
+            <nav className="habibi-topbar-nav" aria-label={copy.common.navAria}>
+              {desktopTabs.map((tab) => {
+                const active = isTabActive(pathname, tab.href);
+                const href = resolveHref(tab.href, loggedIn);
+                return (
+                  <Link
+                    key={tab.href}
+                    href={href}
+                    className="habibi-topbar-link"
+                    data-active={active}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
             <div className="habibi-topbar-tools">
-              <nav className="habibi-topbar-nav" aria-label={copy.common.navAria}>
-                {desktopTabs.map((tab) => {
-                  const active = isTabActive(pathname, tab.href);
-                  const href = resolveHref(tab.href, loggedIn);
-                  return (
-                    <Link
-                      key={tab.href}
-                      href={href}
-                      className="habibi-topbar-link"
-                      data-active={active}
-                      aria-current={active ? "page" : undefined}
-                    >
-                      {tab.label}
-                    </Link>
-                  );
-                })}
-              </nav>
               <AccountMenu loggedIn={loggedIn} />
             </div>
           </div>

@@ -7022,10 +7022,10 @@ button.account-verify-toggle {
     max-width: var(--content-max);
     margin: 0 auto;
     padding: 14px 32px;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
-    gap: 24px;
+    gap: 16px;
   }
 
   .habibi-shell--narrow .habibi-topbar-inner {
@@ -7037,6 +7037,7 @@ button.account-verify-toggle {
     align-items: center;
     gap: 12px;
     min-width: 0;
+    justify-self: start;
   }
 
   .habibi-topbar-brand {
@@ -7055,13 +7056,18 @@ button.account-verify-toggle {
   .habibi-topbar-tools {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 14px;
+    justify-self: end;
+    min-width: 0;
   }
 
   .habibi-topbar-nav {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
+    white-space: nowrap;
   }
 
   .habibi-shell:has(.hero) .legal-lang-switch {
@@ -7896,8 +7902,11 @@ button.account-verify-toggle {
   }
 
   .account-logout {
-    margin-top: auto;
-    padding-top: 0;
+    width: auto;
+    min-width: 0;
+    align-self: flex-start;
+    margin-top: 28px;
+    padding: 0 16px 0 10px;
   }
 
   .plan-switcher {

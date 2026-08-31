@@ -13,6 +13,7 @@ export type RenewableSlot = {
   plan_id: string | null;
   plan_name: string | null;
   expires_at: string | null;
+  upstream_username?: string | null;
   can_renew?: boolean;
   renew_spec?: RenewSpec | null;
 };
@@ -31,11 +32,19 @@ function canonFup(value: unknown) {
   return JSON.stringify(value ?? null);
 }
 
+export function slotIsExpired(slot: Pick<RenewableSlot, "status" | "expires_at">) {
+  if (slot.status === "expired") return true;
+  if (!slot.expires_at) return false;
+  const t = new Date(slot.expires_at).getTime();
+  return Number.isFinite(t) && t < Date.now();
+}
+
 export function slotCompatibleWithPlan(
   slot: RenewableSlot,
   plan: RenewablePlan,
 ) {
   if (slot.status === "disabled") return false;
+  if (slotIsExpired(slot)) return true;
   if (!slot.plan_id || !slot.renew_spec) return true;
   if (plan.id && slot.plan_id === plan.id) return true;
   const spec = slot.renew_spec;

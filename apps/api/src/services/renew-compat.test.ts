@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import type { PlanResetPolicy } from "@prisma/client";
 import {
   plansCompatibleForRenew,
+  slotAllowsRenewWithPlan,
+  slotIsExpired,
   slotStatusAllowsRenew,
   subscriptionCanRenewWithPaidPlans,
   type RenewPlanSpec,
@@ -71,6 +73,107 @@ describe("subscriptionCanRenewWithPaidPlans", () => {
         [spec({})],
       ),
       true,
+    );
+  });
+
+  it("lets expired slots renew with any paid plan even if spec differs", () => {
+    assert.equal(
+      subscriptionCanRenewWithPaidPlans(
+        {
+          status: "active",
+          planId: "p1",
+          plan: spec({ dataLimitBytes: BigInt(50), deviceSlots: 1 }),
+          expiresAt: new Date(Date.now() - 60_000),
+        },
+        [spec({ dataLimitBytes: BigInt(100), deviceSlots: 3 })],
+      ),
+      true,
+    );
+    assert.equal(
+      subscriptionCanRenewWithPaidPlans(
+        {
+          status: "expired",
+          planId: "p1",
+          plan: spec({ deviceSlots: 1 }),
+        },
+        [spec({ deviceSlots: 5 })],
+      ),
+      true,
+    );
+  });
+
+  it("still requires matching spec for unexpired slots", () => {
+    assert.equal(
+      subscriptionCanRenewWithPaidPlans(
+        {
+          status: "active",
+          planId: "p1",
+          plan: spec({ dataLimitBytes: BigInt(50) }),
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+        [spec({ dataLimitBytes: BigInt(100) })],
+      ),
+      false,
+    );
+  });
+});
+
+describe("slotIsExpired / slotAllowsRenewWithPlan", () => {
+  it("treats expired status or past expiresAt as expired", () => {
+    assert.equal(slotIsExpired({ status: "expired" }), true);
+    assert.equal(
+      slotIsExpired({ status: "active", expiresAt: new Date(Date.now() - 1) }),
+      true,
+    );
+    assert.equal(slotIsExpired({ status: "active" }), false);
+    assert.equal(
+      slotIsExpired({
+        status: "active",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      }),
+      false,
+    );
+  });
+
+  it("allows expired slots to change entitlement spec", () => {
+    assert.equal(
+      slotAllowsRenewWithPlan(
+        {
+          status: "active",
+          expiresAt: new Date(Date.now() - 1),
+          plan: spec({ dataLimitBytes: BigInt(50), deviceSlots: 1 }),
+        },
+        spec({ dataLimitBytes: BigInt(200), deviceSlots: 3 }),
+      ),
+      true,
+    );
+  });
+
+  it("rejects unexpired slots with a different spec", () => {
+    assert.equal(
+      slotAllowsRenewWithPlan(
+        {
+          status: "active",
+          expiresAt: new Date(Date.now() + 86_400_000),
+          plan: spec({ dataLimitBytes: BigInt(50) }),
+        },
+        spec({ dataLimitBytes: BigInt(200) }),
+      ),
+      false,
+    );
+  });
+
+  it("rejects disabled slots even when expired", () => {
+    assert.equal(
+      slotAllowsRenewWithPlan(
+        {
+          status: "disabled",
+          expiresAt: new Date(Date.now() - 1),
+          plan: spec({}),
+        },
+        spec({}),
+      ),
+      false,
     );
   });
 });

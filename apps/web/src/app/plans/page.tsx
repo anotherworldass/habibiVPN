@@ -11,7 +11,10 @@ import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
-import { slotCompatibleWithPlan, type RenewableSlot } from "../../lib/renew-compat";
+import {
+  slotCompatibleWithPlan,
+  type RenewableSlot,
+} from "../../lib/renew-compat";
 
 type Plan = {
   id: string;
@@ -499,8 +502,9 @@ function PlansContent() {
         )}
         {renewSlotId && !loading && renewSlot ? (
           <p className="alert-ok" style={{ marginTop: 12 }}>
-            {plansCopy.renewBanner}
-            {renewSlot.plan_name ? ` (${renewSlot.plan_name})` : ""}
+            {plansCopy.renewBanner(
+              renewSlot.upstream_username || renewSlot.id,
+            )}
           </p>
         ) : null}
         {renewSlotId && !loading && !renewSlot ? (
