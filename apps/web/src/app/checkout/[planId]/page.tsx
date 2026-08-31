@@ -80,6 +80,14 @@ function formatTraffic(bytes: number | null | undefined, unlimited: string) {
   return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
 }
 
+function formatDevices(
+  n: number | null | undefined,
+  label: (n: number) => string,
+) {
+  if (n == null || n <= 0) return null;
+  return label(n);
+}
+
 export default function CheckoutPage() {
   return (
     <Suspense>
@@ -256,6 +264,7 @@ function CheckoutContent() {
                     copy.checkout.lifetime,
                   ),
                   formatTraffic(plan.data_limit_bytes, copy.checkout.unlimited),
+                  formatDevices(plan.device_slots, copy.checkout.devices),
                 ]
                   .filter(Boolean)
                   .join(" · ");

@@ -126,9 +126,6 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
           </Link>
         ))}
       </nav>
-      <Suspense fallback={null}>
-        <LanguageSwitch variant="footer" />
-      </Suspense>
       {appVersion ? (
         <span className="footer-mini-version">{appVersion}</span>
       ) : null}
@@ -145,7 +142,7 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
                 {site.brand}
               </Link>
               <Suspense fallback={null}>
-                <LanguageSwitch variant="topbar" />
+                <LanguageSwitch />
               </Suspense>
             </div>
             <div className="habibi-topbar-tools">
@@ -181,7 +178,7 @@ export default function Shell({ children, flush, narrow, hideNavigation }: Shell
                   {site.brand}
                 </Link>
                 <Suspense fallback={null}>
-                  <LanguageSwitch variant="topbar" />
+                  <LanguageSwitch />
                 </Suspense>
               </div>
               {!hideNavigation ? <AccountMenu loggedIn={loggedIn} /> : null}

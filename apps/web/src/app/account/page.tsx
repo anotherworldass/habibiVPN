@@ -438,23 +438,6 @@ export default function AccountPage() {
                   </span>
                 </Link>
               </div>
-
-              <button
-                type="button"
-                className="account-logout"
-                onClick={() => {
-                  clearToken();
-                  router.push("/login");
-                }}
-              >
-                <span className="account-logout-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
-                    <path d="m15 8 4 4-4 4M9 12h10" />
-                  </svg>
-                </span>
-                <span>{copy.account.logout}</span>
-              </button>
             </div>
 
             <aside className="account-desktop-aside">
@@ -462,6 +445,23 @@ export default function AccountPage() {
             </aside>
           </div>
         </div>
+
+        <button
+          type="button"
+          className="account-logout"
+          onClick={() => {
+            clearToken();
+            router.push("/login");
+          }}
+        >
+          <span className="account-logout-icon" aria-hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
+              <path d="m15 8 4 4-4 4M9 12h10" />
+            </svg>
+          </span>
+          <span>{copy.account.logout}</span>
+        </button>
       </div>
     </Shell>
   );

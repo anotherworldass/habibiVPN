@@ -94,37 +94,70 @@ function PlanTrafficBadge({ bytes }: { bytes?: number | null }) {
   );
 }
 
+function formatDevices(
+  n: number | null | undefined,
+  unit: string,
+): { value: string; unit: string } | null {
+  if (n == null || n <= 0) return null;
+  return { value: String(n), unit };
+}
+
+function SpecValue({
+  value,
+  unit,
+}: {
+  value: string;
+  unit: string;
+}) {
+  return (
+    <strong>
+      {value}
+      {unit ? <small>{unit}</small> : null}
+    </strong>
+  );
+}
+
 function PlanSpecs({
   days,
   traffic,
+  devices,
   durationLabel,
   trafficLabel,
+  devicesLabel,
 }: {
   days: { value: string; unit: string } | null;
   traffic: { value: string; unit: string } | null;
+  devices: { value: string; unit: string } | null;
   durationLabel: string;
   trafficLabel: string;
+  devicesLabel: string;
 }) {
-  if (!days && !traffic) return null;
+  if (!days && !traffic && !devices) return null;
   return (
     <p className="plan-specs">
       {days ? (
         <span>
-          {durationLabel}{" "}
-          <strong>
-            {days.value}
-            {days.unit ? <small>{days.unit}</small> : null}
-          </strong>
+          {durationLabel} <SpecValue value={days.value} unit={days.unit} />
         </span>
       ) : null}
-      {days && traffic ? <span className="plan-specs-sep" aria-hidden>·</span> : null}
+      {days && (traffic || devices) ? (
+        <span className="plan-specs-sep" aria-hidden>
+          ·
+        </span>
+      ) : null}
       {traffic ? (
         <span>
-          {trafficLabel}{" "}
-          <strong>
-            {traffic.value}
-            <small>{traffic.unit}</small>
-          </strong>
+          {trafficLabel} <SpecValue value={traffic.value} unit={traffic.unit} />
+        </span>
+      ) : null}
+      {traffic && devices ? (
+        <span className="plan-specs-sep" aria-hidden>
+          ·
+        </span>
+      ) : null}
+      {devices ? (
+        <span>
+          {devicesLabel} <SpecValue value={devices.value} unit={devices.unit} />
         </span>
       ) : null}
     </p>
@@ -167,6 +200,7 @@ function FreePlanCards({
             messages.common.hours,
             messages.common.lifetime,
           );
+          const devices = formatDevices(p.device_slots, plansCopy.deviceUnit);
           return (
             <article key={p.id} className="plan-card plan-card--free">
               <PlanTrafficBadge bytes={p.data_limit_bytes} />
@@ -179,8 +213,10 @@ function FreePlanCards({
                 <PlanSpecs
                   days={days}
                   traffic={traffic}
+                  devices={devices}
                   durationLabel={plansCopy.duration}
                   trafficLabel={plansCopy.traffic}
+                  devicesLabel={plansCopy.devices}
                 />
                 {p.description ? (
                   <p className="plan-card-desc">{p.description}</p>
@@ -261,6 +297,7 @@ function PaidPlanCards({
             messages.common.hours,
             messages.common.lifetime,
           );
+          const devices = formatDevices(p.device_slots, plansCopy.deviceUnit);
           const dailyPrice =
             p.validity_seconds && p.validity_seconds > 0
               ? p.price_cents / 100 / (p.validity_seconds / 86400)
@@ -282,8 +319,10 @@ function PaidPlanCards({
                 <PlanSpecs
                   days={days}
                   traffic={traffic}
+                  devices={devices}
                   durationLabel={plansCopy.duration}
                   trafficLabel={plansCopy.traffic}
+                  devicesLabel={plansCopy.devices}
                 />
                 {p.description ? (
                   <p className="plan-card-desc">{p.description}</p>

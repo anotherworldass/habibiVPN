@@ -20,6 +20,7 @@ import { site } from "../lib/site";
 import {
   bindSupportSession,
   setSupportEntry,
+  SUPPORT_CHAT_OPEN_EVENT,
   supportFetchMessages,
   supportMediaSrc,
   supportRecallMessage,
@@ -604,6 +605,18 @@ export default function SupportChatWidget({
     scrollBottom(false);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
+
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
+
+  useEffect(() => {
+    if (isPage || hideWidgetOnChat) return;
+    const onOpenRequest = () => {
+      void onOpenRef.current();
+    };
+    window.addEventListener(SUPPORT_CHAT_OPEN_EVENT, onOpenRequest);
+    return () => window.removeEventListener(SUPPORT_CHAT_OPEN_EVENT, onOpenRequest);
+  }, [isPage, hideWidgetOnChat]);
 
   function onClose() {
     if (isPage) return;

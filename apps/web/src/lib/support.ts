@@ -199,3 +199,11 @@ export async function supportRecallMessage(messageId: string) {
   );
   return res;
 }
+
+export const SUPPORT_CHAT_OPEN_EVENT = "habibi:open-support-chat";
+
+/** Open the site-wide live chat widget (same as the FAB). */
+export function openSupportChat() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(SUPPORT_CHAT_OPEN_EVENT));
+}

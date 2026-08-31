@@ -120,6 +120,11 @@ input {
   padding: 0 20px calc(var(--nav-h) + var(--safe-bottom) + 20px);
 }
 
+.habibi-main:has(.account-page) {
+  display: flex;
+  flex-direction: column;
+}
+
 .habibi-main--no-nav {
   padding-bottom: calc(var(--safe-bottom) + 20px);
 }
@@ -3245,6 +3250,27 @@ textarea.sub-url[data-manual="true"] {
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
+.help-link-item > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.help-link-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--teal) 12%, white);
+  color: var(--teal-deep);
+}
+
+.help-link-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .help-link-item:active {
   transform: scale(0.99);
   background: color-mix(in srgb, var(--teal) 8%, white);
@@ -3265,6 +3291,34 @@ textarea.sub-url[data-manual="true"] {
   font-size: 22px;
   line-height: 1;
   color: var(--muted);
+}
+
+.account-page .help-link-item--download {
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent-bright) 28%, transparent), transparent 55%),
+    linear-gradient(145deg, var(--brand-grad-0) 0%, var(--brand-grad-1) 48%, var(--brand-grad-2) 100%);
+  border-color: transparent;
+  color: #f4f6f8;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--brand-grad-2) 22%, transparent);
+}
+
+.account-page .help-link-item--download .help-link-icon {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.account-page .help-link-item--download .help-link-desc {
+  color: rgba(244, 246, 248, 0.72);
+}
+
+.account-page .help-link-item--download .help-link-chevron {
+  color: rgba(244, 246, 248, 0.78);
+}
+
+.account-page .help-link-item--download:active {
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent-bright) 28%, transparent), transparent 55%),
+    linear-gradient(145deg, var(--brand-grad-0) 0%, var(--brand-grad-1) 48%, var(--brand-grad-2) 100%);
 }
 
 .doc-panel {
@@ -3354,6 +3408,21 @@ textarea.sub-url[data-manual="true"] {
   background: linear-gradient(160deg, #3a4150, #111827);
 }
 
+.about-contact-icon--chat {
+  background: linear-gradient(145deg, var(--brand-grad-0), var(--brand-grad-2));
+}
+
+button.about-contact-btn {
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.about-contact-btn.support-chat-entry {
+  width: 100%;
+}
+
 .about-contact-copy {
   display: flex;
   flex-direction: column;
@@ -3400,6 +3469,10 @@ textarea.sub-url[data-manual="true"] {
     min-height: 76px;
     padding-right: 16px;
     flex: 0 0 auto;
+  }
+
+  .about-contact-btn.support-chat-entry {
+    width: 100%;
   }
 }
 
@@ -6052,8 +6125,16 @@ textarea.sub-url[data-manual="true"] {
   margin: 8px 0 0;
 }
 
+.account-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .account-desktop {
   margin-top: 16px;
+  margin-bottom: 22px;
 }
 
 .account-identity {
@@ -6507,7 +6588,7 @@ button.account-verify-toggle {
   gap: 10px;
   width: 100%;
   min-height: 46px;
-  margin-top: 10px;
+  margin-top: auto;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 13px;
@@ -7815,7 +7896,8 @@ button.account-verify-toggle {
   }
 
   .account-logout {
-    margin-top: 12px;
+    margin-top: auto;
+    padding-top: 0;
   }
 
   .plan-switcher {
@@ -8138,6 +8220,13 @@ button.account-verify-toggle {
   .help-link-item:hover,
   .promo-entry:hover {
     background: color-mix(in srgb, var(--teal) 8%, white);
+  }
+
+  .account-page .help-link-item--download:hover {
+    background:
+      radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent-bright) 28%, transparent), transparent 55%),
+      linear-gradient(145deg, var(--brand-grad-0) 0%, var(--brand-grad-1) 48%, var(--brand-grad-2) 100%);
+    transform: translateY(-1px);
   }
 
   .btn-secondary:hover {
