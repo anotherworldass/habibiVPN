@@ -178,10 +178,10 @@ input {
 .habibi-brandbar-brand {
   display: inline-block;
   font-family: var(--font-display);
-  font-size: 1.28rem;
+  font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.1;
+  line-height: 1;
   color: var(--ink);
 }
 
@@ -6965,11 +6965,11 @@ button.account-verify-toggle {
 
   .habibi-shell--no-nav .habibi-brandbar-inner {
     max-width: var(--content-max);
-    padding: 22px 32px 18px;
+    padding: 12px 32px 8px;
   }
 
   .habibi-shell--no-nav .habibi-brandbar-brand {
-    font-size: 2.25rem;
+    font-size: 2rem;
     letter-spacing: -0.01em;
   }
 
@@ -7042,9 +7042,10 @@ button.account-verify-toggle {
 
   .habibi-topbar-brand {
     font-family: var(--font-display);
-    font-size: 1.25rem;
+    font-size: 1.75rem;
     font-weight: 800;
     letter-spacing: -0.03em;
+    line-height: 1;
     color: var(--ink);
     transition: color 0.15s ease;
   }
@@ -8374,7 +8375,7 @@ button.account-verify-toggle {
   }
 
   .habibi-shell--no-nav .habibi-brandbar-brand {
-    font-size: 2.55rem;
+    font-size: 2.2rem;
   }
 
   .habibi-pad {
