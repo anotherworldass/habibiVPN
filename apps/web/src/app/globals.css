@@ -6017,6 +6017,12 @@ button.about-contact-btn {
   color: var(--muted);
 }
 
+.plan-specs strong small.plan-reset-unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .plan-card-desc {
   margin: 10px 0 0;
   font-size: 13px;

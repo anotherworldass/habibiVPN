@@ -431,6 +431,12 @@ const zh = {
     deviceUnit: "台",
     trafficUnlimited: "不限流量",
     trafficMetered: "流量套餐",
+    resetDay: "天",
+    resetWeek: "周",
+    resetMonth: "月",
+    resetYear: "年",
+    resetDays: (n: number) => `${n % 1 === 0 ? n.toFixed(0) : n}天`,
+    resetHours: (n: number) => `${n % 1 === 0 ? n.toFixed(0) : n}小时`,
   },
   login: {
     title: "登录",
@@ -1375,6 +1381,18 @@ const en = {
     deviceUnit: "",
     trafficUnlimited: "Unlimited data",
     trafficMetered: "Data plan",
+    resetDay: "day",
+    resetWeek: "week",
+    resetMonth: "month",
+    resetYear: "year",
+    resetDays: (n: number) => {
+      const v = n % 1 === 0 ? n.toFixed(0) : String(n);
+      return v === "1" ? "1 day" : `${v} days`;
+    },
+    resetHours: (n: number) => {
+      const v = n % 1 === 0 ? n.toFixed(0) : String(n);
+      return v === "1" ? "1 hour" : `${v} hours`;
+    },
   },
   login: {
     title: "Log in",

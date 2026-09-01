@@ -105,17 +105,58 @@ function formatDevices(
   return { value: String(n), unit };
 }
 
+type ResetUnitCopy = {
+  resetDay: string;
+  resetWeek: string;
+  resetMonth: string;
+  resetYear: string;
+  resetDays: (n: number) => string;
+  resetHours: (n: number) => string;
+};
+
+function formatResetUnit(
+  policy: string | undefined,
+  customInterval: string | null | undefined,
+  copy: ResetUnitCopy,
+): string | null {
+  const p = (policy || "no_reset").trim();
+  if (!p || p === "no_reset") return null;
+  if (p === "day") return copy.resetDay;
+  if (p === "week") return copy.resetWeek;
+  if (p === "month") return copy.resetMonth;
+  if (p === "year") return copy.resetYear;
+  if (p === "custom") {
+    const raw = (customInterval || "").trim();
+    if (!raw) return null;
+    const m = raw.match(/^(\d+(?:\.\d+)?)h$/i);
+    if (!m) return null;
+    const hours = Number(m[1]);
+    if (!Number.isFinite(hours) || hours <= 0) return null;
+    if (hours % 24 === 0) {
+      const days = hours / 24;
+      return copy.resetDays(days);
+    }
+    return copy.resetHours(hours);
+  }
+  return null;
+}
+
 function SpecValue({
   value,
   unit,
+  resetUnit,
 }: {
   value: string;
   unit: string;
+  resetUnit?: string | null;
 }) {
   return (
     <strong>
       {value}
       {unit ? <small>{unit}</small> : null}
+      {resetUnit ? (
+        <small className="plan-reset-unit"> / {resetUnit}</small>
+      ) : null}
     </strong>
   );
 }
@@ -127,6 +168,7 @@ function PlanSpecs({
   durationLabel,
   trafficLabel,
   devicesLabel,
+  trafficResetUnit,
 }: {
   days: { value: string; unit: string } | null;
   traffic: { value: string; unit: string } | null;
@@ -134,6 +176,7 @@ function PlanSpecs({
   durationLabel: string;
   trafficLabel: string;
   devicesLabel: string;
+  trafficResetUnit?: string | null;
 }) {
   if (!days && !traffic && !devices) return null;
   return (
@@ -150,7 +193,12 @@ function PlanSpecs({
       ) : null}
       {traffic ? (
         <span>
-          {trafficLabel} <SpecValue value={traffic.value} unit={traffic.unit} />
+          {trafficLabel}{" "}
+          <SpecValue
+            value={traffic.value}
+            unit={traffic.unit}
+            resetUnit={trafficResetUnit}
+          />
         </span>
       ) : null}
       {traffic && devices ? (
@@ -204,6 +252,11 @@ function FreePlanCards({
             messages.common.lifetime,
           );
           const devices = formatDevices(p.device_slots, plansCopy.deviceUnit);
+          const trafficResetUnit = formatResetUnit(
+            p.reset_policy,
+            p.custom_reset_interval,
+            plansCopy,
+          );
           return (
             <article key={p.id} className="plan-card plan-card--free">
               <PlanTrafficBadge bytes={p.data_limit_bytes} />
@@ -220,6 +273,7 @@ function FreePlanCards({
                   durationLabel={plansCopy.duration}
                   trafficLabel={plansCopy.traffic}
                   devicesLabel={plansCopy.devices}
+                  trafficResetUnit={trafficResetUnit}
                 />
                 {p.description ? (
                   <p className="plan-card-desc">{p.description}</p>
@@ -301,6 +355,11 @@ function PaidPlanCards({
             messages.common.lifetime,
           );
           const devices = formatDevices(p.device_slots, plansCopy.deviceUnit);
+          const trafficResetUnit = formatResetUnit(
+            p.reset_policy,
+            p.custom_reset_interval,
+            plansCopy,
+          );
           const dailyPrice =
             p.validity_seconds && p.validity_seconds > 0
               ? p.price_cents / 100 / (p.validity_seconds / 86400)
@@ -326,6 +385,7 @@ function PaidPlanCards({
                   durationLabel={plansCopy.duration}
                   trafficLabel={plansCopy.traffic}
                   devicesLabel={plansCopy.devices}
+                  trafficResetUnit={trafficResetUnit}
                 />
                 {p.description ? (
                   <p className="plan-card-desc">{p.description}</p>
