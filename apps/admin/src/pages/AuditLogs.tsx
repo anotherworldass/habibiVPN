@@ -4,6 +4,7 @@ import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { PageContainer, ProTable } from "@ant-design/pro-components";
 import { Descriptions, Modal, Space, Tag, Typography } from "antd";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 
 type ActorView =
   | { kind: "admin"; id: string; username: string }
@@ -171,7 +172,7 @@ export default function AuditLogsPage() {
           };
         },
       },
-      render: (_, r) => new Date(r.created_at).toLocaleString(),
+      render: (_, r) => formatDateTime(r.created_at),
     },
     {
       title: "动作",
@@ -315,7 +316,7 @@ export default function AuditLogsPage() {
         {detail ? (
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="时间">
-              {new Date(detail.created_at).toLocaleString()}
+              {formatDateTime(detail.created_at)}
             </Descriptions.Item>
             <Descriptions.Item label="动作">
               {actionLabel(detail.action)}

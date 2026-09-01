@@ -11,6 +11,7 @@ import { Button, Card, Input, Space, Statistic, Table, Tag, Typography } from "a
 import { message } from "../lib/antd-message";
 import { SendOutlined } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import { getProjectId } from "../lib/project";
 
 type BotConfig = {
@@ -405,7 +406,7 @@ export default function TelegramBotPage() {
                 title: "最近活跃",
                 dataIndex: "last_seen_at",
                 width: 170,
-                render: (v: string) => new Date(v).toLocaleString(),
+                render: (v: string) => formatDateTime(v),
               },
             ]}
           />

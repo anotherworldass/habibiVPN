@@ -16,6 +16,7 @@ import { Button, Drawer, InputNumber, Space, Tag } from "antd";
 import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import { getToken } from "../lib/auth";
 import { getProjectId } from "../lib/project";
 
@@ -289,7 +290,12 @@ export default function RedeemCodesPage() {
           columns={[
             { title: "码", dataIndex: "code", copyable: true },
             { title: "状态", dataIndex: "status", width: 100 },
-            { title: "兑换时间", dataIndex: "redeemed_at", width: 180 },
+            {
+              title: "兑换时间",
+              dataIndex: "redeemed_at",
+              width: 180,
+              render: (v: string | null) => formatDateTime(v),
+            },
             {
               title: "操作",
               width: 90,

@@ -22,6 +22,7 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import { getProjectId } from "../lib/project";
 
 type Job = {
@@ -352,7 +353,7 @@ export default function TelegramBroadcastPage() {
               {
                 title: "创建",
                 width: 160,
-                render: (_, r) => new Date(r.created_at).toLocaleString(),
+                render: (_, r) => formatDateTime(r.created_at),
               },
               {
                 title: "操作",

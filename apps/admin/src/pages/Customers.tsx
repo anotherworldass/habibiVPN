@@ -16,6 +16,7 @@ import { message } from "../lib/antd-message";
 import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { adminFetch, sortBandwidthPlansBySpeed, unwrapList } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 
 type CustomerRow = {
   end_user?: {
@@ -51,9 +52,7 @@ function formatBytes(n?: number) {
 }
 
 function formatTime(v?: string | null) {
-  if (!v) return "-";
-  const d = dayjs(v);
-  return d.isValid() ? d.format("YYYY/MM/DD HH:mm:ss") : v;
+  return formatDateTime(v, "-");
 }
 
 type CustomerDetail = {
@@ -656,7 +655,7 @@ export default function CustomersPage() {
                       {detailOnline ? "在线" : "离线"}
                     </Tag>
                     <Typography.Text type="secondary" copyable={{ text: detail.end_user.online_at || "" }}>
-                      {formatTime(detail.end_user.online_at)} UTC
+                      {formatTime(detail.end_user.online_at)}
                     </Typography.Text>
                   </Space>
                 </Descriptions.Item>
@@ -700,12 +699,12 @@ export default function CustomersPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="到期时间">
                   <Typography.Text copyable={{ text: detail.end_user.expires_at || "" }}>
-                    {formatTime(detail.end_user.expires_at)} UTC
+                    {formatTime(detail.end_user.expires_at)}
                   </Typography.Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="服务停止时间">
                   <Typography.Text copyable={{ text: detail.end_user.service_expires_at || "" }}>
-                    {formatTime(detail.end_user.service_expires_at)} UTC
+                    {formatTime(detail.end_user.service_expires_at)}
                   </Typography.Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="设备上限">
@@ -768,7 +767,7 @@ export default function CustomersPage() {
                 <Descriptions.Item label="撤销时间">
                   {detail.subscription?.revoked_at ? (
                     <Typography.Text type="danger" copyable>
-                      {formatTime(detail.subscription.revoked_at)} UTC
+                      {formatTime(detail.subscription.revoked_at)}
                     </Typography.Text>
                   ) : (
                     "-"

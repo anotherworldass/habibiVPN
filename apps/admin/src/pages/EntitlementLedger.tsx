@@ -9,6 +9,7 @@ import {
   type EntitlementLedgerDetailRow,
 } from "../components/EntitlementLedgerDetailModal";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 
 type EntitlementRow = EntitlementLedgerDetailRow;
 
@@ -74,7 +75,7 @@ export default function EntitlementLedgerPage() {
       dataIndex: "created_at",
       width: 170,
       search: false,
-      render: (_, r) => new Date(r.created_at).toLocaleString(),
+      render: (_, r) => formatDateTime(r.created_at),
     },
     {
       title: "用户",
@@ -137,12 +138,8 @@ export default function EntitlementLedgerPage() {
       search: false,
       width: 220,
       render: (_, r) => {
-        const before = r.expires_at_before
-          ? new Date(r.expires_at_before).toLocaleString()
-          : "—";
-        const after = r.expires_at_after
-          ? new Date(r.expires_at_after).toLocaleString()
-          : "—";
+        const before = formatDateTime(r.expires_at_before);
+        const after = formatDateTime(r.expires_at_after);
         return (
           <Space direction="vertical" size={0}>
             <span>

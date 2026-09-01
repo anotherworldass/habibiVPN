@@ -1,6 +1,7 @@
 import { CheckOutlined } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import { Button, Descriptions, Modal, Space, Table, Tag, Typography } from "antd";
+import { formatDateTime } from "../lib/time";
 
 export type EntitlementLedgerDetailRow = {
   id: string;
@@ -71,8 +72,7 @@ function planLabel(
 }
 
 function formatTime(iso: string | null | undefined) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso);
 }
 
 function changeFlagTags(flags: Record<string, boolean> | undefined) {

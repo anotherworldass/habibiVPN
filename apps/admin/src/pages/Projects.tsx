@@ -26,6 +26,7 @@ import {
 } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import { getProjectId, setProjectId } from "../lib/project";
 import AppCopyI18nFields from "../components/AppCopyI18nFields";
 import {
@@ -1543,13 +1544,13 @@ export default function ProjectsPage() {
               title: "最后使用",
               dataIndex: "last_used_at",
               width: 180,
-              render: (v) => (v ? new Date(v).toLocaleString() : "从未"),
+              render: (v) => formatDateTime(v, "从未"),
             },
             {
               title: "创建时间",
               dataIndex: "created_at",
               width: 180,
-              render: (v) => new Date(v).toLocaleString(),
+              render: (v) => formatDateTime(v),
             },
             {
               title: "操作",
@@ -1723,13 +1724,13 @@ export default function ProjectsPage() {
                   title: "发布时间",
                   dataIndex: "published_at",
                   width: 170,
-                  render: (v) => (v ? new Date(v).toLocaleString() : "—"),
+                  render: (v) => formatDateTime(v),
                 },
                 {
                   title: "添加时间",
                   dataIndex: "created_at",
                   width: 170,
-                  render: (v: string) => new Date(v).toLocaleString(),
+                  render: (v: string) => formatDateTime(v),
                 },
                 {
                   title: "操作",

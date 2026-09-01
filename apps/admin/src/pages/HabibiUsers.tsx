@@ -12,6 +12,7 @@ import { Button, Drawer, Space, Tag, Typography } from "antd";
 import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { message } from "../lib/antd-message";
 import { adminFetch, unwrapList } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 
 type ClientUrls = {
   clash_meta?: string;
@@ -431,9 +432,7 @@ export default function HabibiUsersPage() {
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   来源 {detailUser.preferences.connect_pref_source}
                   {detailUser.preferences.connect_pref_at
-                    ? ` · ${String(detailUser.preferences.connect_pref_at)
-                        .slice(0, 19)
-                        .replace("T", " ")}`
+                    ? ` · ${formatDateTime(detailUser.preferences.connect_pref_at)}`
                     : ""}
                 </Typography.Text>
               )}
@@ -481,7 +480,7 @@ export default function HabibiUsersPage() {
                 {s.upstream_id ? ` (${s.upstream_id})` : ""}
               </div>
               <div style={{ fontSize: 12, color: "#666" }}>
-                到期：{s.expires_at?.slice(0, 19).replace("T", " ") || "-"}
+                到期：{formatDateTime(s.expires_at)}
               </div>
               {s.subscription_url && (
                 <>

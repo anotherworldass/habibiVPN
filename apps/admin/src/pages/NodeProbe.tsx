@@ -17,6 +17,7 @@ import {
 import { CloudServerOutlined } from "@ant-design/icons";
 import { message } from "../lib/antd-message";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import { getProjectId } from "../lib/project";
 
 type LastRun = {
@@ -319,11 +320,11 @@ export default function NodeProbePage() {
           type={schedule.last_tick.result === "disabled" ? "warning" : "info"}
           showIcon
           style={{ marginBottom: 16 }}
-          message={`定时任务心跳 ${new Date(schedule.last_tick.at).toLocaleString()} · ${tickText(
+          message={`定时任务心跳 ${formatDateTime(schedule.last_tick.at)} · ${tickText(
             schedule.last_tick.result,
           )}${
             schedule.next_probe_at
-              ? ` · 下次探测约 ${new Date(schedule.next_probe_at).toLocaleString()}`
+              ? ` · 下次探测约 ${formatDateTime(schedule.next_probe_at)}`
               : ""
           }`}
         />
@@ -333,7 +334,7 @@ export default function NodeProbePage() {
           type={lastRun.ok ? "success" : "warning"}
           showIcon
           style={{ marginBottom: 16 }}
-          message={`上次探测 ${new Date(lastRun.at).toLocaleString()} · ${
+          message={`上次探测 ${formatDateTime(lastRun.at)} · ${
             lastRun.ok ? "成功" : probeErrText(lastRun.error || "失败")
           } · ${lastRun.delayOk}/${lastRun.targetCount} 通${
             lastRun.speedCount ? ` · 测速 ${lastRun.speedCount}` : ""
@@ -480,8 +481,7 @@ export default function NodeProbePage() {
                     title: "探测时间",
                     dataIndex: "last_probed_at",
                     width: 170,
-                    render: (v: string | null) =>
-                      v ? new Date(v).toLocaleString() : "—",
+                    render: (v: string | null) => formatDateTime(v),
                   },
                 ]}
               />
@@ -520,7 +520,7 @@ export default function NodeProbePage() {
                     title: "开始",
                     dataIndex: "opened_at",
                     width: 170,
-                    render: (v: string) => new Date(v).toLocaleString(),
+                    render: (v: string) => formatDateTime(v),
                   },
                 ]}
               />

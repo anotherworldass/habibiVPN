@@ -16,6 +16,7 @@ import { Alert, Button, Collapse, Drawer, Divider, Form, Input, Space, Tag } fro
 import { message } from "../lib/antd-message";
 import { CopyOutlined, PlusOutlined } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import AppCopyI18nFields from "../components/AppCopyI18nFields";
 import {
   formValuesToI18n,
@@ -709,7 +710,12 @@ export default function CampaignsPage() {
               ellipsis: true,
               render: (_, r) => r.slot_id ?? "-",
             },
-            { title: "时间", dataIndex: "created_at", width: 180 },
+            {
+              title: "时间",
+              dataIndex: "created_at",
+              width: 180,
+              render: (v: string) => formatDateTime(v),
+            },
           ]}
         />
       </Drawer>

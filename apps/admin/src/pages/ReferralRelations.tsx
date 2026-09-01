@@ -34,6 +34,7 @@ import {
 } from "../components/EntitlementLedgerDetailModal";
 import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { adminFetch, unwrapList } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 
 type RelationListItem = {
   id: string;
@@ -286,8 +287,7 @@ function formatTrafficPair(used?: number | null, limit?: number | null) {
 }
 
 function formatSubTime(v?: string | null) {
-  if (!v) return "—";
-  return v.slice(0, 19).replace("T", " ");
+  return formatDateTime(v);
 }
 
 function formatOnlineSeconds(sec?: number | null) {
@@ -519,10 +519,8 @@ function formatEntitlementMsg(e?: EntitlementRes): string {
   }
   if (e.skipped === "no_slot") return "无对应订阅槽，未扣时长";
   if (e.skipped === "already_refunded") return "订单已退款，跳过权益扣回";
-  const prev = e.previous_expires_at
-    ? new Date(e.previous_expires_at).toLocaleString()
-    : "—";
-  const next = e.new_expires_at ? new Date(e.new_expires_at).toLocaleString() : "—";
+  const prev = formatDateTime(e.previous_expires_at);
+  const next = formatDateTime(e.new_expires_at);
   const secs =
     e.clawback_seconds != null ? `扣回 ${e.clawback_seconds} 秒 · ` : "";
   return `权益：${secs}到期 ${prev} → ${next}${e.disabled ? "（已禁用）" : ""}`;
@@ -1333,9 +1331,7 @@ export default function ReferralRelationsPage() {
                       <>
                         <Tag color="success">已验证</Tag>
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {String(data.user.emailVerifiedAt)
-                            .slice(0, 19)
-                            .replace("T", " ")}
+                          {formatDateTime(data.user.emailVerifiedAt)}
                         </Typography.Text>
                       </>
                     ) : (
@@ -1378,7 +1374,7 @@ export default function ReferralRelationsPage() {
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {data.user.connectPrefSource}
                       {data.user.connectPrefAt
-                        ? ` · ${String(data.user.connectPrefAt).slice(0, 19).replace("T", " ")}`
+                        ? ` · ${formatDateTime(data.user.connectPrefAt)}`
                         : ""}
                     </Typography.Text>
                   )}
@@ -1568,7 +1564,7 @@ export default function ReferralRelationsPage() {
                   title: "创建时间",
                   dataIndex: "createdAt",
                   width: 170,
-                  render: (v: string) => new Date(v).toLocaleString(),
+                  render: (v: string) => formatDateTime(v),
                 },
                 {
                   title: "套餐",
@@ -1622,7 +1618,7 @@ export default function ReferralRelationsPage() {
                   title: "支付时间",
                   dataIndex: "paidAt",
                   width: 170,
-                  render: (v?: string | null) => (v ? new Date(v).toLocaleString() : "—"),
+                  render: (v?: string | null) => formatDateTime(v),
                 },
                 {
                   title: "佣金",
@@ -1720,7 +1716,7 @@ export default function ReferralRelationsPage() {
                   title: "时间",
                   dataIndex: "created_at",
                   width: 170,
-                  render: (v: string) => new Date(v).toLocaleString(),
+                  render: (v: string) => formatDateTime(v),
                 },
                 {
                   title: "类型",
@@ -1817,7 +1813,7 @@ export default function ReferralRelationsPage() {
                   title: "时间",
                   dataIndex: "created_at",
                   width: 170,
-                  render: (v: string) => new Date(v).toLocaleString(),
+                  render: (v: string) => formatDateTime(v),
                 },
                 {
                   title: "原因",
@@ -1852,12 +1848,8 @@ export default function ReferralRelationsPage() {
                   title: "到期",
                   width: 200,
                   render: (_, r) => {
-                    const before = r.expires_at_before
-                      ? new Date(r.expires_at_before).toLocaleString()
-                      : "—";
-                    const after = r.expires_at_after
-                      ? new Date(r.expires_at_after).toLocaleString()
-                      : "—";
+                    const before = formatDateTime(r.expires_at_before);
+                    const after = formatDateTime(r.expires_at_after);
                     return `${before} → ${after}`;
                   },
                 },
@@ -1916,7 +1908,7 @@ export default function ReferralRelationsPage() {
                   title: "时间",
                   dataIndex: "createdAt",
                   width: 170,
-                  render: (v: string) => new Date(v).toLocaleString(),
+                  render: (v: string) => formatDateTime(v),
                 },
                 {
                   title: "类型",

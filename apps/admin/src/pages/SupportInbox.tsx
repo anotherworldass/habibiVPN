@@ -40,6 +40,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { adminFetch } from "../lib/api";
+import { formatDateTime } from "../lib/time";
 import { playDingDong, unlockDingDong } from "../lib/dingdong";
 import { getProjectId } from "../lib/project";
 
@@ -441,8 +442,7 @@ function money(cents: number) {
 }
 
 function fmtTime(v: string | null | undefined) {
-  if (!v) return "—";
-  return new Date(v).toLocaleString();
+  return formatDateTime(v);
 }
 
 function statusColor(status: string) {
@@ -1271,7 +1271,7 @@ export default function SupportInboxPage() {
                   <div>
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                       {c.last_message_at
-                        ? new Date(c.last_message_at).toLocaleString()
+                        ? formatDateTime(c.last_message_at)
                         : ""}
                     </Typography.Text>
                   </div>
