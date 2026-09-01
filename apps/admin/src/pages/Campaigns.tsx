@@ -714,7 +714,7 @@ export default function CampaignsPage() {
               title: "时间",
               dataIndex: "created_at",
               width: 180,
-              render: (v: string) => formatDateTime(v),
+              render: (_, r) => formatDateTime(r.created_at),
             },
           ]}
         />

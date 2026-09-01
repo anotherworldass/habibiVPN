@@ -294,7 +294,7 @@ export default function RedeemCodesPage() {
               title: "兑换时间",
               dataIndex: "redeemed_at",
               width: 180,
-              render: (v: string | null) => formatDateTime(v),
+              render: (_, r) => formatDateTime(r.redeemed_at),
             },
             {
               title: "操作",
