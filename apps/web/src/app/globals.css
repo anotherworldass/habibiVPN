@@ -6041,11 +6041,18 @@ button.about-contact-btn {
   white-space: nowrap;
 }
 
+.plans-extra-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 28px;
+}
+
 .plans-invite-entry {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 28px;
+  min-width: 0;
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--line));
   border-radius: 16px;
@@ -6054,6 +6061,27 @@ button.about-contact-btn {
     rgba(255, 255, 255, 0.9);
   box-shadow: 0 10px 24px color-mix(in srgb, var(--amber) 10%, transparent);
   transition: transform 0.15s ease, border-color 0.18s ease;
+}
+
+button.plans-invite-entry {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plans-custom-entry {
+  border-color: color-mix(in srgb, var(--teal) 30%, var(--line));
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--teal) 16%, transparent), transparent 55%),
+    rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--teal) 10%, transparent);
+}
+
+.plans-custom-entry .plans-invite-icon {
+  background: color-mix(in srgb, var(--teal) 18%, white);
+  color: var(--teal-deep);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--teal) 16%, transparent);
 }
 
 .plans-invite-entry:active {
@@ -7760,14 +7788,26 @@ button.account-verify-toggle {
     font-size: 15px;
   }
 
-  .plans-invite-entry {
+  .plans-extra-entries {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
     margin-top: 36px;
+    align-items: stretch;
+  }
+
+  .plans-invite-entry {
+    height: 100%;
     padding: 16px 18px;
   }
 
   .plans-invite-entry:hover {
     transform: translateY(-1px);
     border-color: color-mix(in srgb, var(--amber) 42%, var(--line));
+  }
+
+  .plans-custom-entry:hover {
+    border-color: color-mix(in srgb, var(--teal) 42%, var(--line));
   }
 
   .orders-list {

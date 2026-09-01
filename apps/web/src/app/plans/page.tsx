@@ -11,6 +11,7 @@ import Shell from "../../components/Shell";
 import { apiFetch } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
+import { openSupportChat } from "../../lib/support";
 import {
   slotCompatibleWithPlan,
   type RenewableSlot,
@@ -622,35 +623,65 @@ function PlansContent() {
         )}
 
         {!loading && (
-          <Link
-            href={loggedIn ? "/promo" : "/login?next=/promo"}
-            className="plans-invite-entry"
-          >
-            <span className="plans-invite-icon" aria-hidden>
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </span>
-            <span className="plans-invite-body">
-              <span className="plans-invite-title">{plansCopy.inviteTitle}</span>
-              <span className="plans-invite-desc">
-                {plansCopy.inviteDesc}
+          <div className="plans-extra-entries">
+            <Link
+              href={loggedIn ? "/promo" : "/login?next=/promo"}
+              className="plans-invite-entry"
+            >
+              <span className="plans-invite-icon" aria-hidden>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
               </span>
-            </span>
-            <span className="plans-invite-chevron" aria-hidden>
-              ›
-            </span>
-          </Link>
+              <span className="plans-invite-body">
+                <span className="plans-invite-title">{plansCopy.inviteTitle}</span>
+                <span className="plans-invite-desc">
+                  {plansCopy.inviteDesc}
+                </span>
+              </span>
+              <span className="plans-invite-chevron" aria-hidden>
+                ›
+              </span>
+            </Link>
+            <button
+              type="button"
+              className="plans-invite-entry plans-custom-entry"
+              onClick={() => openSupportChat()}
+            >
+              <span className="plans-invite-icon" aria-hidden>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+                  <path d="M8 9h8M8 13h5" />
+                </svg>
+              </span>
+              <span className="plans-invite-body">
+                <span className="plans-invite-title">{plansCopy.customTitle}</span>
+                <span className="plans-invite-desc">
+                  {plansCopy.customDesc}
+                </span>
+              </span>
+              <span className="plans-invite-chevron" aria-hidden>
+                ›
+              </span>
+            </button>
+          </div>
         )}
       </div>
     </Shell>
