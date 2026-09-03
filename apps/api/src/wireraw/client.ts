@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { env } from "../config.js";
 
+/** Fail fast so user requests do not hang on a wedged upstream port. */
+export const WIRERAW_TIMEOUT_MS = 10_000;
+
 export class WireRawError extends Error {
   constructor(
     public readonly status: number,
@@ -38,6 +41,84 @@ function buildUrl(path: string, query?: WireRawRequestOptions["query"]): string 
   return url.toString();
 }
 
+function errName(err: unknown): string {
+  if (err && typeof err === "object" && "name" in err) {
+    return String((err as { name?: unknown }).name || "");
+  }
+  return "";
+}
+
+function errCode(err: unknown): string {
+  if (err && typeof err === "object" && "code" in err) {
+    return String((err as { code?: unknown }).code || "");
+  }
+  return "";
+}
+
+function errMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err ?? "");
+}
+
+const NETWORK_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ECONNABORTED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_ABORTED",
+  "UND_ERR_SOCKET",
+]);
+
+export function isAbortOrNetworkError(err: unknown): boolean {
+  const name = errName(err);
+  if (name === "TimeoutError" || name === "AbortError") return true;
+  const code = errCode(err);
+  if (NETWORK_CODES.has(code)) return true;
+  const msg = errMessage(err).toLowerCase();
+  return (
+    msg.includes("fetch failed") ||
+    msg.includes("aborted") ||
+    msg.includes("timeout") ||
+    msg.includes("econnrefused") ||
+    msg.includes("network")
+  );
+}
+
+/** Transient control-plane failures that should be retried / served stale. */
+export function isRetryableUpstreamError(err: unknown): boolean {
+  if (err instanceof WireRawError) {
+    if (
+      err.code === "upstream.unavailable" ||
+      err.code === "upstream.timeout"
+    ) {
+      return true;
+    }
+    return err.status === 408 || err.status === 429 || err.status >= 500;
+  }
+  return isAbortOrNetworkError(err);
+}
+
+function wrapTransportError(err: unknown, requestId: string): WireRawError {
+  if (err instanceof WireRawError) return err;
+  const timeout =
+    errName(err) === "TimeoutError" ||
+    errName(err) === "AbortError" ||
+    (NETWORK_CODES.has(errCode(err)) && errCode(err).includes("TIMEOUT"));
+  return new WireRawError(
+    503,
+    timeout ? "upstream.timeout" : "upstream.unavailable",
+    { message: errMessage(err), code: errCode(err) || undefined },
+    requestId,
+  );
+}
+
 export async function wirerawRequest<T = unknown>(
   options: WireRawRequestOptions,
 ): Promise<T> {
@@ -57,12 +138,18 @@ export async function wirerawRequest<T = unknown>(
     headers["Idempotency-Key"] = options.idempotencyKey;
   }
 
-  const res = await undiciFetch(buildUrl(options.path, options.query), {
-    method,
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
-  });
+  let res: Awaited<ReturnType<typeof undiciFetch>>;
+  try {
+    res = await undiciFetch(buildUrl(options.path, options.query), {
+      method,
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: AbortSignal.timeout(WIRERAW_TIMEOUT_MS),
+      ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
+    });
+  } catch (err) {
+    throw wrapTransportError(err, requestId);
+  }
 
   const text = await res.text();
   let data: unknown = null;

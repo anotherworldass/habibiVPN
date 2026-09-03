@@ -7,9 +7,9 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import { signUserToken, verifyUserToken } from "../lib/user-jwt.js";
 import {
   claimFreePlan,
+  getUserSubscriptionView,
   listUserSubscriptions,
   refreshUpstreamSubscriptionUrl,
-  syncUpstreamSlot,
 } from "../services/provision.js";
 import { getPublicNodePool } from "../services/nodes.js";
 import {
@@ -1200,7 +1200,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const sub = await syncUpstreamSlot(
+        const sub = await getUserSubscriptionView(
           req.user!.sub,
           id,
           localeFromRequest(req),
@@ -1230,6 +1230,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         );
         return {
           ok: true,
+          pending: result.pending,
           subscription: result.subscription,
         };
       } catch (err) {

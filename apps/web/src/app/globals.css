@@ -7670,6 +7670,11 @@ button.account-verify-toggle {
     gap: 16px;
   }
 
+  /* Exactly 4 cards: 2×2. Leave 3-up (and other counts) on auto-fill. */
+  .plans-grid:has(> :nth-child(4):last-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .home-app-layout {
     grid-template-columns: 1.15fr 0.85fr;
     gap: 20px;

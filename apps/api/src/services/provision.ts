@@ -21,6 +21,7 @@ import {
   type FupView,
 } from "./fup.js";
 import { localizePlanCopy } from "./plan-i18n.js";
+import { executeOrEnqueueGrant } from "./upstream-grant-queue.js";
 import {
   subscriptionCanRenewWithPaidPlans,
   slotAllowsRenewWithPlan,
@@ -1704,6 +1705,58 @@ export async function grantVpnDuration(input: {
   };
 }
 
+export function activatingSubscriptionPlaceholder(
+  plan: Plan,
+  locale?: string | null,
+): SubscriptionView {
+  const copy = localizePlanCopy(plan, locale);
+  return {
+    id: "",
+    plan_id: plan.id,
+    plan_code: plan.code,
+    plan_name: copy.name,
+    plan_name_i18n: (plan.nameI18n as Record<string, string> | null) || undefined,
+    status: "activating",
+    expires_at: null,
+    service_expires_at: null,
+    used_traffic_bytes: null,
+    data_limit_bytes:
+      plan.dataLimitBytes == null ? null : Number(plan.dataLimitBytes),
+    reset_policy: plan.resetPolicy,
+    custom_reset_interval: plan.customResetInterval,
+    next_reset_at: null,
+    subscription_url: null,
+    client_urls: null,
+    online_ip_limit: plan.deviceSlots,
+    online_device_count: null,
+    subscription_online_devices: null,
+    online_at: null,
+    online_since: null,
+    next_plan_ref: plan.upstreamPlanRef,
+    current_bandwidth_plan_ref: null,
+    next_bandwidth_plan_ref: null,
+    bandwidth_policy: null,
+    current_node: null,
+    source_ips: [],
+    source_ip_history: [],
+    last_source_ip: null,
+    online_seconds: null,
+    inbounds: null,
+    protocols: [],
+    revoked_at: null,
+    last_fetch_agent: null,
+    available_formats: [],
+    note: null,
+    last_synced_at: null,
+    upstream_id: null,
+    upstream_username: "",
+    fup: null,
+    fup_history: [],
+    can_renew: false,
+    renew_spec: null,
+  };
+}
+
 export async function claimFreePlan(
   userId: string,
   planId: string,
@@ -1725,19 +1778,41 @@ export async function claimFreePlan(
   if (plan.projectId !== user.projectId) {
     throw Object.assign(new Error("plan.project_mismatch"), { statusCode: 403 });
   }
-  return createUpstreamSlot({
+  const ledger = {
+    reason: "free_claim" as const,
+    refType: "plan",
+    refId: plan.id,
+    actorType: "user",
+    actorId: userId,
+    idempotencyKey: `free_claim:${userId}:${plan.id}`,
+  };
+  const queued = await executeOrEnqueueGrant({
+    kind: "free_claim",
     userId,
-    planId: plan.id,
-    locale,
-    ledger: {
-      reason: "free_claim",
-      refType: "plan",
-      refId: plan.id,
-      actorType: "user",
-      actorId: userId,
-      idempotencyKey: `free_claim:${userId}:${plan.id}`,
+    idempotencyKey: ledger.idempotencyKey,
+    payload: {
+      op: "create_slot",
+      planId: plan.id,
+      locale,
+      ledger,
     },
+    run: () =>
+      createUpstreamSlot({
+        userId,
+        planId: plan.id,
+        locale,
+        ledger,
+      }),
   });
+  if (queued.pending) {
+    return {
+      pending: true as const,
+      user,
+      slot: null,
+      subscription: activatingSubscriptionPlaceholder(plan, locale),
+    };
+  }
+  return { pending: false as const, ...queued.result };
 }
 
 /**
@@ -1843,6 +1918,27 @@ export async function syncUpstreamSlot(
   const view = await toSubscriptionViewAsync(saved, live, locale);
   const [withRenew] = await attachCanRenew(userId, [view], [saved]);
   return withRenew;
+}
+
+/** Live sync when possible; fall back to the local snapshot so detail pages stay usable. */
+export async function getUserSubscriptionView(
+  userId: string,
+  slotId: string,
+  locale?: string | null,
+) {
+  const slot = await prisma.userUpstream.findFirst({
+    where: { id: slotId, userId },
+    include: slotProjectInclude,
+  });
+  if (!slot) return null;
+  try {
+    const synced = await syncUpstreamSlot(userId, slotId, locale);
+    return synced ?? (await toSubscriptionViewAsync(slot, null, locale));
+  } catch {
+    const view = await toSubscriptionViewAsync(slot, null, locale);
+    const [withRenew] = await attachCanRenew(userId, [view], [slot]);
+    return withRenew;
+  }
 }
 
 const DEFAULT_STALE_TTL_MS = 30_000;

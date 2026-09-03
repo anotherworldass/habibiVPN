@@ -89,10 +89,21 @@ function classifyStatus(status?: string): "active" | "inactive" | "other" {
   return "other";
 }
 
-export async function getPublicNodePool() {
-  const raw = await wireraw.listNodes();
-  const nodes = unwrapNodes(raw);
+export type PublicNodePool = {
+  summary: {
+    total_nodes: number;
+    active_nodes: number;
+    region_count: number;
+    updated_at: string;
+  };
+  regions: RegionPool[];
+};
 
+const NODE_POOL_TTL_MS = 90_000;
+let nodePoolCache: { data: PublicNodePool; at: number } | null = null;
+let nodePoolInflight: Promise<PublicNodePool> | null = null;
+
+function buildPublicNodePool(nodes: UpstreamNode[]): PublicNodePool {
   const byRegion = new Map<
     string,
     { active: number; inactive: number; other: number }
@@ -137,4 +148,28 @@ export async function getPublicNodePool() {
     },
     regions,
   };
+}
+
+export async function getPublicNodePool(): Promise<PublicNodePool> {
+  const now = Date.now();
+  if (nodePoolCache && now - nodePoolCache.at < NODE_POOL_TTL_MS) {
+    return nodePoolCache.data;
+  }
+  if (nodePoolInflight) return nodePoolInflight;
+
+  nodePoolInflight = (async () => {
+    try {
+      const raw = await wireraw.listNodes();
+      const data = buildPublicNodePool(unwrapNodes(raw));
+      nodePoolCache = { data, at: Date.now() };
+      return data;
+    } catch (err) {
+      if (nodePoolCache) return nodePoolCache.data;
+      throw err;
+    } finally {
+      nodePoolInflight = null;
+    }
+  })();
+
+  return nodePoolInflight;
 }

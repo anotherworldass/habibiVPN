@@ -161,6 +161,7 @@ export const userCampaignRoutes: FastifyPluginAsync = async (app) => {
           result: result.claim.result,
           granted_seconds: result.claim.grantedSeconds,
           subscription: result.subscription,
+          pending: "pending" in result ? Boolean(result.pending) : false,
         };
       } catch (err) {
         return mapErr(err, reply);

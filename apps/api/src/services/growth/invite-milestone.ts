@@ -7,6 +7,7 @@ import type {
 import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { createUpstreamSlot } from "../provision.js";
+import { executeOrEnqueueGrant } from "../upstream-grant-queue.js";
 import type { CampaignWithRelations } from "./eligibility.js";
 import {
   MILESTONE_PERIOD_KEY,
@@ -176,6 +177,7 @@ export async function tryGrantInviteMilestone(input: {
   claim?: CampaignClaim;
   subscription?: unknown;
   reason?: string;
+  pending?: boolean;
 }> {
   const { campaign } = input;
   const now = new Date();
@@ -241,32 +243,62 @@ export async function tryGrantInviteMilestone(input: {
       where: { id: reward.planId },
       select: { validitySeconds: true },
     });
-    const grant = await createUpstreamSlot({
+    const ledger = {
+      reason: "campaign" as const,
+      refType: "campaign_claim",
+      refId: claim.id,
+      actorType: "user",
+      actorId: input.userId,
+      idempotencyKey: `campaign_claim:${claim.id}`,
+    };
+    const note = `campaign:${campaign.code}:milestone`;
+    const campaignMeta = {
+      type: "invite_milestone",
+      invited_count: count,
+      plan_id: reward.planId,
+    };
+    const queued = await executeOrEnqueueGrant({
+      kind: "campaign",
       userId: input.userId,
-      planId: reward.planId,
-      allowRenew: true,
-      note: `campaign:${campaign.code}:milestone`,
-      ledger: {
-        reason: "campaign",
-        refType: "campaign_claim",
-        refId: claim.id,
-        actorType: "user",
-        actorId: input.userId,
-        idempotencyKey: `campaign_claim:${claim.id}`,
+      idempotencyKey: ledger.idempotencyKey,
+      payload: {
+        op: "create_slot",
+        planId: reward.planId,
+        allowRenew: true,
+        note,
+        ledger,
+        campaignClaimId: claim.id,
+        campaignGrantedSeconds: plan?.validitySeconds ?? null,
+        campaignMeta,
       },
+        run: () =>
+          createUpstreamSlot({
+            userId: input.userId,
+            planId: reward.planId ?? undefined,
+            allowRenew: true,
+            note,
+            ledger,
+          }),
     });
     const grantedSeconds = plan?.validitySeconds ?? null;
+    if (queued.pending) {
+      claim = await prisma.campaignClaim.update({
+        where: { id: claim.id },
+        data: {
+          result: "claimed",
+          grantedSeconds,
+          meta: campaignMeta,
+        },
+      });
+      return { granted: true, claim, subscription: null, pending: true };
+    }
     claim = await prisma.campaignClaim.update({
       where: { id: claim.id },
       data: {
         result: "claimed",
         grantedSeconds,
-        slotId: grant.slot.id,
-        meta: {
-          type: "invite_milestone",
-          invited_count: count,
-          plan_id: reward.planId,
-        },
+        slotId: queued.result.slot.id,
+        meta: campaignMeta,
       },
     });
     await writeAudit({
@@ -284,7 +316,7 @@ export async function tryGrantInviteMilestone(input: {
         trigger: "invite_milestone",
       },
     });
-    return { granted: true, claim, subscription: grant.subscription };
+    return { granted: true, claim, subscription: queued.result.subscription };
   } catch (err) {
     await prisma.campaignClaim.delete({ where: { id: claim.id } }).catch(() => {});
     throw err;
@@ -387,31 +419,61 @@ export async function tryGrantPerInviteRewards(input: {
     }
 
     try {
-      const grant = await createUpstreamSlot({
+      const ledger = {
+        reason: "campaign" as const,
+        refType: "campaign_claim",
+        refId: claim.id,
+        actorType: "user",
+        actorId: input.userId,
+        idempotencyKey: `campaign_claim:${claim.id}`,
+      };
+      const note = `campaign:${campaign.code}:per_invite`;
+      const campaignMeta = {
+        type: "invite_per_invite",
+        invitee_id: item.inviteeId,
+        plan_id: planId,
+      };
+      const queued = await executeOrEnqueueGrant({
+        kind: "campaign",
         userId: input.userId,
-        planId,
-        allowRenew: true,
-        note: `campaign:${campaign.code}:per_invite`,
-        ledger: {
-          reason: "campaign",
-          refType: "campaign_claim",
-          refId: claim.id,
-          actorType: "user",
-          actorId: input.userId,
-          idempotencyKey: `campaign_claim:${claim.id}`,
+        idempotencyKey: ledger.idempotencyKey,
+        payload: {
+          op: "create_slot",
+          planId,
+          allowRenew: true,
+          note,
+          ledger,
+          campaignClaimId: claim.id,
+          campaignGrantedSeconds: plan.validitySeconds ?? null,
+          campaignMeta,
         },
+        run: () =>
+          createUpstreamSlot({
+            userId: input.userId,
+            planId,
+            allowRenew: true,
+            note,
+            ledger,
+          }),
       });
+      if (queued.pending) {
+        await prisma.campaignClaim.update({
+          where: { id: claim.id },
+          data: {
+            result: "claimed",
+            grantedSeconds: plan.validitySeconds ?? null,
+            meta: campaignMeta,
+          },
+        });
+        continue;
+      }
       await prisma.campaignClaim.update({
         where: { id: claim.id },
         data: {
           result: "claimed",
           grantedSeconds: plan.validitySeconds ?? null,
-          slotId: grant.slot.id,
-          meta: {
-            type: "invite_per_invite",
-            invitee_id: item.inviteeId,
-            plan_id: planId,
-          },
+          slotId: queued.result.slot.id,
+          meta: campaignMeta,
         },
       });
       await writeAudit({

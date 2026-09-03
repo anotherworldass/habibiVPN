@@ -869,6 +869,7 @@ model User {
   telegramSubscribers    TelegramSubscriber[]
   supportGuests          SupportGuest[]
   supportConversations   SupportConversation[]
+  upstreamGrantJobs      UpstreamGrantJob[]
 
   @@index([invitedById])
   @@index([promoGroupId])
@@ -1241,6 +1242,35 @@ model UserUpstream {
   @@index([planId])
   @@index([userId, planId])
   @@map("user_upstreams")
+}
+
+enum UpstreamGrantJobStatus {
+  pending
+  processing
+  done
+  failed
+}
+
+/// Deferred WireRaw writes (claim / redeem / campaign / signup trial) while upstream is down.
+model UpstreamGrantJob {
+  id             String                 @id @default(cuid())
+  kind           String
+  userId         String                 @map("user_id")
+  idempotencyKey String                 @unique @map("idempotency_key")
+  payload        Json
+  status         UpstreamGrantJobStatus @default(pending)
+  attempts       Int                    @default(0)
+  nextRetryAt    DateTime               @default(now()) @map("next_retry_at")
+  lastError      String?                @map("last_error") @db.Text
+  slotId         String?                @map("slot_id")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([userId])
+  @@map("upstream_grant_jobs")
 }
 
 /// Append-only Habibi slot entitlement changes (plan / expiry / traffic / status)

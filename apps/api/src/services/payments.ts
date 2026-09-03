@@ -390,8 +390,11 @@ export async function applyPaymentResult(
   if (!order || order.provider !== providerCode) {
     throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
   }
-  if (["paid", "provisioning", "provisioned"].includes(order.status)) {
+  if (["provisioning", "provisioned"].includes(order.status)) {
     return order;
+  }
+  if (order.status === "paid") {
+    return provisionPaidOrder(order.id);
   }
   if (order.amountCents !== result.amountCents) {
     throw Object.assign(new Error("payment.amount_mismatch"), { statusCode: 400 });
@@ -432,7 +435,7 @@ export async function refreshPaymentOrder(userId: string, orderId: string) {
     where: { userId, OR: [{ id: orderId }, { orderNo: orderId }] },
   });
   if (!order) throw Object.assign(new Error("order.not_found"), { statusCode: 404 });
-  if (!order.provider || !["pending", "paid", "cancelled"].includes(order.status)) {
+  if (!order.provider || !["pending", "cancelled"].includes(order.status)) {
     return order;
   }
   if (!(await shouldRefreshRemotePayment(order.id))) return order;

@@ -12,7 +12,7 @@
     "prisma:deploy": "pnpm exec prisma migrate deploy",
     "prisma:studio": "pnpm exec prisma studio",
     "wireraw:smoke": "tsx scripts/wireraw-smoke.ts",
-    "test": "tsx --test src/payments/accepto-epay.test.ts src/services/iap/store-package.test.ts src/services/app-download-policy.test.ts src/services/release-upload-key.test.ts src/services/llm/translate.test.ts src/services/referral/invite-env.test.ts src/services/fup.test.ts src/services/signup-trial.test.ts src/services/email-canonical.test.ts src/services/growth/invite-milestone.test.ts src/services/order-no.test.ts src/services/renew-compat.test.ts src/services/node-probe/node-probe.test.ts"
+    "test": "tsx --test src/payments/accepto-epay.test.ts src/services/iap/store-package.test.ts src/services/app-download-policy.test.ts src/services/release-upload-key.test.ts src/services/llm/translate.test.ts src/services/referral/invite-env.test.ts src/services/fup.test.ts src/services/signup-trial.test.ts src/services/email-canonical.test.ts src/services/growth/invite-milestone.test.ts src/services/order-no.test.ts src/services/renew-compat.test.ts src/services/node-probe/node-probe.test.ts src/wireraw/client.test.ts src/services/upstream-grant-queue.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1100.0",

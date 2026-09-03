@@ -5,6 +5,7 @@ import type {
 import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { grantVpnDuration } from "../provision.js";
+import { executeOrEnqueueGrant } from "../upstream-grant-queue.js";
 import {
   eligibilityHttpError,
   evaluateEligibility,
@@ -436,6 +437,7 @@ export async function participateCampaign(input: ParticipateInput) {
       subscription: grant.subscription,
       period_key: elig.periodKey,
       attempt_index: 1,
+      pending: Boolean(grant.pending),
     };
   }
 
@@ -447,6 +449,7 @@ export async function participateCampaign(input: ParticipateInput) {
   if (!reward || reward.kind !== "vpn_duration" || !reward.validitySeconds) {
     throw httpError("campaign.reward_misconfigured", 500);
   }
+  const rewardSeconds = reward.validitySeconds;
 
   // Reserve attempt slot first to avoid double-grant on concurrent requests
   let claim: CampaignClaim;
@@ -498,6 +501,7 @@ export async function participateCampaign(input: ParticipateInput) {
   let grantedSeconds: number | null = null;
   let slotId: string | null = null;
   let subscription = null;
+  let pending = false;
 
   if (result === "claimed" || result === "won") {
     try {
@@ -506,28 +510,60 @@ export async function participateCampaign(input: ParticipateInput) {
       const displayNameI18n = Object.keys(titleI18n).length
         ? titleI18n
         : { ...DEFAULT_GROWTH_SLOT_NAME_I18N };
-      const grant = await grantVpnDuration({
+      const note = `campaign:${campaign.code}:${periodKey}#${nextAttemptIndex}`;
+      const ledger = {
+        reason: "campaign" as const,
+        refType: "campaign_claim",
+        refId: claim.id,
+        actorType: "user",
+        actorId: input.userId,
+        idempotencyKey: `campaign_claim:${claim.id}`,
+      };
+      const queued = await executeOrEnqueueGrant({
+        kind: "campaign",
         userId: input.userId,
-        seconds: reward.validitySeconds,
-        dataLimitBytes:
-          reward.dataLimitBytes == null
-            ? undefined
-            : Number(reward.dataLimitBytes),
-        stackMode: reward.stackMode,
-        note: `campaign:${campaign.code}:${periodKey}#${nextAttemptIndex}`,
-        displayNameI18n,
-        ledger: {
-          reason: "campaign",
-          refType: "campaign_claim",
-          refId: claim.id,
-          actorType: "user",
-          actorId: input.userId,
-          idempotencyKey: `campaign_claim:${claim.id}`,
+        idempotencyKey: ledger.idempotencyKey,
+        payload: {
+          op: "grant_duration",
+          seconds: rewardSeconds,
+          dataLimitBytes:
+            reward.dataLimitBytes == null
+              ? undefined
+              : Number(reward.dataLimitBytes),
+          stackMode: reward.stackMode,
+          note,
+          displayNameI18n,
+          ledger,
+          campaignClaimId: claim.id,
+          campaignGrantedSeconds: rewardSeconds,
+          campaignMeta: {
+            type: campaign.type,
+            stack_mode: reward.stackMode,
+            attempt_index: nextAttemptIndex,
+          },
         },
+        run: () =>
+          grantVpnDuration({
+            userId: input.userId,
+            seconds: rewardSeconds,
+            dataLimitBytes:
+              reward.dataLimitBytes == null
+                ? undefined
+                : Number(reward.dataLimitBytes),
+            stackMode: reward.stackMode,
+            note,
+            displayNameI18n,
+            ledger,
+          }),
       });
-      grantedSeconds = grant.granted_seconds;
-      slotId = grant.slot.id;
-      subscription = grant.subscription;
+      if (queued.pending) {
+        pending = true;
+        grantedSeconds = rewardSeconds;
+      } else {
+        grantedSeconds = queued.result.granted_seconds;
+        slotId = queued.result.slot.id;
+        subscription = queued.result.subscription;
+      }
     } catch (err) {
       await prisma.campaignClaim.delete({ where: { id: claim.id } }).catch(() => {});
       throw err;
@@ -570,6 +606,7 @@ export async function participateCampaign(input: ParticipateInput) {
     subscription,
     period_key: periodKey,
     attempt_index: nextAttemptIndex,
+    pending,
   };
 }
 

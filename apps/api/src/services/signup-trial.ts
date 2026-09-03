@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { createUpstreamSlot } from "./provision.js";
+import { executeOrEnqueueGrant } from "./upstream-grant-queue.js";
 import { localizePlanCopy } from "./plan-i18n.js";
 import {
   evaluateSignupTrialGrant,
@@ -92,7 +93,7 @@ export async function grantSignupTrialIfEligible(
   userId: string,
   event: SignupTrialEvent,
   locale?: string | null,
-): Promise<"skipped" | "granted"> {
+): Promise<"skipped" | "granted" | "queued"> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, projectId: true, status: true },
@@ -119,20 +120,39 @@ export async function grantSignupTrialIfEligible(
   if (!decision.ok) return "skipped";
 
   try {
-    await createUpstreamSlot({
+    const queued = await executeOrEnqueueGrant({
+      kind: "signup_trial",
       userId: user.id,
-      planId: decision.planId,
-      locale,
-      ledger: {
-        reason: "signup_trial",
-        refType: "plan",
-        refId: decision.planId,
-        actorType: "system",
-        actorId: "signup_trial",
-        idempotencyKey: `signup_trial:${user.id}:${decision.planId}`,
+      idempotencyKey: `signup_trial:${user.id}:${decision.planId}`,
+      payload: {
+        op: "create_slot",
+        planId: decision.planId,
+        locale,
+        ledger: {
+          reason: "signup_trial",
+          refType: "plan",
+          refId: decision.planId,
+          actorType: "system",
+          actorId: "signup_trial",
+          idempotencyKey: `signup_trial:${user.id}:${decision.planId}`,
+        },
       },
+      run: () =>
+        createUpstreamSlot({
+          userId: user.id,
+          planId: decision.planId,
+          locale,
+          ledger: {
+            reason: "signup_trial",
+            refType: "plan",
+            refId: decision.planId,
+            actorType: "system",
+            actorId: "signup_trial",
+            idempotencyKey: `signup_trial:${user.id}:${decision.planId}`,
+          },
+        }),
     });
-    return "granted";
+    return queued.pending ? "queued" : "granted";
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg === "subscription.plan_already_owned") return "skipped";

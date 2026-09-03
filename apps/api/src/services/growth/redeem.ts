@@ -2,6 +2,7 @@ import type { ClientChannel, RedeemBatch, RedeemCode } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { writeAudit } from "../../lib/audit.js";
 import { createUpstreamSlot, grantVpnDuration } from "../provision.js";
+import { executeOrEnqueueGrant } from "../upstream-grant-queue.js";
 import { CLIENT_CHANNELS } from "../catalog.js";
 
 function httpError(message: string, statusCode: number) {
@@ -232,6 +233,7 @@ export async function redeemCode(input: {
   let grantedSeconds: number | null = null;
   let slotId: string | null = null;
   let subscription = null;
+  let pending = false;
 
   try {
     const redeemLedger = {
@@ -242,36 +244,78 @@ export async function redeemCode(input: {
       actorId: input.userId,
       idempotencyKey: `redeem:${row.id}`,
     };
+    const note = `redeem:${codeStr}`;
     if (batch.planId) {
-      const result = await createUpstreamSlot({
+      const queued = await executeOrEnqueueGrant({
+        kind: "redeem",
         userId: input.userId,
-        planId: batch.planId,
-        allowRenew: true,
-        note: `redeem:${codeStr}`,
-        ledger: redeemLedger,
+        idempotencyKey: redeemLedger.idempotencyKey,
+        payload: {
+          op: "create_slot",
+          planId: batch.planId,
+          allowRenew: true,
+          note,
+          ledger: redeemLedger,
+        },
+        run: () =>
+          createUpstreamSlot({
+            userId: input.userId,
+            planId: batch.planId!,
+            allowRenew: true,
+            note,
+            ledger: redeemLedger,
+          }),
       });
-      slotId = result.slot.id;
-      grantedSeconds = batch.plan?.validitySeconds ?? batch.validitySeconds;
-      subscription = result.subscription;
+      if (queued.pending) {
+        pending = true;
+        grantedSeconds = batch.plan?.validitySeconds ?? batch.validitySeconds;
+      } else {
+        slotId = queued.result.slot.id;
+        grantedSeconds = batch.plan?.validitySeconds ?? batch.validitySeconds;
+        subscription = queued.result.subscription;
+      }
     } else {
-      const grant = await grantVpnDuration({
+      const displayNameI18n = batch.name?.trim()
+        ? { zh: batch.name.trim(), en: batch.name.trim() }
+        : undefined;
+      const queued = await executeOrEnqueueGrant({
+        kind: "redeem",
         userId: input.userId,
-        seconds: batch.validitySeconds!,
-        dataLimitBytes:
-          batch.dataLimitBytes == null
-            ? undefined
-            : Number(batch.dataLimitBytes),
-        stackMode: batch.stackMode,
-        note: `redeem:${codeStr}`,
-        // Batch name is ops label; use as zh with system en fallback via defaults merge in create.
-        displayNameI18n: batch.name?.trim()
-          ? { zh: batch.name.trim(), en: batch.name.trim() }
-          : undefined,
-        ledger: redeemLedger,
+        idempotencyKey: redeemLedger.idempotencyKey,
+        payload: {
+          op: "grant_duration",
+          seconds: batch.validitySeconds!,
+          dataLimitBytes:
+            batch.dataLimitBytes == null
+              ? undefined
+              : Number(batch.dataLimitBytes),
+          stackMode: batch.stackMode,
+          note,
+          displayNameI18n,
+          ledger: redeemLedger,
+        },
+        run: () =>
+          grantVpnDuration({
+            userId: input.userId,
+            seconds: batch.validitySeconds!,
+            dataLimitBytes:
+              batch.dataLimitBytes == null
+                ? undefined
+                : Number(batch.dataLimitBytes),
+            stackMode: batch.stackMode,
+            note,
+            displayNameI18n,
+            ledger: redeemLedger,
+          }),
       });
-      slotId = grant.slot.id;
-      grantedSeconds = grant.granted_seconds;
-      subscription = grant.subscription;
+      if (queued.pending) {
+        pending = true;
+        grantedSeconds = batch.validitySeconds!;
+      } else {
+        slotId = queued.result.slot.id;
+        grantedSeconds = queued.result.granted_seconds;
+        subscription = queued.result.subscription;
+      }
     }
   } catch (err) {
     await prisma.redeemCode.update({
@@ -317,6 +361,7 @@ export async function redeemCode(input: {
     granted_seconds: grantedSeconds,
     slot_id: slotId,
     subscription,
+    pending,
   };
 }
 

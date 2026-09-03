@@ -48,8 +48,8 @@ const proxyDispatcher = env.WIRERAW_HTTP_PROXY
 
 /** Fresh cache window for upstream subscription bodies. */
 const UPSTREAM_CACHE_TTL_MS = 90_000;
-/** Serve stale body up to this age when upstream is rate-limited. */
-const UPSTREAM_STALE_TTL_MS = 15 * 60_000;
+/** Serve stale body up to this age when upstream is unavailable (not only 429). */
+const UPSTREAM_STALE_TTL_MS = 12 * 60 * 60_000;
 
 type UpstreamCacheEntry = {
   body: string;
@@ -378,11 +378,17 @@ async function getUpstreamSubscriptionBody(input: {
       upstreamCache.set(input.cacheKey, { body, fetchedAt: Date.now() });
       return body;
     } catch (err) {
-      const code = err instanceof Error ? err.message : "";
-      const isRateLimited =
-        code.includes("rate_limited") ||
-        (err as { statusCode?: number }).statusCode === 429;
-      if (isRateLimited && cached && now - cached.fetchedAt < UPSTREAM_STALE_TTL_MS) {
+      const status = (err as { statusCode?: number }).statusCode;
+      const message = err instanceof Error ? err.message : "";
+      const terminal =
+        status === 410 ||
+        message === "sub.expired" ||
+        message === "sub.revoked";
+      if (
+        !terminal &&
+        cached &&
+        now - cached.fetchedAt < UPSTREAM_STALE_TTL_MS
+      ) {
         return cached.body;
       }
       throw err;

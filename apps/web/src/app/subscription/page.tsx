@@ -58,6 +58,7 @@ const THIRD_PARTY_CLIENTS: Array<{
 
 function statusLabel(status: string, copy: ReturnType<typeof t>["sub"]) {
   if (status === "active") return copy.statusActive;
+  if (status === "activating") return copy.statusActivating;
   if (status === "expired") return copy.statusExpired;
   if (status === "disabled") return copy.statusDisabled;
   if (status === "none") return copy.statusNone;
