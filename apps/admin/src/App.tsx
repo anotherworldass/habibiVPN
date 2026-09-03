@@ -42,6 +42,7 @@ import {
   SafetyCertificateOutlined,
   FileTextOutlined,
   HistoryOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Select, Space } from "antd";
 import DashboardPage from "./pages/Dashboard";
@@ -85,6 +86,7 @@ import AuthEmailSettingsPage from "./pages/AuthEmailSettings";
 import SignupTrialSettingsPage from "./pages/SignupTrialSettings";
 import StorageSettingsPage from "./pages/StorageSettings";
 import SubscriptionNoticeSettingsPage from "./pages/SubscriptionNoticeSettings";
+import ThirdPartyClientsSettingsPage from "./pages/ThirdPartyClientsSettings";
 import LlmSettingsPage from "./pages/LlmSettings";
 import { adminFetch } from "./lib/api";
 import { clearSession, getAdmin, getToken } from "./lib/auth";
@@ -179,6 +181,11 @@ function ProtectedLayout() {
                 path: "/settings/subscription-notice",
                 name: "订阅转换",
                 icon: <FileTextOutlined />,
+              },
+              {
+                path: "/settings/third-party-clients",
+                name: "第三方客户端",
+                icon: <DownloadOutlined />,
               },
               {
                 path: "/settings/llm",
@@ -362,6 +369,10 @@ function ProtectedLayout() {
         <Route
           path="/settings/subscription-notice"
           element={<SubscriptionNoticeSettingsPage />}
+        />
+        <Route
+          path="/settings/third-party-clients"
+          element={<ThirdPartyClientsSettingsPage />}
         />
         <Route path="/settings/llm" element={<LlmSettingsPage />} />
         <Route path="/settings/audit-logs" element={<AuditLogsPage />} />

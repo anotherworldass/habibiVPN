@@ -13,6 +13,7 @@ export const PUBLIC_SEO_PATHS = [
   "/about",
   "/guide",
   "/download",
+  "/clients",
   "/privacy",
   "/terms",
   "/nodes",
@@ -68,6 +69,16 @@ const pages: Record<PublicSeoPath, Record<SiteLocale, PageSeo>> = {
     en: {
       title: `Download · ${site.brand}`,
       description: `Download ${site.brand} for iOS, Android, Windows, and macOS, or manage plans in the browser first.`,
+    },
+  },
+  "/clients": {
+    zh: {
+      title: `第三方软件 · ${site.brand}`,
+      description: "按平台下载 Shadowrocket、Clash、Hiddify 等第三方客户端，再导入本站订阅。",
+    },
+    en: {
+      title: `Third-party clients · ${site.brand}`,
+      description: "Download Shadowrocket, Clash, Hiddify, and other clients by platform, then import your subscription.",
     },
   },
   "/privacy": {

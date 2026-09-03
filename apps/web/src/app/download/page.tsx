@@ -126,6 +126,10 @@ export default function DownloadPage() {
           ) : null}
 
           <p className="download-web-hint">
+            {copy.clientsBefore}{" "}
+            <Link href="/clients">{copy.clientsLink}</Link>
+          </p>
+          <p className="download-web-hint">
             {copy.webBefore}{" "}
             <Link href="/register">{copy.register}</Link>
             {" · "}

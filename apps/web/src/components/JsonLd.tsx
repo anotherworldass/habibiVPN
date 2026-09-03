@@ -75,6 +75,7 @@ export default function JsonLd({
     "/about": copy.about.title,
     "/guide": copy.guide.title,
     "/download": copy.download.title,
+    "/clients": copy.clients.title,
     "/privacy": locale === "en" ? "Privacy" : "隐私条款",
     "/terms": locale === "en" ? "Terms" : "用户协议",
     "/support": copy.support.title,

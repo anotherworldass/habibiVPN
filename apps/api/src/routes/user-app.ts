@@ -9,6 +9,7 @@ import {
   listPublicDownloads,
   recordDownloadAndResolve,
 } from "../services/app-downloads.js";
+import { listPublicThirdPartyClients } from "../services/third-party-clients.js";
 import { sourceHintsFromRequest } from "../services/project.js";
 
 function softParseClient(raw: string | null | undefined): ClientChannel | null {
@@ -28,6 +29,33 @@ export const userAppRoutes: FastifyPluginAsync = async (app) => {
         projectCode: q.project || q.project_code || hints.projectCode,
         siteHost: hints.siteHost,
         packageName: q.package || q.package_name || null,
+        platform: q.platform || null,
+      });
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${USER_API_PREFIX}/app/third-party-clients`, async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const hints = sourceHintsFromRequest(req);
+    const locale =
+      q.locale ||
+      q.lang ||
+      (typeof req.headers["x-habibi-locale"] === "string"
+        ? req.headers["x-habibi-locale"]
+        : Array.isArray(req.headers["accept-language"])
+          ? req.headers["accept-language"][0]
+          : req.headers["accept-language"]) ||
+      null;
+    try {
+      return await listPublicThirdPartyClients({
+        projectCode: q.project || q.project_code || hints.projectCode,
+        siteHost: hints.siteHost,
+        locale,
         platform: q.platform || null,
       });
     } catch (err) {

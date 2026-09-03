@@ -30,6 +30,8 @@ export const SETTING_KEYS = {
   PAYMENT_ORDER_GUARD: "payment.order_guard",
   /** Node connectivity probe (mihomo URL-test / speed / TG ops alerts). */
   NODE_PROBE: "node.probe",
+  /** Public third-party client download catalog (Clash / Shadowrocket / …). */
+  THIRD_PARTY_CLIENTS: "download.third_party_clients",
 } as const;
 
 /** Modules that can bind to a named S3 profile. */

@@ -57,6 +57,17 @@ import {
   type StorageS3BindingsPatch,
 } from "../services/system-settings.js";
 import {
+  THIRD_PARTY_CLIENTS_MAX,
+  THIRD_PARTY_IMPORT_KEYS,
+  THIRD_PARTY_NAME_MAX,
+  THIRD_PARTY_SUMMARY_MAX,
+  THIRD_PARTY_TIP_MAX,
+  getThirdPartyClientsConfig,
+  parseThirdPartyClientsValue,
+  thirdPartyClientsValueSchema,
+  upsertThirdPartyClientsConfig,
+} from "../services/third-party-clients.js";
+import {
   clearSupportTelegramForwardBind,
   getSupportTelegramForwardPublic,
   sendSupportTelegramForwardTest,
@@ -157,6 +168,12 @@ const subscriptionNodeNamePatch = z.object({
 
 const subscriptionDomainsPatch = z.object({
   domains: z.array(z.string().trim().max(500)).max(SUBSCRIPTION_DOMAINS_MAX),
+  remark: z.string().max(255).nullable().optional(),
+});
+
+const thirdPartyClientsPatch = z.object({
+  enabled: z.boolean(),
+  clients: thirdPartyClientsValueSchema.shape.clients,
   remark: z.string().max(255).nullable().optional(),
 });
 
@@ -757,6 +774,84 @@ export const adminSettingsRoutes: FastifyPluginAsync = async (app) => {
         targetId: projectId,
       });
       return await getSupportTelegramForwardPublic(projectId);
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.get(`${prefix}/download/third-party-clients`, async (req, reply) => {
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const cfg = await getThirdPartyClientsConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.THIRD_PARTY_CLIENTS,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        stored: cfg.stored,
+        clients_max: THIRD_PARTY_CLIENTS_MAX,
+        name_max: THIRD_PARTY_NAME_MAX,
+        summary_max: THIRD_PARTY_SUMMARY_MAX,
+        tip_max: THIRD_PARTY_TIP_MAX,
+        import_keys: THIRD_PARTY_IMPORT_KEYS,
+        ...cfg.value,
+      };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode || 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "internal_error",
+      });
+    }
+  });
+
+  app.put(`${prefix}/download/third-party-clients`, async (req, reply) => {
+    const parsed = thirdPartyClientsPatch.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "validation.failed", details: parsed.error.flatten() });
+    }
+    try {
+      const projectId = await resolveAdminProjectId(req);
+      const value = parseThirdPartyClientsValue({
+        clients: parsed.data.clients,
+      });
+      await upsertThirdPartyClientsConfig({
+        projectId,
+        enabled: parsed.data.enabled,
+        value,
+        remark: parsed.data.remark ?? null,
+      });
+
+      await writeAudit({
+        actorType: "admin",
+        actorId: req.admin?.sub,
+        action: "settings.third_party_clients.upsert",
+        targetType: "project",
+        targetId: projectId,
+        meta: {
+          enabled: parsed.data.enabled,
+          count: value.clients.length,
+        },
+      });
+
+      const cfg = await getThirdPartyClientsConfig(projectId);
+      return {
+        project_id: projectId,
+        key: SETTING_KEYS.THIRD_PARTY_CLIENTS,
+        enabled: cfg.enabled,
+        remark: cfg.remark,
+        stored: cfg.stored,
+        clients_max: THIRD_PARTY_CLIENTS_MAX,
+        name_max: THIRD_PARTY_NAME_MAX,
+        summary_max: THIRD_PARTY_SUMMARY_MAX,
+        tip_max: THIRD_PARTY_TIP_MAX,
+        import_keys: THIRD_PARTY_IMPORT_KEYS,
+        ...cfg.value,
+      };
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode || 500;
       return reply.code(status).send({

@@ -26,7 +26,14 @@ export const translateCopyInputSchema = z.object({
     )
     .refine((value) => Object.keys(value).length <= 10, "too_many_fields"),
   context: z
-    .enum(["plan_group", "plan", "announcement", "campaign", "release"])
+    .enum([
+        "plan_group",
+        "plan",
+        "announcement",
+        "campaign",
+        "release",
+        "third_party_client",
+      ])
     .optional(),
 });
 

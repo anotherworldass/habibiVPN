@@ -544,6 +544,10 @@ function SubscriptionContent() {
                   <li><span>4</span>{copy.sub.thirdStep4}</li>
                 </ol>
                 <p className="usage-card-note">{copy.sub.thirdNote}</p>
+                <Link href="/clients" className="usage-card-link">
+                  {copy.sub.clientsDownload}
+                  <span aria-hidden>→</span>
+                </Link>
                 {subscriptionUrl ? (
                   <>
                     <div className="sub-link-view-head">

@@ -222,6 +222,7 @@ export default function GuidePage() {
                   <li>{copy.thirdStep4}</li>
                 </ol>
                 <small>{copy.thirdNote}</small>
+                <Link href="/clients">{copy.thirdDownload}<span>→</span></Link>
                 <Link href="/subscription">{copy.thirdCta}<span>→</span></Link>
               </article>
             </div>

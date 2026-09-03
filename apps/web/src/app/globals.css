@@ -214,6 +214,7 @@ input {
 /* Separate page title from brand band */
 .habibi-shell:has(.habibi-brandbar) .habibi-main > .page-head:first-child,
 .habibi-shell:has(.habibi-brandbar) .habibi-main > .download-page > .download-main > .page-head:first-child,
+.habibi-shell:has(.habibi-brandbar) .habibi-main > .clients-page > .page-head:first-child,
 .habibi-shell:has(.habibi-brandbar) .habibi-main > .plans-page > .page-head:first-child,
 .habibi-shell:has(.habibi-brandbar) .habibi-main > .account-page > .page-head:first-child,
 .habibi-shell:has(.habibi-brandbar) .habibi-main > .orders-page > .page-head:first-child,
@@ -1315,6 +1316,159 @@ input {
 .download-footnote a {
   color: var(--teal-deep);
   font-weight: 600;
+}
+
+.clients-page {
+  width: 100%;
+}
+
+.clients-disclaimer {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.clients-platform-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.clients-platform-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.clients-platform-chip-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+.clients-platform-chip-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.clients-platform-chip[data-active="true"] {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
+.clients-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.clients-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.clients-card-top {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.clients-card-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--teal) 12%, var(--surface-solid));
+  color: var(--teal-deep);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.clients-card-copy h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.clients-card-copy p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.clients-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clients-card-tags span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clients-card-cta {
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.clients-tip-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--teal-deep);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.clients-card-tip p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.clients-empty {
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
 }
 
 .invite-desktop-qr {
@@ -4300,6 +4454,10 @@ button.about-contact-btn {
 .help-method > a {
   color: var(--teal-deep);
   font-weight: 700;
+}
+
+.help-method > a + a {
+  margin-left: 14px;
 }
 
 .help-step-grid small,
@@ -7450,6 +7608,12 @@ button.account-verify-toggle {
   .download-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+    margin-top: 20px;
+  }
+
+  .clients-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
     margin-top: 20px;
   }
 
