@@ -12,6 +12,10 @@ import { Button, Drawer, Space, Tag, Typography } from "antd";
 import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { message } from "../lib/antd-message";
 import { adminFetch, unwrapList } from "../lib/api";
+import {
+  groupLocalPlanOptions,
+  groupUpstreamPlanOptions,
+} from "../lib/plan-select-options";
 import { formatDateTime } from "../lib/time";
 
 type ClientUrls = {
@@ -368,26 +372,43 @@ export default function HabibiUsersPage() {
           name="plan_id"
           label="改为本地套餐"
           request={async () => {
-            const data = await adminFetch<{ plans: { id: string; name: string; code: string }[] }>(
-              "/admin/v1/plans",
-            );
-            return (data.plans || []).map((p) => ({
-              label: `${p.name} (${p.code})`,
-              value: p.id,
-            }));
+            const data = await adminFetch<{
+              plans: {
+                id: string;
+                name: string;
+                code: string;
+                enabled?: boolean;
+                nameI18n?: Record<string, string>;
+                group?: {
+                  id: string;
+                  name: string;
+                  enabled: boolean;
+                  sortOrder: number;
+                } | null;
+              }[];
+            }>("/admin/v1/plans");
+            return groupLocalPlanOptions(data.plans || []);
           }}
+          showSearch
           allowClear
+          fieldProps={{ optionFilterProp: "label" }}
         />
         <ProFormSelect
           name="upstream_plan_ref"
           label="或上游套餐 code"
           request={async () => {
             const data = await adminFetch("/admin/v1/wireraw/customer-plans");
-            const plans = unwrapList<{ code: string; name: string }>(data, ["items", "plans"]);
-            return plans.map((p) => ({ label: `${p.name} (${p.code})`, value: p.code }));
+            const plans = unwrapList<{
+              code: string;
+              name: string;
+              type?: string;
+              enabled?: boolean;
+            }>(data, ["items", "plans"]);
+            return groupUpstreamPlanOptions(plans);
           }}
           showSearch
           allowClear
+          fieldProps={{ optionFilterProp: "label" }}
         />
         <ProFormDigit name="validity_days" label="延长天数" min={1} />
       </ModalForm>

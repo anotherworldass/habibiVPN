@@ -34,6 +34,11 @@ import {
 } from "../components/EntitlementLedgerDetailModal";
 import { CopyableUrlWithQr } from "../components/CopyableUrlWithQr";
 import { adminFetch, unwrapList } from "../lib/api";
+import {
+  groupLocalPlanOptions,
+  groupUpstreamPlanOptions,
+  type GroupedSelectOption,
+} from "../lib/plan-select-options";
 import { formatDateTime } from "../lib/time";
 
 type RelationListItem = {
@@ -579,11 +584,9 @@ export default function ReferralRelationsPage() {
     keep_expires_at: boolean;
     keep_used_traffic: boolean;
   }>();
-  const [planOptions, setPlanOptions] = useState<
-    { label: string; value: string }[]
-  >([]);
+  const [planOptions, setPlanOptions] = useState<GroupedSelectOption[]>([]);
   const [upstreamPlanOptions, setUpstreamPlanOptions] = useState<
-    { label: string; value: string }[]
+    GroupedSelectOption[]
   >([]);
   const [renewPreview, setRenewPreview] = useState<{
     before: Record<string, string | number | null>;
@@ -662,27 +665,31 @@ export default function ReferralRelationsPage() {
   async function loadRenewSelectOptions() {
     try {
       const [plansRes, upstreamRes] = await Promise.all([
-        adminFetch<{ plans: { id: string; name: string; code: string }[] }>(
-          "/admin/v1/plans",
-        ),
+        adminFetch<{
+          plans: {
+            id: string;
+            name: string;
+            code: string;
+            enabled?: boolean;
+            nameI18n?: Record<string, string>;
+            group?: {
+              id: string;
+              name: string;
+              enabled: boolean;
+              sortOrder: number;
+            } | null;
+          }[];
+        }>("/admin/v1/plans"),
         adminFetch("/admin/v1/wireraw/customer-plans"),
       ]);
-      setPlanOptions(
-        (plansRes.plans || []).map((p) => ({
-          label: `${p.name} (${p.code})`,
-          value: p.id,
-        })),
-      );
-      const upstream = unwrapList<{ code: string; name: string }>(upstreamRes, [
-        "items",
-        "plans",
-      ]);
-      setUpstreamPlanOptions(
-        upstream.map((p) => ({
-          label: `${p.name} (${p.code})`,
-          value: p.code,
-        })),
-      );
+      setPlanOptions(groupLocalPlanOptions(plansRes.plans || []));
+      const upstream = unwrapList<{
+        code: string;
+        name: string;
+        type?: string;
+        enabled?: boolean;
+      }>(upstreamRes, ["items", "plans"]);
+      setUpstreamPlanOptions(groupUpstreamPlanOptions(upstream));
     } catch {
       setPlanOptions([]);
       setUpstreamPlanOptions([]);
@@ -2101,32 +2108,43 @@ export default function ReferralRelationsPage() {
           label="本地售卖套餐"
           request={async () => {
             const res = await adminFetch<{
-              plans: { id: string; name: string; code: string }[];
+              plans: {
+                id: string;
+                name: string;
+                code: string;
+                enabled?: boolean;
+                nameI18n?: Record<string, string>;
+                group?: {
+                  id: string;
+                  name: string;
+                  enabled: boolean;
+                  sortOrder: number;
+                } | null;
+              }[];
             }>("/admin/v1/plans");
-            return (res.plans || []).map((p) => ({
-              label: `${p.name} (${p.code})`,
-              value: p.id,
-            }));
+            return groupLocalPlanOptions(res.plans || []);
           }}
+          showSearch
           allowClear
-          tooltip="同一本地套餐每位用户只能开一次槽；续费请在订阅详情里操作"
+          fieldProps={{ optionFilterProp: "label" }}
+          tooltip="按套餐分组列出。同一本地套餐每位用户只能开一次槽；续费请在订阅详情里操作"
         />
         <ProFormSelect
           name="upstream_plan_ref"
           label="或直接选上游套餐 code"
           request={async () => {
             const res = await adminFetch("/admin/v1/wireraw/customer-plans");
-            const plans = unwrapList<{ code: string; name: string }>(res, [
-              "items",
-              "plans",
-            ]);
-            return plans.map((p) => ({
-              label: `${p.name} (${p.code})`,
-              value: p.code,
-            }));
+            const plans = unwrapList<{
+              code: string;
+              name: string;
+              type?: string;
+              enabled?: boolean;
+            }>(res, ["items", "plans"]);
+            return groupUpstreamPlanOptions(plans);
           }}
           showSearch
           allowClear
+          fieldProps={{ optionFilterProp: "label" }}
         />
         <ProFormDigit
           name="validity_days"
