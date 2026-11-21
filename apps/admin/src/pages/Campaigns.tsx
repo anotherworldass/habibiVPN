@@ -1178,14 +1178,14 @@ function CampaignForm(props: {
                 options={[
                   {
                     value: "create_campaign_slot",
-                    label: "新建活动槽（推荐：新用户/已过期）",
+                    label: "续在活动槽上（过期则从现在起算，不新开槽）",
                   },
                   {
                     value: "extend_active",
-                    label: "仅叠加到当前仍有效的槽（不会复活已过期套餐）",
+                    label: "优先叠加到当前仍有效的套餐（不会复活已过期付费套餐）",
                   },
                 ]}
-                extra="新用户每日福利请用「新建活动槽」，避免挂上旧套餐名"
+                extra="每日福利用「续在活动槽上」：同一用户只保留一条活动订阅，已过期的付费套餐不会被续活"
               />
             </>
           )

@@ -23,6 +23,10 @@ import {
 import { localizePlanCopy } from "./plan-i18n.js";
 import { executeOrEnqueueGrant } from "./upstream-grant-queue.js";
 import {
+  pickGrowthSlotToReuse,
+  selectVisibleSubscriptionSlots,
+} from "./growth/growth-slot.js";
+import {
   subscriptionCanRenewWithPaidPlans,
   slotAllowsRenewWithPlan,
 } from "./renew-compat.js";
@@ -1619,9 +1623,20 @@ export async function clawbackUpstreamForOrder(order: {
   };
 }
 
+function trafficResetUnsupported(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    err.message.includes("upstream.used_traffic_reset_unsupported")
+  );
+}
+
 /**
  * Grant VPN duration for growth rewards (campaign / redeem code).
- * Prefer stacking onto the user's longest-lived active slot via explicit expire_at.
+ *
+ * extend_active still stacks onto a still-valid slot of any kind, and never
+ * revives an expired paid plan. Creating a slot reuses the user's plan-less
+ * activity slot instead: extend it while it is valid, or start from now once
+ * it has expired. A new upstream customer is opened only when none exists.
  */
 export async function grantVpnDuration(input: {
   userId: string;
@@ -1673,6 +1688,7 @@ export async function grantVpnDuration(input: {
         expireAt,
         dataLimitBytes: input.dataLimitBytes,
         note,
+        locale: input.locale,
         ledger: input.ledger,
       });
       return {
@@ -1683,8 +1699,17 @@ export async function grantVpnDuration(input: {
         expires_at: result.subscription.expires_at,
       };
     }
-    // No valid slot → fall through to create a fresh campaign/redeem slot.
   }
+
+  const reused = await reusePlanlessGrowthSlot({
+    userId: input.userId,
+    seconds: input.seconds,
+    dataLimitBytes: input.dataLimitBytes,
+    note,
+    locale: input.locale,
+    ledger: input.ledger,
+  });
+  if (reused) return reused;
 
   const created = await createUpstreamSlot({
     userId: input.userId,
@@ -1702,6 +1727,65 @@ export async function grantVpnDuration(input: {
     subscription: created.subscription,
     granted_seconds: input.seconds,
     expires_at: created.subscription.expires_at,
+  };
+}
+
+async function reusePlanlessGrowthSlot(input: {
+  userId: string;
+  seconds: number;
+  dataLimitBytes?: number;
+  note: string;
+  locale?: string | null;
+  ledger?: EntitlementLedgerContext;
+}) {
+  const nowMs = Date.now();
+  const slots = await prisma.userUpstream.findMany({
+    where: {
+      userId: input.userId,
+      planId: null,
+      status: "active",
+      upstreamId: { not: null },
+    },
+    orderBy: [{ expiresAt: "desc" }, { createdAt: "desc" }],
+  });
+  const picked = pickGrowthSlotToReuse(slots, nowMs);
+  if (!picked?.slot.upstreamId) return null;
+
+  const baseMs =
+    picked.from === "expiry" && picked.slot.expiresAt
+      ? picked.slot.expiresAt.getTime()
+      : nowMs;
+  const expireAt = new Date(baseMs + input.seconds * 1000).toISOString();
+  const resetTraffic = input.dataLimitBytes != null;
+  const apply = (keepUsedTraffic: boolean) =>
+    updateUpstreamSlot({
+      userId: input.userId,
+      slotId: picked.slot.id,
+      expireAt,
+      dataLimitBytes: input.dataLimitBytes,
+      keepUsedTraffic,
+      note: input.note,
+      locale: input.locale,
+      ledger: input.ledger,
+    });
+
+  let result: Awaited<ReturnType<typeof updateUpstreamSlot>>;
+  try {
+    result = await apply(!resetTraffic);
+  } catch (err) {
+    if (!resetTraffic || !trafficResetUnsupported(err)) throw err;
+    result = await apply(true);
+  }
+
+  return {
+    mode:
+      picked.from === "expiry"
+        ? ("extend_active" as const)
+        : ("reuse_growth_slot" as const),
+    slot: result.slot,
+    subscription: result.subscription,
+    granted_seconds: input.seconds,
+    expires_at: result.subscription.expires_at,
   };
 }
 
@@ -1971,6 +2055,11 @@ export type ListSubscriptionsOptions = {
   locale?: string | null;
   /** Soft TTL for background refresh when mode=cached. Default 30s. */
   staleTtlMs?: number;
+  /**
+   * App/web lists: collapse plan-less growth slots so expired daily claims
+   * do not pile up. Admin lists leave this off and still see every slot.
+   */
+  collapseGrowthSlots?: boolean;
 };
 
 
@@ -1999,7 +2088,7 @@ export async function listUserSubscriptions(
   const locale = optionsObj.locale ?? localeArg;
   const staleTtlMs = optionsObj.staleTtlMs ?? DEFAULT_STALE_TTL_MS;
 
-  const slots = await prisma.userUpstream.findMany({
+  const rows = await prisma.userUpstream.findMany({
     where: { userId },
     include: {
       plan: true,
@@ -2012,6 +2101,9 @@ export async function listUserSubscriptions(
     },
     orderBy: { createdAt: "desc" },
   });
+  const slots = optionsObj.collapseGrowthSlots
+    ? selectVisibleSubscriptionSlots(rows, Date.now())
+    : rows;
 
   if (mode === "live") {
     const views = await Promise.all(

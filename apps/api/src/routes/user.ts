@@ -1159,6 +1159,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       const subscriptions = await listUserSubscriptions(req.user!.sub, {
         mode: live ? "live" : "cached",
         locale,
+        collapseGrowthSlots: true,
       });
       return { subscriptions };
     },
@@ -1174,6 +1175,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       const subscriptions = await listUserSubscriptions(req.user!.sub, {
         mode: live ? "live" : "cached",
         locale,
+        collapseGrowthSlots: true,
       });
       const active =
         subscriptions.find((s) => s.status === "active") || subscriptions[0] || null;
